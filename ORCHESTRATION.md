@@ -17,9 +17,9 @@ Default routing (logged per task in TASKS.md and MORNING_REPORT.md):
 
 1. **Prepare** (manager)
    ```bash
-   git worktree add ../inputtracker-wt/T07 -b task/T07 main
+   git worktree add .worktrees/T07 -b task/T07 main
    ```
-   Write `../inputtracker-wt/T07/.task/prompt.md` (`.task/` is gitignored) containing:
+   Write `.worktrees/T07/.task/prompt.md` (`.task/` is gitignored) containing:
    task text from TASKS.md, files allowed to touch, acceptance criteria, `AGENTS.md` rules
    (no secrets, no real data in fixtures, no network in tests, GET-only for ABS,
    never commit/push, run `bun run check` before finishing).
@@ -45,7 +45,7 @@ Default routing (logged per task in TASKS.md and MORNING_REPORT.md):
    bun run check                         # on main again
    scripts/check-secrets.sh              # also runs as pre-push hook
    git push origin main
-   git worktree remove ../inputtracker-wt/T07 && git branch -d task/T07
+   git worktree remove .worktrees/T07 && git branch -d task/T07
    ```
    Update TASKS.md status + MORNING_REPORT.md, commit those with the merge.
 
@@ -69,7 +69,7 @@ State per worker in `.orchestrator/state.json` (gitignored): `available | limite
   is too low" → read `antigravity -p /usage --output-format json`; `until` = the Gemini bucket's
   `reset_time` (5-hour or weekly) when remaining is ~0, else now + 15 min.
 - **opencode**: `error` event matching 429/rate/quota/limit/exhausted → first switch to the next
-  free model in the list (models have separate limits); if all free models are limited,
+  free model in the list (models have separate limits; never a paid `nebius/*` model); if all free models are limited,
   `until` = now + 15 min.
 - **Probe** when `until` passes: the PONG prompt from WORKERS.md. Still limited → back off
   15 → 30 → 60 min (cap 60). Recovered → resume.
@@ -116,13 +116,20 @@ is rebased by the manager or re-run by the worker on the new `main`.
 
 ## Worker permissions
 
-- Antigravity: `--mode accept-edits` (tested OK for edits + simple shell). If it can't run
-  `bun test`, switch to `--mode auto` (needs your OK, see SETUP.md).
-- opencode: `--auto`. A project `opencode.json` will deny `git push`, `git commit`, `rm -rf`,
-  and reading `inputtracker.config.toml` (first manager task of the night; exact permission
-  syntax to be checked against opencode 2.x docs).
-- Workers never get the real config file; integration against your real ABS is run by the
-  manager only, with output redacted.
+Decided 2026-10-17: Antigravity may act autonomously but only inside the project folder;
+opencode free models only.
+
+- **Folder limit is enforced by bubblewrap**, not by the CLIs: every worker runs in a `bwrap`
+  jail where `/` is read-only and only its own worktree `.worktrees/<task>` (plus the CLI's
+  state/cache dirs and `~/.bun`) is writable; `inputtracker.config.toml` is masked with
+  `/dev/null`. Tested for Antigravity. Commands in WORKERS.md.
+- Antigravity: default headless mode (`--mode auto` is not available on your account; default
+  mode already ran `bun test` without prompts). `--sandbox` is not used (wrong behaviour in test).
+- opencode: `--auto --standalone` inside the same jail (jail untested yet; M01 checks it). Fallback
+  if the jail breaks opencode: unjailed with project `opencode.json` denying `git push`,
+  `git commit`, `rm -rf` and the config file — logged in the morning report.
+- Inside the jail git metadata of the main repo is read-only, so workers can't commit — intended.
+- Integration against your real ABS is run by the manager only, with output redacted.
 
 ## MORNING_REPORT.md format
 

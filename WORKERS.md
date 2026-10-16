@@ -5,9 +5,9 @@ Verified on this PC on 2026-10-17 against real `--help` output and live test run
 | Worker | Binary | Version | Auth state |
 |---|---|---|---|
 | Antigravity CLI | `antigravity` (alias `agy`, via mise shim) | 1.4.0 | signed in, Gemini quota 100% |
-| opencode | `opencode` | v2.0.31 | OpenCode Zen free models + Nebius (paid, API key stored) |
+| opencode | `opencode` | v2.0.31 | OpenCode Zen free models (Nebius paid models exist but are not allowed) |
 
-Both workers run **in the task's git worktree** (`cd` into it first). Neither may push,
+Both workers run **in the task's git worktree** `.worktrees/<task>` inside the project, jailed with bubblewrap so they can only write there. Neither may push,
 touch `main`, or read `inputtracker.config.toml` (secrets). The manager runs the final
 checks, merges and pushes.
 
@@ -32,27 +32,37 @@ The thinking level is baked into the model ID: `--model gemini-3.8-flash-high`.
 (`--effort` exists too, but is not needed with the `-high` ID.) Note: no Gemini Pro
 is offered on this account right now, so Flash High is the most capable Gemini model.
 
-### Headless command (tested)
+### Headless command (tested), jailed to the task worktree
 
 ```bash
-cd ../inputtracker-wt/T07
-timeout 50m antigravity -p "$(cat .task/prompt.md)" \
-  --model gemini-3.8-flash-high \
-  --mode accept-edits \
-  --output-format json \
-  --print-timeout 45m \
+WT=~/Projects/inputtracker/.worktrees/T07
+cd "$WT"
+timeout 50m bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp \
+  --bind "$WT" "$WT" \
+  --bind ~/.gemini ~/.gemini --bind ~/.cache ~/.cache --bind ~/.bun ~/.bun \
+  --ro-bind /dev/null ~/Projects/inputtracker/inputtracker.config.toml \
+  --die-with-parent --chdir "$WT" \
+  antigravity -p "$(cat .task/prompt.md)" \
+    --model gemini-3.8-flash-high \
+    --output-format json \
+    --print-timeout 45m \
   > .task/agy.json 2> .task/agy.err
 echo $? > .task/exit
 ```
 
 - Prompt: `-p "<text>"` (`--print`). Long prompts: write to a file and pass `"$(cat file)"`.
 - Working dir: the current directory is the workspace (`--add-dir` adds more).
-- `--mode accept-edits`: tested — it created files and ran `ls` with no prompt.
-  Not yet tested: whether it runs `bun install` / `bun test` without approval. First
-  overnight task verifies this; fallback is `--mode auto`.
-- `--dangerously-skip-permissions` was **blocked** by Claude Code's auto-mode safety
-  classifier when I tried it. Don't plan on it.
-- `--sandbox` is available if we want terminal restrictions.
+- **Folder limit = bubblewrap** (tested 2026-10-17): the whole filesystem is read-only except
+  the worktree and the CLI's own state/cache dirs; writing to `~/` failed with
+  "Read-only file system", writing in the worktree and `bun --version` worked.
+  The real config file is masked with `/dev/null`, so the worker can't read your token.
+  Network stays on (the model API needs it).
+- **Mode**: you allowed `--mode auto`, but the CLI says *"--mode auto is not available for this
+  account; continuing in the default mode."* In default headless mode it still ran
+  `bun test` and shell commands with no prompt (tested), so no mode flag is needed.
+- `--sandbox` is **not** usable: in the test it blocked writes in the working dir and allowed
+  a write to the parent dir — the opposite of what we need.
+- `--dangerously-skip-permissions` was blocked by Claude Code's safety classifier. Not used.
 
 ### Output and finish signals
 
@@ -114,20 +124,31 @@ opencode/beam-free
 opencode/big-pickle
 ```
 
-Paid (Nebius API key is stored, **costs money**): e.g. `nebius/moonshotai/Kimi-K2.7-Code`,
-`nebius/zai-org/GLM-5.3`, `nebius/deepseek-ai/DeepSeek-V4-Pro`, `nebius/Qwen/Qwen3.5-397B-A17B`,
-`nebius/MiniMaxAI/MiniMax-M3`, `nebius/moonshotai/Kimi-K3` and others.
-Local: `ollama/qwen2.5:3b` (too small for coding).
+Paid Nebius models (`nebius/*`) are also listed — **not allowed** (your decision 2026-10-17:
+free models only). Local `ollama/qwen2.5:3b` is too small for coding.
 
 Plan: start on `opencode/deepseek-v4.1-flash-free`, fall back to `opencode/glm-5.3-flash-free`,
-then `opencode/nemotron-3-ultra-free`. Nebius only if you approve paid use (see SETUP.md).
+then `opencode/nemotron-3-ultra-free`, then the other free ones.
 Every run's model is logged in `MORNING_REPORT.md`.
 
-### Headless command (tested)
+### Headless command (tested without jail; jail not yet tested)
+
+Same bubblewrap jail as Antigravity, with opencode's state dirs writable and `--standalone`
+so tools run inside the jail instead of in the background service (which lives outside it).
+First overnight step (M01) verifies this; if opencode fails inside bwrap, it runs unjailed
+with the project `opencode.json` permission denies as the fallback, and that's logged.
 
 ```bash
-cd ../inputtracker-wt/T05
-timeout 45m opencode run \
+WT=~/Projects/inputtracker/.worktrees/T05
+cd "$WT"
+timeout 45m bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp \
+  --bind "$WT" "$WT" \
+  --bind ~/.local/share/opencode ~/.local/share/opencode \
+  --bind ~/.local/state/opencode ~/.local/state/opencode \
+  --bind ~/.cache ~/.cache --bind ~/.bun ~/.bun \
+  --ro-bind /dev/null ~/Projects/inputtracker/inputtracker.config.toml \
+  --die-with-parent --chdir "$WT" \
+opencode run --standalone \
   --model opencode/deepseek-v4.1-flash-free \
   --auto \
   --format json \

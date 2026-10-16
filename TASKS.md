@@ -10,6 +10,8 @@ Design reference: PLAN.md. Fixtures are synthetic only.
 |---|---|---|
 | M01 | `scripts/run-worker.sh` (wrapper: timeout, stall watch, result classification), `scripts/probe-worker.sh`, `scripts/check-secrets.sh` + `.githooks/pre-push` | TODO |
 | M02 | `AGENTS.md` worker rules, `opencode.json` permission denies, `inputtracker.config.example.toml` | TODO |
+| M04 | Capture field names (no values) of `GET /api/me` mediaProgress and `GET /api/me/listening-stats` into `docs/abs-fields.md` | TODO |
+| — | Session field names captured into `docs/abs-fields.md`; ABS key verified (HTTP 200) | DONE 2026-10-17 |
 
 ## v1
 
@@ -21,7 +23,7 @@ Design reference: PLAN.md. Fixtures are synthetic only.
 | T04 | **Time utils**: `toUtcIso()` from epoch ms / ISO with offset / date; `localParts(iso, "Europe/Bratislava")` → date, hour, weekday | OC (small, well-specified) | T01 | Tests incl. DST days 2026-03-29 and 2026-10-25, midnight boundary | TODO |
 | T05 | **Config**: `src/core/config.ts` load `inputtracker.config.toml` (path override via env `INPUTTRACKER_CONFIG`), defaults (db path in XDG data dir, port 8787, tz), `redact()` for logs | OC | T01 | Tests: missing file → defaults; token never appears in `String(config)`/log output | TODO |
 | T06 | **ABS client**: `src/sources/audiobookshelf/client.ts` GET-only (`get(path, query)`), Bearer auth, path allow-list, pagination helper for `/api/me/listening-sessions` (`itemsPerPage`, `page`), timeouts, retries on 5xx | AG (safety rule) | T05 | Tests with mocked `fetch`: only GET ever issued; non-allow-listed path throws; pagination collects all pages; token not in error messages | TODO |
-| T07 | **ABS mapping**: sessions → `listening_session` events (id, libraryItemId, episodeId, displayTitle/Author, mediaType, startedAt/updatedAt ms → UTC, timeListening, deviceInfo); `/api/me` mediaProgress → `media_progress` events; listening-stats → `daily_stat` snapshot rows | AG (field semantics) | T03, T04, T06 | Tests on synthetic fixtures in `test/fixtures/abs/`; podcast episode vs book handled | TODO |
+| T07 | **ABS mapping** per `docs/abs-fields.md` (real field names): sessions → `listening_session` events; `/api/me` mediaProgress → `media_progress` events; listening-stats → `daily_stat` snapshot rows; strip `deviceInfo.ipAddress` from `raw` | AG (field semantics) | T03, T04, T06, M04 | Tests on synthetic fixtures in `test/fixtures/abs/` using the exact field names; podcast episode vs book handled; no `ipAddress` in stored raw | TODO |
 | T08 | **ABS sync + CLI**: `src/sources/audiobookshelf/sync.ts`, `sync_state` cursor (still idempotent if cursor lost), CLI `bun run it sync audiobookshelf` printing counts | OC | T07 | Tests with mocked client: two runs → second inserts 0; run logged in `ingest_runs` | TODO |
 | T09 | **Export**: JSON (`inputtracker-export` v1) and CSV of all events, CLI `it export --format json|csv --out file` | OC | T03 | Tests: all columns present, UTC preserved, CSV escaping | TODO |
 | T10 | **Import native**: re-import own JSON and CSV export; hashes recomputed | OC | T09 | Round-trip test: export → import into same DB → 0 inserted; into empty DB → identical rows | TODO |

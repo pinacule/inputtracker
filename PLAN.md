@@ -20,7 +20,7 @@ overnight builds, two data copies to sync). Can wrap the PWA later as a TWA if w
 - **Arch PC** is the hub: the server owns the database and runs all syncs
   (Audiobookshelf/Simkl/yt-dlp are reached from the PC). Bound to `127.0.0.1:8787`.
   Open `http://localhost:8787` in a browser, or use the CLI (`bun run it <cmd>`).
-- **Android**: `tailscale serve` publishes the server at `https://pinpc.<tailnet>.ts.net`.
+- **Android**: `tailscale serve` publishes the server at https://pinpc.taild61ed4.ts.net/ (running).
   Open in Chrome → "Install app". Service worker caches the app shell and the last
   loaded data, so calendar/heat map still open read-only when the PC is off.
   Uploads, manual entries and syncs need the PC reachable (offline queue = proposed feature F11).
@@ -93,6 +93,10 @@ API (JSON, times UTC): `GET /api/events?from&to&source`, `GET /api/calendar?mont
 `GET /api/heatmap?from&to&source&mode=day|hour-weekday`, `POST /api/import` (multipart),
 `GET /api/export.json`, `GET /api/export.csv`, `POST /api/events` (manual),
 `POST /api/sync/:source`, `GET /api/runs`.
+
+Audiobookshelf field mapping uses the real field names in `docs/abs-fields.md`
+(`startedAt`/`updatedAt` are epoch ms, `timeListening` seconds, `page` 0-based;
+`deviceInfo.ipAddress` is stripped before storing `raw`).
 
 Audiobookshelf safety: `client.ts` exposes only a `get(path)` method; a unit test fails if
 any non-GET request is made, and the path allow-list is `/api/me`, `/api/me/listening-sessions`,

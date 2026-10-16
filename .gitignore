@@ -13,6 +13,7 @@ Takeout/
 
 # orchestration scratch
 .task/
+.worktrees/
 .orchestrator/
 
 # build
