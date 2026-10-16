@@ -1,0 +1,22 @@
+# secrets and personal data — never commit
+inputtracker.config.toml
+.env*
+*.cookies.txt
+cookies.txt
+*.db
+*.db-*
+*.sqlite*
+data/
+exports/
+watch-history*.json
+Takeout/
+
+# orchestration scratch
+.task/
+.orchestrator/
+
+# build
+node_modules/
+dist/
+web/dist/
+*.log
