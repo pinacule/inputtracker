@@ -22,7 +22,7 @@ import {
   CONSUMPTION_KINDS,
   coverUrlFor,
   formatLocalParts,
-  getLatestConsumptionEvents,
+  getDisplayConsumptionEvents,
   getSeriesOrTitle,
   type ConsumptionEvent,
 } from "./aggregate.ts";
@@ -435,6 +435,6 @@ export function getYearReview(
   db: Database,
   opts: GetYearReviewOptions
 ): YearReview {
-  const events = getLatestConsumptionEvents(db, opts.source);
+  const events = getDisplayConsumptionEvents(db, opts.source, opts.tz);
   return computeYearReview(events, opts.tz, opts.year, opts.today);
 }

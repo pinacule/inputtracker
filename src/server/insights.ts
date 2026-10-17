@@ -17,7 +17,7 @@ import {
   CONSUMPTION_KINDS,
   coverUrlFor,
   formatLocalParts,
-  getLatestConsumptionEvents,
+  getDisplayConsumptionEvents,
   getSeriesOrTitle,
   type ConsumptionEvent,
 } from "./aggregate.ts";
@@ -295,7 +295,7 @@ export function getInsights(
   db: Database,
   opts: GetInsightsOptions
 ): InsightsResult {
-  const events = getLatestConsumptionEvents(db, opts.source);
+  const events = getDisplayConsumptionEvents(db, opts.source, opts.tz);
   return {
     streaks: computeStreaks(events, opts.tz, opts.today),
     on_this_day: computeOnThisDay(events, opts.tz, opts.today),
