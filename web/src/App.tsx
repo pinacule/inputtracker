@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { OfflineBanner } from "./components/OfflineBanner";
+import { getDefaultStore, subscribeQueue } from "./lib/offline-queue";
 import { Add } from "./pages/Add";
 import { Calendar } from "./pages/Calendar";
 import { Heatmap } from "./pages/Heatmap";
@@ -85,6 +86,7 @@ export function App() {
   const [{ route, date, year, q, hitKey }, setLocation] = useState<ParsedRoute>(() =>
     parseHash(window.location.hash)
   );
+  const [queueCount, setQueueCount] = useState(0);
 
   useEffect(() => {
     const onHashChange = () => setLocation(parseHash(window.location.hash));
@@ -93,6 +95,27 @@ export function App() {
       window.location.hash = `#/${DEFAULT_ROUTE}`;
     }
     return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // Count of entries waiting to send, for the badge on the Add tab.
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      const store = await getDefaultStore();
+      if (store === null || cancelled) {
+        return;
+      }
+      const entries = await store.list();
+      if (!cancelled) {
+        setQueueCount(entries.length);
+      }
+    };
+    void refresh();
+    const unsubscribe = subscribeQueue(() => void refresh());
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   return (
@@ -109,16 +132,27 @@ export function App() {
         {route === "search" && <Search qParam={q} hitKeyParam={hitKey} />}
       </main>
       <nav class="tabbar" aria-label="Primary">
-        {ROUTES.map((item) => (
-          <a
-            key={item.id}
-            class={route === item.id ? "tab tab-active" : "tab"}
-            href={`#/${item.id}`}
-            aria-current={route === item.id ? "page" : undefined}
-          >
-            {item.label}
-          </a>
-        ))}
+        {ROUTES.map((item) => {
+          const waiting = item.id === "add" && queueCount > 0;
+          return (
+            <a
+              key={item.id}
+              class={route === item.id ? "tab tab-active" : "tab"}
+              href={`#/${item.id}`}
+              aria-current={route === item.id ? "page" : undefined}
+              aria-label={
+                waiting ? `Add, ${queueCount} entries waiting to send` : undefined
+              }
+            >
+              {item.label}
+              {waiting && (
+                <span class="queue-badge" aria-hidden="true">
+                  {queueCount > 9 ? "9+" : queueCount}
+                </span>
+              )}
+            </a>
+          );
+        })}
       </nav>
     </div>
   );

@@ -6,7 +6,9 @@
  * the same origin). Response types mirror the routes in `src/server/app.ts`.
  *
  * On a non-2xx response the server's `{ error }` message is thrown as an
- * `Error`; otherwise the JSON body is parsed and returned.
+ * `ApiError` (with `kind: "http"` and the status code); network failures and
+ * timeouts throw `ApiError`s with `kind: "network"`. Otherwise the JSON body
+ * is parsed and returned.
  */
 
 // --- Response types (mirror src/server/app.ts) -----------------------------
@@ -346,6 +348,12 @@ export interface ManualEventInput {
   progress?: number | null;
   device?: string | null;
   external_ids?: Record<string, unknown> | null;
+  /**
+   * Idempotency key for this entry. The server stores it as the row's
+   * `source_id` (`client:<uuid>`), so sending the same body again — a retry
+   * after a lost response — never creates a second row.
+   */
+  client_id?: string;
 }
 
 export interface AddEventResult {
@@ -404,18 +412,43 @@ export interface HealthResult {
 
 // --- Core helpers ----------------------------------------------------------
 
+/** Why a request failed: the network (or a timeout), or an HTTP error status. */
+export type ApiErrorKind = "network" | "http";
+
+/**
+ * Error thrown by the API helpers. `kind` lets callers tell a network failure
+ * or timeout (`"network"`, `status` is `null`) apart from a non-2xx response
+ * (`"http"`, with the status code and the server's error message).
+ */
+export class ApiError extends Error {
+  readonly kind: ApiErrorKind;
+  /** HTTP status code, or `null` for network failures and timeouts. */
+  readonly status: number | null;
+
+  constructor(kind: ApiErrorKind, status: number | null, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.kind = kind;
+    this.status = status;
+  }
+}
+
+async function apiErrorFromResponse(res: Response): Promise<ApiError> {
+  let message = `Request failed with status ${res.status}`;
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    if (body && typeof body.error === "string" && body.error !== "") {
+      message = body.error;
+    }
+  } catch {
+    // Non-JSON error body: keep the status-based fallback message.
+  }
+  return new ApiError("http", res.status, message);
+}
+
 async function parseResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    let message = `Request failed with status ${res.status}`;
-    try {
-      const body = (await res.json()) as { error?: unknown };
-      if (body && typeof body.error === "string" && body.error !== "") {
-        message = body.error;
-      }
-    } catch {
-      // Non-JSON error body: keep the status-based fallback message.
-    }
-    throw new Error(message);
+    throw await apiErrorFromResponse(res);
   }
   return (await res.json()) as T;
 }
@@ -548,8 +581,70 @@ export function getProgress(source?: string): Promise<ProgressLists> {
   return getJson<ProgressLists>(withQuery("/api/progress", { source }));
 }
 
-export function addEvent(body: ManualEventInput): Promise<AddEventResult> {
-  return postJson<AddEventResult>("/api/events", body);
+export interface AddEventOptions {
+  /** Abort the request after this many milliseconds (default 10 000). */
+  timeoutMs?: number;
+}
+
+/**
+ * POST one manual entry to `/api/events`.
+ *
+ * Aborts with a network `ApiError` after `timeoutMs` (default 10 s) and turns
+ * non-2xx responses into `ApiError`s carrying the status and the server's
+ * error message, so callers can decide between retrying and showing the
+ * problem to the user.
+ */
+export async function addEvent(
+  body: ManualEventInput,
+  options: AddEventOptions = {}
+): Promise<AddEventResult> {
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let res: Response;
+    try {
+      res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (caught) {
+      if (controller.signal.aborted) {
+        throw new ApiError(
+          "network",
+          null,
+          `Request timed out after ${timeoutMs} ms`
+        );
+      }
+      throw new ApiError(
+        "network",
+        null,
+        `Could not reach the server: ${
+          caught instanceof Error ? caught.message : String(caught)
+        }`
+      );
+    }
+    if (!res.ok) {
+      throw await apiErrorFromResponse(res);
+    }
+    return (await res.json()) as AddEventResult;
+  } catch (caught) {
+    if (caught instanceof ApiError) {
+      throw caught;
+    }
+    // e.g. `res.json()` failed on a truncated body: retrying is safe.
+    throw new ApiError(
+      "network",
+      null,
+      `Could not read the server response: ${
+        caught instanceof Error ? caught.message : String(caught)
+      }`
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function importFile(file: File): Promise<ImportResult> {
