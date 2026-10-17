@@ -287,3 +287,59 @@ describe("redaction", () => {
     expect(redact(`auth=${FAKE_TOKEN}`)).not.toContain(FAKE_TOKEN);
   });
 });
+
+const FAKE_INGEST_TOKEN = "INGEST-FAKE-TOKEN-0123456789abcdefgh"; // 37 chars
+
+describe("ingest config", () => {
+  test("missing [ingest] yields an empty token (ingest disabled)", () => {
+    const config = loadConfig({ path: missingPath(), env: {} });
+    expect(config.ingest?.token).toBe("");
+    // Serialized output shows `ingest` as an empty object (no token key).
+    expect((JSON.parse(JSON.stringify(config)) as { ingest: object }).ingest).toEqual({});
+  });
+
+  test("the token is readable but never leaks through serialization", () => {
+    const path = writeConfig(
+      "ingest.toml",
+      `[ingest]\ntoken = "${FAKE_INGEST_TOKEN}"\n`
+    );
+    const config = loadConfig({ path, env: {} });
+
+    // Accessible for the endpoint, non-enumerable for every serializer.
+    expect(config.ingest?.token).toBe(FAKE_INGEST_TOKEN);
+    expect(String(config)).not.toContain(FAKE_INGEST_TOKEN);
+    expect(`${config}`).not.toContain(FAKE_INGEST_TOKEN);
+    expect(JSON.stringify(config)).not.toContain(FAKE_INGEST_TOKEN);
+    expect(inspect(config)).not.toContain(FAKE_INGEST_TOKEN);
+    expect(redact(config)).not.toContain(FAKE_INGEST_TOKEN);
+    expect(redactString(`Bearer ${FAKE_INGEST_TOKEN}`, config)).toBe("Bearer ***");
+    // Free-text masking without the config object (the route never logs anyway).
+    expect(redact(`token=${FAKE_INGEST_TOKEN}`)).not.toContain(FAKE_INGEST_TOKEN);
+  });
+
+  test("a non-empty token shorter than 32 characters is a config error", () => {
+    const path = writeConfig(
+      "short.toml",
+      '[ingest]\ntoken = "too-short-token"\n'
+    );
+    expect(() => loadConfig({ path, env: {} })).toThrow(/ingest\.token/);
+    // The error never quotes the token value itself.
+    expect(captureError(() => loadConfig({ path, env: {} }))).not.toContain(
+      "too-short-token"
+    );
+  });
+
+  test("a 32-character token is accepted", () => {
+    const token = "a".repeat(32);
+    const path = writeConfig("ok32.toml", `[ingest]\ntoken = "${token}"\n`);
+    const config = loadConfig({ path, env: {} });
+    expect(config.ingest?.token).toBe(token);
+  });
+
+  test("wrong types for ingest keys throw", () => {
+    const bad = writeConfig("badingest.toml", "[ingest]\ntoken = 12345\n");
+    expect(() => loadConfig({ path: bad, env: {} })).toThrow(/ingest\.token/);
+    const badTable = writeConfig("badingesttable.toml", 'ingest = "nope"\n');
+    expect(() => loadConfig({ path: badTable, env: {} })).toThrow(/ingest/);
+  });
+});

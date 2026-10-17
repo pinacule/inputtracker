@@ -23,6 +23,7 @@ import { dirname } from "node:path";
 
 import {
   loadConfig,
+  isIngestEnabled,
   redact,
   redactString,
   type Config,
@@ -221,6 +222,7 @@ function configDetail(config: Config, deps: DoctorDeps): string {
     `audiobookshelf token: ${tokenSet ? "set" : "empty"}`,
     `simkl client_id: ${clientIdSet ? "set" : "empty"}`,
     `simkl token file: ${tokenFile}`,
+    `ingest: ${isIngestEnabled(config) ? "enabled" : "disabled"}`,
   ].join(", ");
 }
 
