@@ -5,7 +5,8 @@ shows it as a calendar, heat map, stats and in-progress/finished lists.
 Everything is stored in a local SQLite database, and the web app is a PWA you
 can install on your phone.
 
-The v1 source is Audiobookshelf (read-only); manual entries are supported too.
+Sources: Audiobookshelf and Simkl (both read-only syncs) and YouTube Takeout
+imports (local files). Manual entries are supported too.
 
 ## Requirements
 
@@ -39,6 +40,11 @@ Every key, its default and what it means:
 | `audiobookshelf.url` | `http://localhost:<port>` (default port 13378) | Audiobookshelf server base URL. |
 | `audiobookshelf.token` | empty | Audiobookshelf API token; required for syncing. |
 | `audiobookshelf.timeout_s` | `20` | Per-request timeout, in seconds. |
+| `simkl.client_id` | empty | Simkl V2 app client id; required for Simkl sync. |
+| `simkl.base_url` | `https://api.simkl.com` | Simkl API base URL. |
+| `simkl.poster_base_url` | `https://simkl.in/posters` | Base URL for Simkl poster images. |
+| `simkl.timeout_s` | `20` | Per-request timeout, in seconds. |
+| `youtube.thumb_base_url` | `https://i.ytimg.com/vi` | Base URL for YouTube video thumbnails. |
 | `notify.desktop` | `true` | Desktop notification on sync failure (via `notify-send`; silently ignored when missing). |
 | `notify.ntfy_url` | empty | Optional ntfy topic URL for sync failure alerts. |
 
@@ -59,7 +65,7 @@ Checks:
 
 ```sh
 bun run check   # tsc for src/ and web/, then bun test
-bun run smoke   # end-to-end run against a fake Audiobookshelf (temp dirs, no outside network)
+bun run smoke   # end-to-end run against fake Audiobookshelf, Simkl and YouTube servers (temp dirs, no outside network)
 ```
 
 ## Install as a service
@@ -95,6 +101,7 @@ Units and timers it installs:
 | `inputtracker.service` | runs the HTTP server | always (restarts on failure) |
 | `inputtracker-sync@.service` | oneshot `it sync %i` | launched by its timer |
 | `inputtracker-sync@audiobookshelf.timer` | Audiobookshelf sync | hourly, persistent, up to 120 s jitter |
+| `inputtracker-sync@simkl.timer` | Simkl sync | hourly at :30, persistent, up to 120 s jitter |
 | `inputtracker-backup.service` | oneshot `it backup` | launched by its timer |
 | `inputtracker-backup.timer` | database snapshot + JSON export | daily at 03:30, persistent |
 
@@ -116,7 +123,7 @@ Run commands with `bun run it <command>`.
 
 | Command | Options | Example |
 |---|---|---|
-| `sync audiobookshelf` | source name; only `audiobookshelf` is accepted | `bun run it sync audiobookshelf` |
+| `sync <source>` | source is `audiobookshelf` or `simkl` | `bun run it sync audiobookshelf` |
 | `auth simkl` | `[--status]` | `bun run it auth simkl` |
 | `add` | `--type <t> --title <title> --start <local> [--end <local>] [--duration-min <n>] [--parent <title>] [--season <n>] [--episode <n>] [--progress <0..1>] [--device <name>]` | `bun run it add --type audiobook --title "The Synthetic Tale" --start "2026-10-17 21:30" --duration-min 45` |
 | `export` | `--format json\|csv --out <file>` | `bun run it export --format json --out archive.json` |
@@ -146,6 +153,65 @@ Details:
 
 Exit codes: `0` success, `1` bad usage (also invalid `add` input), `2` failure
 (missing/unreadable config, database, sync, export or import errors).
+
+## Simkl (TV shows, movies, anime)
+
+1. Register a **V2** app at https://simkl.com/settings/developer/ with client type
+   **"TV, devices & command line"**. It needs no client secret and no redirect URI.
+2. Copy the commented `[simkl]` block from `inputtracker.config.example.toml` into
+   `inputtracker.config.toml` and paste the app's `client_id` there. The block's other
+   keys are `base_url` (default `https://api.simkl.com`), `poster_base_url` (default
+   `https://simkl.in/posters`) and `timeout_s` (default `20`). The `client_id` is not a
+   secret, but the config file stays out of git.
+3. Run `bun run it auth simkl`. It prints an approval link on one line, plus a fallback
+   link and code: open the link on any device and approve. The command polls until it
+   succeeds, then exits by itself; it stops after at most 10 minutes and prints
+   `code expired, run 'it auth simkl' again`. `bun run it auth simkl --status` shows
+   whether Simkl is connected, the scope and the date the access token is valid until
+   (no network; it never prints tokens).
+4. Tokens are stored in `<directory of db_path>/secrets/simkl-token.json`: the `secrets`
+   directory is mode 0700 and the file mode 0600. Never commit or share that file. The
+   access token refreshes automatically; if a refresh fails, the sync error tells you to
+   run `it auth simkl` again.
+5. Re-run `scripts/install.sh` so the new `inputtracker-sync@simkl.timer` is installed and
+   enabled. It runs the Simkl sync hourly at :30, persistent, with up to 120 s of jitter
+   (the Audiobookshelf timer runs on the hour).
+6. Sync now with `bun run it sync simkl`, or use "Sync Simkl now" on the Import/Export
+   page (`POST /api/sync/simkl`). If `simkl.client_id` is empty or the account is not
+   authorised, `sync simkl` prints a hint and exits 0, so the timer records no failed run
+   and sends no notification.
+
+InputTracker only reads from Simkl: every data call is a GET, and the only POSTs are the
+two sign-in endpoints (`/oauth2/device` and `/oauth2/token`). It never changes anything in
+your Simkl account. Posters are fetched from `simkl.in` directly by the server and cached
+on disk; no third-party image proxy is used.
+
+## YouTube watch history (Google Takeout)
+
+1. Go to https://takeout.google.com, choose **Deselect all**, then select only
+   **YouTube and YouTube Music**.
+2. Open "All YouTube data included" and keep only **history**. Under "Multiple formats"
+   set History to **JSON** (HTML is not supported).
+3. Create the export, download it and unzip it. The file you need is
+   `Takeout/YouTube and YouTube Music/history/watch-history.json`.
+4. Import it with `bun run it import youtube-takeout <path to watch-history.json>`. It
+   prints the record count, the views seen, the views inserted and the skip counts. You
+   can also upload the file on the Import/Export page; that path accepts files up to
+   512 MB, so use the CLI for bigger exports.
+5. Re-importing the same file, or a newer export that overlaps an older one, adds only the
+   new views; duplicates are ignored.
+6. Keep the Takeout file out of the repo: `.gitignore` already ignores
+   `watch-history*.json` and `Takeout/`.
+
+YouTube records carry no watch duration, so YouTube views count as views, not minutes.
+When the source filter is YouTube, Stats and Heat map default to the Count metric, and a
+minutes view shows the note "YouTube counts views, not minutes." Thumbnails are fetched
+from `i.ytimg.com` by the server and cached on disk (`GET /api/thumb/youtube/<videoId>`);
+no third-party image proxy is used. The import reads the local file only, no network.
+
+Skipped records are counted per reason: `ads` (Google Ads), `no_video` (removed or private
+videos, and anything without a usable video id), `other` (records whose `products` do not
+include `YouTube`) and `invalid` (a record with no parseable time).
 
 ## Phone install (PWA)
 
@@ -196,5 +262,9 @@ The exact column types, the `events_latest` view and worked SQL examples are in
   the unique `record_hash`.
 - Audiobookshelf is only read from: every request is a GET through the
   allow-listed client in `src/sources/audiobookshelf/client.ts`.
+- Simkl is only read from too: data requests go through the allow-listed client
+  in `src/sources/simkl/client.ts` (GET only; the two sign-in endpoints are the
+  only POSTs). Nothing is ever written to the Simkl account.
+- A YouTube Takeout import reads the local file only; it never uses the network.
 - Timestamps are stored as UTC ISO 8601 with milliseconds; the configured
   timezone is applied only for display and bucketing.
