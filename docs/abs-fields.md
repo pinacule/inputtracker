@@ -46,5 +46,46 @@ Fixtures in `test/fixtures/abs/` must use exactly these names with fake values.
 Note: a session can keep growing (`updatedAt`, `timeListening`, `currentTime` change while you
 listen) → the next sync creates a new row with a new hash; `events_latest` shows the final state.
 
-Still to capture (same way, by the manager, names only): `GET /api/me` (`mediaProgress[]`) and
-`GET /api/me/listening-stats`, and one podcast session if you have any.
+## `GET /api/me` (captured 2026-10-17)
+
+Top level: `id, username, email, type, mediaProgress[], seriesHideFromContinueListening, bookmarks,
+isActive, isLocked, lastSeen, createdAt, permissions, librariesAccessible, itemTagsSelected,
+hasOpenIDLink`. We use **only `mediaProgress`**; nothing else from the user object is stored.
+
+### `mediaProgress[]` item
+
+| Field | Type | Seen value / format | Maps to |
+|---|---|---|---|
+| `id` | string | | raw |
+| `userId` | string | | raw |
+| `libraryItemId` | string | | `source_id` (kind `media_progress`) = `libraryItemId` or `libraryItemId:episodeId` |
+| `episodeId` | string \| null | null for books | part of `source_id` |
+| `mediaItemId` | string | | raw |
+| `mediaItemType` | string | `"book"` / `"podcastEpisode"` | `media_type` |
+| `duration` | number | seconds | raw |
+| `progress` | number | 0..1 | `progress` |
+| `currentTime` | number | seconds | raw |
+| `isFinished` | boolean | | raw (F10 finished list) |
+| `hideFromContinueListening` | boolean | | raw |
+| `ebookLocation` | string \| null | | raw |
+| `ebookProgress` | number | | raw |
+| `lastUpdate` | number | epoch ms | `started_at` of the progress row (UTC ISO) |
+| `startedAt` | number | epoch ms | raw |
+| `finishedAt` | number \| null | epoch ms | `ended_at` |
+
+`title` is not in mediaProgress: take it from the matching session (`libraryItemId`) or from
+`listening-stats.items[id].mediaMetadata.title`; fall back to `libraryItemId`.
+
+## `GET /api/me/listening-stats` (captured 2026-10-17)
+
+| Field | Type | Notes |
+|---|---|---|
+| `totalTime` | number | seconds |
+| `items` | object | keyed by libraryItemId → `{ id, mediaMetadata, timeListening }` |
+| `days` | object | `"YYYY-MM-DD"` → seconds |
+| `dayOfWeek` | object | `"Monday"`… → seconds |
+| `today` | number | seconds |
+| `recentSessions` | array | same shape as sessions above |
+
+`days` become `daily_stat` snapshot rows (`source_id` = the date) for cross-checks only; they are
+never counted in heat map/calendar (sessions are).
