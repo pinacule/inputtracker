@@ -26,6 +26,7 @@ Run in progress.
 | T16 Import/Export/Add page | opencode | deepseek-v4.1-flash-free | 1 | 79c19be |
 | T17 PWA | opencode | deepseek-v4.1-flash-free | 1 | 001ac0c |
 | F01 Stats dashboard | antigravity | gemini-3.8-flash-high | 1 | e88e92f |
+| F09 ABS covers | opencode | deepseek-v4.1-flash-free | 1 | c7513d6 |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
