@@ -8,6 +8,7 @@ Run in progress.
 ## Done
 | Task | Worker | Model | Attempts | Commit |
 |---|---|---|---|---|
+| T01 Scaffold | opencode | deepseek-v4.1-flash-free | 1 | 8725ad5 |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
