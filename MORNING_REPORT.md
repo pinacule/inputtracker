@@ -17,6 +17,7 @@ Run in progress.
 | T07 ABS mapping | antigravity | gemini-3.8-flash-high | 1 | 6f44f72 |
 | T08 ABS sync + CLI | opencode | deepseek-v4.1-flash-free | 1 | 56816bd |
 | T09 Export JSON/CSV | opencode | deepseek-v4.1-flash-free | 1 | bf08295 |
+| T10 Import native | opencode | deepseek-v4.1-flash-free | 1 | b9d08ac |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
