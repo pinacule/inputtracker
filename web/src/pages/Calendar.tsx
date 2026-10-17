@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { getCalendar, type CalendarDay, type CalendarResult } from "../api";
+import {
+  getCalendar,
+  type CalendarDay,
+  type CalendarItem,
+  type CalendarResult,
+} from "../api";
 import {
   buildMonthGrid,
   formatDuration,
@@ -15,6 +20,34 @@ export interface CalendarProps {
 }
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/**
+ * Small square cover thumbnail for a calendar item. Falls back to the existing
+ * source icon when the item has no cover or the image fails to load.
+ */
+function ItemThumbnail({ item }: { item: CalendarItem }) {
+  const [failed, setFailed] = useState(false);
+
+  if (item.cover_url && !failed) {
+    return (
+      <img
+        class="calendar-item-cover"
+        src={item.cover_url}
+        alt=""
+        width={40}
+        height={40}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <span class="calendar-item-icon-badge" aria-hidden="true">
+      {sourceIcon(item.source, item.media_type)}
+    </span>
+  );
+}
 
 function getCurrentMonth(): string {
   const now = new Date();
@@ -314,12 +347,7 @@ export function Calendar({ date }: CalendarProps = {}) {
             <ul class="calendar-detail-list">
               {selectedItems.map((item) => (
                 <li key={item.id} class="calendar-detail-item">
-                  <span
-                    class="calendar-item-icon-badge"
-                    aria-hidden="true"
-                  >
-                    {sourceIcon(item.source, item.media_type)}
-                  </span>
+                  <ItemThumbnail item={item} />
                   <div class="calendar-item-body">
                     {item.parent_title && (
                       <div class="calendar-item-parent">

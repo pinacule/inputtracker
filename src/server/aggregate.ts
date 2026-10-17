@@ -23,6 +23,7 @@ export interface ConsumptionEvent {
   source: string;
   source_kind: string;
   source_id?: string;
+  external_ids?: unknown;
   media_type: string;
   title: string | null;
   parent_title?: string | null;
@@ -43,6 +44,8 @@ export interface CalendarItem {
   started_at: string;
   local_time: string;
   duration_seconds: number | null;
+  /** `/api/cover/<abs_item>` for ABS items, else null. */
+  cover_url: string | null;
 }
 
 export interface CalendarDay {
@@ -122,6 +125,85 @@ export interface InProgressItem {
   parent_title: string | null;
   progress: number | null;
   started_at: string;
+  /** `/api/cover/<abs_item>` for ABS items, else null. */
+  cover_url: string | null;
+}
+
+/** Parse an `external_ids` value (JSON string from SQLite, or an object). */
+export function parseExternalIds(
+  value: unknown
+): Record<string, unknown> | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "string") {
+    if (value.trim() === "") {
+      return null;
+    }
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (
+        parsed !== null &&
+        typeof parsed === "object" &&
+        !Array.isArray(parsed)
+      ) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+/**
+ * `/api/cover/<abs_item>` for Audiobookshelf events carrying an `abs_item`
+ * external id (real field `libraryItemId`), otherwise null. The id is
+ * re-validated so a malformed value can never be turned into a URL/path.
+ */
+export function coverUrlFor(event: {
+  source?: string;
+  external_ids?: unknown;
+}): string | null {
+  if (event.source !== "audiobookshelf") {
+    return null;
+  }
+  const ids = parseExternalIds(event.external_ids);
+  if (ids === null) {
+    return null;
+  }
+  const absItem = ids["abs_item"];
+  if (typeof absItem !== "string" || !/^[A-Za-z0-9_-]+$/.test(absItem)) {
+    return null;
+  }
+  return `/api/cover/${absItem}`;
+}
+
+/** Raw `events_latest` row for the in-progress query (before `cover_url`). */
+interface InProgressRow {
+  id: number;
+  source: string;
+  title: string | null;
+  parent_title: string | null;
+  progress: number | null;
+  started_at: string;
+  external_ids: unknown;
+}
+
+function toInProgressItem(row: InProgressRow): InProgressItem {
+  return {
+    id: row.id,
+    source: row.source,
+    title: row.title ?? null,
+    parent_title: row.parent_title ?? null,
+    progress: row.progress ?? null,
+    started_at: row.started_at,
+    cover_url: coverUrlFor(row),
+  };
 }
 
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
@@ -243,6 +325,7 @@ export function aggregateCalendar(
       started_at: event.started_at,
       local_time: local.localTime,
       duration_seconds: durationSeconds,
+      cover_url: coverUrlFor(event),
     });
     day.totalSeconds += durationSeconds ?? 0;
   }
@@ -584,6 +667,7 @@ export function filterInProgress(
     parent_title?: string | null;
     progress?: number | null;
     started_at: string;
+    external_ids?: unknown;
   }[],
   source?: string
 ): InProgressItem[] {
@@ -609,6 +693,7 @@ export function filterInProgress(
       parent_title: e.parent_title ?? null,
       progress: e.progress ?? null,
       started_at: e.started_at,
+      cover_url: coverUrlFor(e),
     }));
 }
 
@@ -626,6 +711,7 @@ export function getLatestConsumptionEvents(
           source,
           source_kind,
           source_id,
+          external_ids,
           media_type,
           title,
           parent_title,
@@ -648,6 +734,7 @@ export function getLatestConsumptionEvents(
         source,
         source_kind,
         source_id,
+        external_ids,
         media_type,
         title,
         parent_title,
@@ -736,14 +823,15 @@ export function getInProgress(
 ): InProgressItem[] {
   if (source !== undefined && source !== "") {
     return db
-      .query<InProgressItem, [string]>(
+      .query<InProgressRow, [string]>(
         `SELECT
           id,
           source,
           title,
           parent_title,
           progress,
-          started_at
+          started_at,
+          external_ids
         FROM events_latest
         WHERE source_kind = 'media_progress'
           AND progress > 0
@@ -751,23 +839,26 @@ export function getInProgress(
           AND source = ?
         ORDER BY started_at DESC, id DESC;`
       )
-      .all(source);
+      .all(source)
+      .map(toInProgressItem);
   }
 
   return db
-    .query<InProgressItem, []>(
+    .query<InProgressRow, []>(
       `SELECT
         id,
         source,
         title,
         parent_title,
         progress,
-        started_at
+        started_at,
+        external_ids
       FROM events_latest
       WHERE source_kind = 'media_progress'
         AND progress > 0
         AND progress < 1
       ORDER BY started_at DESC, id DESC;`
     )
-    .all();
+    .all()
+    .map(toInProgressItem);
 }

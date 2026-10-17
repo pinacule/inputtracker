@@ -30,6 +30,7 @@ import {
   getInProgress,
   getStats,
 } from "./aggregate.ts";
+import { getCover, isValidCoverId } from "./covers.ts";
 
 export interface AppDeps {
   db: Database;
@@ -220,6 +221,37 @@ export function createApp(deps: AppDeps): Hono {
     const source = c.req.query("source") || undefined;
     const result = getInProgress(db, source);
     return c.json(result);
+  });
+
+  // GET /api/cover/:itemId — proxy (and cache) an Audiobookshelf cover.
+  // The token/URL stay server-side: the body is image bytes and the headers
+  // only ever carry a normalized `image/*` content type.
+  app.get("/api/cover/:itemId", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const itemId = c.req.param("itemId");
+    if (!isValidCoverId(itemId)) {
+      return c.json({ error: "Invalid item id" }, 400);
+    }
+
+    const cover = await getCover(itemId, {
+      config,
+      createAbsClient: deps.createAbsClient,
+    });
+    if (cover === null) {
+      return c.json({ error: "Cover not available" }, 404);
+    }
+
+    return new Response(cover.bytes, {
+      status: 200,
+      headers: {
+        "Content-Type": cover.contentType,
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
   });
 
   // GET /api/export.json

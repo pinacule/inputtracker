@@ -22,6 +22,8 @@ export interface CalendarItem {
   started_at: string;
   local_time: string;
   duration_seconds: number | null;
+  /** `/api/cover/<abs_item>` for ABS items, else null. */
+  cover_url: string | null;
 }
 
 export interface CalendarDay {
@@ -109,6 +111,8 @@ export interface InProgressItem {
   parent_title: string | null;
   progress: number | null;
   started_at: string;
+  /** `/api/cover/<abs_item>` for ABS items, else null. */
+  cover_url: string | null;
 }
 
 /** Body accepted by `POST /api/events` (manual entry). */
