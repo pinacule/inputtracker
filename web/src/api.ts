@@ -24,6 +24,8 @@ export interface CalendarItem {
   duration_seconds: number | null;
   /** `/api/cover/<abs_item>` for ABS items, else null. */
   cover_url: string | null;
+  /** Synced later from an offline device: the day is the sync day, the time is unknown. */
+  time_uncertain?: boolean;
 }
 
 export interface CalendarDay {
@@ -60,6 +62,9 @@ export interface HeatmapHourCell {
 
 export interface HeatmapHoursResult {
   cells: HeatmapHourCell[];
+  /** Sessions left out of the grid because their time of day is unknown. */
+  unplaced_count?: number;
+  unplaced_minutes?: number;
 }
 
 export interface StatBucket {

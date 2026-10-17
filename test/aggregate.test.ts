@@ -14,6 +14,8 @@ import {
   getHeatmapHours,
   getInProgress,
   getStats,
+  isTimeUncertain,
+  UNCERTAIN_SLACK_SECONDS,
   type ConsumptionEvent,
 } from "../src/server/aggregate.ts";
 
@@ -546,5 +548,94 @@ describe("database integration: reading events_latest only", () => {
 
     const calEmpty = getCalendar(db, "2026-10", TZ, "nonexistent");
     expect(calEmpty.days).toHaveLength(0);
+  });
+});
+
+describe("offline-synced sessions (time of day unknown)", () => {
+  // Synthetic: an Android offline session the server stamps at sync time
+  // (start == end) with 3 h of listening that happened earlier.
+  const offline: ConsumptionEvent = {
+    id: 10,
+    source: "audiobookshelf",
+    source_kind: "listening_session",
+    media_type: "audiobook",
+    title: "Offline Book",
+    started_at: "2026-07-12T11:31:46.350Z",
+    ended_at: "2026-07-12T11:31:46.462Z",
+    duration_seconds: 10800,
+  };
+  // A normal browser session: 2 h of listening inside a 2.5 h span (pauses).
+  const normal: ConsumptionEvent = {
+    id: 11,
+    source: "audiobookshelf",
+    source_kind: "listening_session",
+    media_type: "audiobook",
+    title: "Desk Book",
+    started_at: "2026-07-12T15:00:00.000Z",
+    ended_at: "2026-07-12T17:30:00.000Z",
+    duration_seconds: 7200,
+  };
+
+  test("isTimeUncertain flags only listening longer than the wall-clock span", () => {
+    expect(isTimeUncertain(offline)).toBe(true);
+    expect(isTimeUncertain(normal)).toBe(false);
+    // Within the slack (rounding) is not uncertain.
+    expect(
+      isTimeUncertain({ ...normal, duration_seconds: 9000 + UNCERTAIN_SLACK_SECONDS })
+    ).toBe(false);
+    expect(
+      isTimeUncertain({ ...normal, duration_seconds: 9001 + UNCERTAIN_SLACK_SECONDS })
+    ).toBe(true);
+    // No end or no duration (e.g. watches, manual entries): never uncertain.
+    expect(isTimeUncertain({ ...offline, ended_at: null })).toBe(false);
+    expect(isTimeUncertain({ ...offline, ended_at: undefined })).toBe(false);
+    expect(isTimeUncertain({ ...offline, duration_seconds: null })).toBe(false);
+  });
+
+  test("calendar keeps the session on its sync day and marks it", () => {
+    const cal = aggregateCalendar([offline, normal], "2026-07", TZ);
+    expect(cal.days).toHaveLength(1);
+    const day = cal.days[0]!;
+    expect(day.date).toBe("2026-07-12");
+    expect(day.minutes).toBe(300); // both count toward the day
+    expect(day.items.map((i) => [i.title, i.time_uncertain])).toEqual([
+      ["Offline Book", true],
+      ["Desk Book", false],
+    ]);
+  });
+
+  test("heat map days count it; the hour grid leaves it out and reports it", () => {
+    const days = aggregateHeatmapDays([offline, normal], "2026", TZ);
+    expect(days.days[0]?.minutes).toBe(300);
+
+    const hours = aggregateHeatmapHours([offline, normal], "2026", TZ);
+    expect(hours.cells).toEqual([
+      { weekday: 6, hour: 17, count: 1, minutes: 120 }, // Sun 17:00 CEST
+    ]);
+    expect(hours.unplaced_count).toBe(1);
+    expect(hours.unplaced_minutes).toBe(180);
+  });
+
+  test("the DB path reads ended_at from events_latest", () => {
+    const db = openDb(":memory:");
+    const runId = startRun(db, "test-sync");
+    insertEvents(db, runId, [
+      {
+        source: "audiobookshelf",
+        source_kind: "listening_session",
+        source_id: "abs-offline-1",
+        media_type: "audiobook",
+        title: "Offline Book",
+        started_at: offline.started_at,
+        ended_at: offline.ended_at,
+        duration_seconds: 10800,
+      },
+    ]);
+    finishRun(db, runId, { status: "ok", rowsSeen: 1, rowsInserted: 1 });
+
+    expect(getCalendar(db, "2026-07", TZ).days[0]?.items[0]?.time_uncertain).toBe(true);
+    const hours = getHeatmapHours(db, "2026", TZ);
+    expect(hours.cells).toEqual([]);
+    expect(hours.unplaced_count).toBe(1);
   });
 });

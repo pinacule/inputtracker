@@ -358,9 +358,18 @@ export function Calendar({ date }: CalendarProps = {}) {
                       {formatItemTitle(item)}
                     </div>
                     <div class="calendar-item-meta">
-                      <span class="calendar-item-time">
-                        {formatLocalTime(item.local_time)}
-                      </span>
+                      {item.time_uncertain ? (
+                        <span
+                          class="calendar-item-time calendar-item-time-uncertain"
+                          title="Played offline and synced later. The day is the sync day; the time of day is unknown."
+                        >
+                          synced {formatLocalTime(item.local_time)} (offline)
+                        </span>
+                      ) : (
+                        <span class="calendar-item-time">
+                          {formatLocalTime(item.local_time)}
+                        </span>
+                      )}
                       <span class="calendar-item-bullet">·</span>
                       <span class="calendar-item-duration">
                         {formatDuration(item.duration_seconds)}

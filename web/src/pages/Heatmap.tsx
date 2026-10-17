@@ -5,6 +5,7 @@ import {
   type HeatmapDay,
   type HeatmapHourCell,
 } from "../api";
+import { formatDuration } from "../lib/calendar";
 import {
   buildHourGrid,
   buildYearGrid,
@@ -40,6 +41,10 @@ export function Heatmap() {
 
   const [daysData, setDaysData] = useState<HeatmapDay[]>([]);
   const [hoursData, setHoursData] = useState<HeatmapHourCell[]>([]);
+  const [unplaced, setUnplaced] = useState<{ count: number; minutes: number }>({
+    count: 0,
+    minutes: 0,
+  });
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +67,10 @@ export function Heatmap() {
         if (!cancelled) {
           setDaysData(daysRes.days ?? []);
           setHoursData(hoursRes.cells ?? []);
+          setUnplaced({
+            count: hoursRes.unplaced_count ?? 0,
+            minutes: hoursRes.unplaced_minutes ?? 0,
+          });
           setLoading(false);
         }
       })
@@ -393,6 +402,14 @@ export function Heatmap() {
             })}
           </div>
         </div>
+        {unplaced.count > 0 && (
+          <p class="heatmap-note">
+            Not shown: {unplaced.count} offline{" "}
+            {unplaced.count === 1 ? "session" : "sessions"} (
+            {formatDuration(unplaced.minutes * 60)}) synced later from a phone, so
+            their time of day is unknown. They still count on their sync day above.
+          </p>
+        )}
       </section>
     </section>
   );
