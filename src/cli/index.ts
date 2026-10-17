@@ -43,9 +43,17 @@ import {
 } from "../sources/simkl/client.ts";
 import {
   readSimklToken,
+  simklTokenPath,
   writeSimklToken,
   type SimklToken,
 } from "../sources/simkl/token.ts";
+import {
+  isSimklAuthorised,
+  isSimklConfigured,
+  syncSimkl,
+  type SimklSyncResult,
+  type SyncSimklDeps,
+} from "../sources/simkl/sync.ts";
 
 export const EXIT_OK = 0;
 export const EXIT_USAGE = 1;
@@ -58,7 +66,7 @@ export function usage(): string {
     "Usage: it <command> [options]",
     "",
     "Commands:",
-    "  sync audiobookshelf                      fetch new Audiobookshelf activity into the DB",
+    "  sync audiobookshelf|simkl                fetch new source activity into the DB",
     "  auth simkl [--status]                    connect or inspect Simkl authorization",
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
@@ -75,6 +83,7 @@ export interface CliDeps {
   createAbsClient?: (cfg: Config) => AbsClient;
   sinkFor?: (db: Database) => Sink;
   syncAudiobookshelf?: (deps: SyncAbsDeps) => Promise<AbsSyncResult>;
+  syncSimkl?: (deps: SyncSimklDeps) => Promise<SimklSyncResult>;
   /** Cover cache fill after a successful sync; defaults to the real `prefetchCovers`. */
   prefetchCovers?: typeof prefetchCovers;
   buildNotifier?: (cfg: Config) => Notifier;
@@ -99,8 +108,20 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+const SIMKL_TOKEN_PATTERN = /\b(?:simkl_at_|simkl_rt_)[A-Za-z0-9_\-]+\b/gi;
+
 function redactMessage(message: string, config?: Config): string {
-  return config ? redactString(message, config) : redact(message);
+  let clean = message.replace(SIMKL_TOKEN_PATTERN, "***");
+  if (config) {
+    clean = redactString(clean, config);
+    try {
+      const tok = readSimklToken(simklTokenPath(config));
+      if (tok?.access_token) clean = clean.split(tok.access_token).join("***");
+      if (tok?.refresh_token) clean = clean.split(tok.refresh_token).join("***");
+    } catch {}
+    return clean;
+  }
+  return redact(clean);
 }
 
 interface SyncContext {
@@ -121,10 +142,86 @@ async function runSync(
     return EXIT_USAGE;
   }
 
-  if (source !== ABS_SOURCE) {
+  if (source !== ABS_SOURCE && source !== "simkl") {
     err(`Unknown source: ${source}`);
     err(usage());
     return EXIT_USAGE;
+  }
+
+  if (source === "simkl") {
+    const doLoadConfig = deps.loadConfig ?? loadConfig;
+    const doOpenDb = deps.openDb ?? openDb;
+    const sinkFor = deps.sinkFor ?? ((db: Database) => new LocalDbSink(db));
+    const makeNotifier = deps.buildNotifier ?? buildNotifier;
+    const report = deps.reportSyncResult ?? reportSyncResult;
+
+    let config: Config;
+    try {
+      config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+    } catch (caught) {
+      err(redactMessage(errorText(caught)));
+      return EXIT_FAILURE;
+    }
+
+    if (!isSimklConfigured(config)) {
+      out("Simkl is not configured: set simkl.client_id in inputtracker.config.toml");
+      return EXIT_OK;
+    }
+
+    const tokenReader = deps.readSimklToken ?? readSimklToken;
+    if (!isSimklAuthorised(config, tokenReader)) {
+      out("Simkl is not authorised; run: bun run it auth simkl");
+      return EXIT_OK;
+    }
+
+    let db: Database;
+    try {
+      db = doOpenDb(config.storage.db_path);
+    } catch (caught) {
+      err(redactMessage(errorText(caught), config));
+      return EXIT_FAILURE;
+    }
+
+    let notifier: Notifier;
+    try {
+      notifier = makeNotifier(config);
+    } catch {
+      notifier = { notify: async () => {} };
+    }
+
+    try {
+      const sink = sinkFor(db);
+      const makeSimkl =
+        deps.createSimklClient ??
+        ((cfg, clientDeps) => createSimklClient(cfg, clientDeps));
+      const tokenPath = simklTokenPath(config);
+      const client = makeSimkl(config.simkl, {
+        fetch: deps.fetch,
+        sleep: deps.sleep,
+        now: deps.nowMs,
+        tokenPath,
+        readToken: () => tokenReader(tokenPath),
+        writeToken: deps.writeSimklToken
+          ? (t) => deps.writeSimklToken!(tokenPath, t)
+          : undefined,
+      });
+      const doSync = deps.syncSimkl ?? syncSimkl;
+      const result = await doSync({ client, sink, db, config });
+      out(`simkl: ${result.seen} seen, ${result.inserted} new (${result.mode})`);
+      await reportSyncSafely(report, db, "simkl", true, undefined, notifier);
+      return EXIT_OK;
+    } catch (caught) {
+      const message = redactMessage(errorText(caught), config);
+      err(message);
+      await reportSyncSafely(report, db, "simkl", false, message, notifier);
+      return EXIT_FAILURE;
+    } finally {
+      try {
+        db.close();
+      } catch {
+        // ignore close errors
+      }
+    }
   }
 
   const doLoadConfig = deps.loadConfig ?? loadConfig;

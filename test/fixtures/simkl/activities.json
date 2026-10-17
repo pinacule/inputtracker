@@ -1,12 +1,28 @@
 {
   "all": "2026-05-08T14:23:11Z",
-  "tv_shows": {
+  "settings": {
     "all": "2026-05-08T14:23:11Z"
+  },
+  "tv_shows": {
+    "all": "2026-05-08T14:23:11Z",
+    "watching": "2026-05-08T14:23:11Z",
+    "plantowatch": "2026-04-01T10:00:00Z",
+    "hold": null,
+    "completed": "2026-03-01T12:00:00Z",
+    "dropped": null
   },
   "anime": {
-    "all": "2026-05-08T14:23:11Z"
+    "all": "2026-05-08T14:23:11Z",
+    "watching": "2026-05-08T14:23:11Z",
+    "plantowatch": null,
+    "hold": null,
+    "completed": null,
+    "dropped": null
   },
   "movies": {
-    "all": "2026-05-08T14:23:11Z"
+    "all": "2026-05-08T14:23:11Z",
+    "plantowatch": "2026-04-10T08:00:00Z",
+    "completed": "2026-05-01T20:15:00Z",
+    "dropped": null
   }
 }

@@ -1,0 +1,118 @@
+{
+  "movies": [
+    {
+      "last_watched_at": "2026-05-01T20:15:00Z",
+      "status": "completed",
+      "user_rating": 8,
+      "user_rated_at": "2026-05-01T22:30:00Z",
+      "movie": {
+        "title": "Synthetic Movie 1",
+        "year": 2024,
+        "poster": "74/74415673dcdc9cdd",
+        "runtime": 148,
+        "ids": {
+          "simkl": 900001,
+          "slug": "synthetic-movie-1-2024",
+          "imdb": "tt9000001",
+          "tmdb": "9000001"
+        }
+      }
+    },
+    {
+      "last_watched_at": null,
+      "status": "plantowatch",
+      "user_rating": null,
+      "user_rated_at": null,
+      "movie": {
+        "title": "Synthetic Unwatched Movie",
+        "year": 2025,
+        "poster": null,
+        "runtime": 100,
+        "ids": {
+          "simkl": 900002,
+          "slug": "synthetic-unwatched-movie-2025"
+        }
+      }
+    }
+  ],
+  "shows": [
+    {
+      "last_watched_at": "2026-04-30T19:02:00Z",
+      "status": "watching",
+      "last_watched": "S01E01",
+      "show": {
+        "title": "Synthetic Show 1",
+        "year": 2023,
+        "poster": "12/12345678abcdef01",
+        "runtime": 45,
+        "ids": {
+          "simkl": 900003,
+          "slug": "synthetic-show-1-2023",
+          "imdb": "tt9000003",
+          "tvdb": 900003
+        }
+      },
+      "seasons": [
+        {
+          "number": 1,
+          "episodes": [
+            {
+              "number": 1,
+              "watched_at": "2026-04-30T19:02:00Z"
+            },
+            {
+              "number": 2,
+              "watched_at": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "anime": [
+    {
+      "anime_type": "tv",
+      "last_watched_at": "2026-05-02T15:00:00Z",
+      "status": "watching",
+      "show": {
+        "title": "Synthetic Anime TV",
+        "year": 2022,
+        "poster": "34/34567890abcdef12",
+        "runtime": 24,
+        "ids": {
+          "simkl": 900004,
+          "slug": "synthetic-anime-tv-2022",
+          "mal": 900004,
+          "anidb": 900004
+        }
+      },
+      "seasons": [
+        {
+          "number": 1,
+          "episodes": [
+            {
+              "number": 1,
+              "watched_at": "2026-05-02T15:00:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "anime_type": "movie",
+      "last_watched_at": "2026-05-03T18:30:00Z",
+      "status": "completed",
+      "anime": {
+        "title": "Synthetic Anime Movie",
+        "year": 2021,
+        "poster": "56/56789012abcdef34",
+        "runtime": 115,
+        "ids": {
+          "simkl": 900005,
+          "slug": "synthetic-anime-movie-2021",
+          "mal": 900005
+        }
+      }
+    }
+  ]
+}
