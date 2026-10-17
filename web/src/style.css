@@ -1473,9 +1473,7 @@ body {
 .insight-figure-sub {
   font-size: 0.75rem;
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .streak-source-list {
@@ -1489,6 +1487,7 @@ body {
 
 .streak-source-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   padding: 0.45rem 0.75rem;
@@ -1508,9 +1507,7 @@ body {
   color: var(--muted);
   font-size: 0.8rem;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* On this day card: one group per earlier year */
