@@ -117,6 +117,45 @@ export interface StatsParams {
   source?: string;
 }
 
+export interface StreakInfo {
+  current: number;
+  longest: number;
+  longest_start: string | null;
+  longest_end: string | null;
+  last_active: string | null;
+}
+
+export interface StreaksResult {
+  today: string;
+  overall: StreakInfo;
+  by_source: Record<string, StreakInfo>;
+}
+
+export interface OnThisDayItem {
+  title: string;
+  source: string;
+  media_type: string | null;
+  started_at: string;
+  cover_url: string | null;
+}
+
+export interface OnThisDayYear {
+  year: number;
+  years_ago: number;
+  items: OnThisDayItem[];
+}
+
+export interface OnThisDayResult {
+  date: string;
+  years: OnThisDayYear[];
+}
+
+/** Result of `GET /api/insights` (streaks + "On this day"). */
+export interface InsightsResult {
+  streaks: StreaksResult;
+  on_this_day: OnThisDayResult;
+}
+
 export interface InProgressItem {
   id: number;
   source: string;
@@ -323,6 +362,10 @@ export function getStats(
       source: params.source,
     })
   );
+}
+
+export function getInsights(source?: string): Promise<InsightsResult> {
+  return getJson<InsightsResult>(withQuery("/api/insights", { source }));
 }
 
 export function getInProgress(): Promise<InProgressItem[]> {

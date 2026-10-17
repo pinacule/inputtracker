@@ -57,3 +57,19 @@ export function formatDateTime(iso: string, timeZone: string): string {
 
   return `${day}.${month}.${year} ${hour}:${minute}`;
 }
+
+/**
+ * Format an already-local calendar date ("YYYY-MM-DD", e.g. a streak day from
+ * the API) as `DD.MM.YYYY`. No timezone conversion: the server already
+ * resolved the local day, so re-parsing as a timestamp could shift it by a day
+ * in zones behind UTC.
+ *
+ * Invalid input is returned unchanged.
+ */
+export function formatLocalDay(dateStr: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) {
+    return dateStr;
+  }
+  return `${match[3]}.${match[2]}.${match[1]}`;
+}
