@@ -1,4 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
+import { OfflineBanner } from "./components/OfflineBanner";
 import { Add } from "./pages/Add";
 import { Calendar } from "./pages/Calendar";
 import { Heatmap } from "./pages/Heatmap";
@@ -56,6 +57,7 @@ export function App() {
 
   return (
     <div class="app">
+      <OfflineBanner />
       <main class="content">
         {route === "calendar" && <Calendar date={date} />}
         {route === "heatmap" && <Heatmap />}

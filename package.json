@@ -7,6 +7,7 @@
     "dev": "bun run src/server/main.ts",
     "dev:web": "vite --config web/vite.config.ts",
     "it": "bun run src/cli/index.ts",
+    "gen:icons": "bun run scripts/gen-icons.ts",
     "build:web": "vite build --config web/vite.config.ts"
   },
   "devDependencies": {
