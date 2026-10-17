@@ -22,6 +22,7 @@ Run in progress.
 | T12 HTTP API | antigravity | gemini-3.8-flash-high | 1 | 23e5426 |
 | T13 Web scaffold | opencode | deepseek-v4.1-flash-free | 1 | 4bee198 |
 | T14 Calendar view | antigravity | gemini-3.8-flash-high | 1 | 90aedf5 |
+| T15 Heat map view | antigravity | gemini-3.8-flash-high | 1 | 7d974d8 |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
