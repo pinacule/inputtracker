@@ -35,11 +35,19 @@ Worktree: `.worktrees/<task>`, worker output in `.worktrees/<task>/.task/`
   3. Check the rules: only files the task needed; no secrets; fixtures synthetic only; ABS
      client GET-only; no UPDATE/DELETE on `events`; displays/stats read `events_latest` only;
      timestamps UTC in storage; nothing PC-specific hard-coded (paths/URLs from config).
-  4. PASS → in the worktree `git add -A -- . ':!.task'` and commit `"<task>: <title>"`; in the main
-     checkout `git merge --no-ff task/<task>`, `bun install` if needed, `bun run check` on main,
-     `scripts/check-secrets.sh`, `git push origin main`; `git worktree remove --force .worktrees/<task>`,
-     `git branch -d task/<task>`. TASKS.md → `DONE (<worker> <model>, attempts N, <short sha>)`.
-     Update MORNING_REPORT.md "Done", commit + push. Then continue with B in this same call.
+  4. PASS → run exactly `scripts/merge-task.sh <task> "<title>"` from the main checkout. It
+     commits in the worktree, merges, runs `bun run check` on main, the secret check, pushes, and
+     only then removes the worktree. NEVER remove a worktree or branch yourself before it succeeded.
+     If it exits non-zero, main is unchanged and the worktree is kept: treat it as a review FAIL
+     (merge conflict → reset the worktree to main and re-run the task as the same attempt).
+     After success: TASKS.md → `DONE (<worker> <model>, attempts N, <short sha>)`, update
+     MORNING_REPORT.md "Done", commit + `scripts/check-secrets.sh` + push. Then continue with B.
+  - Only ever change the TASKS.md status of the task you are handling right now.
+  - Run merge-task.sh as its own command (`scripts/merge-task.sh T01 "Scaffold"`), not chained
+    with `cd` or `&&`; your cwd is already the main checkout. Don't commit/merge/push worker
+    code any other way.
+  - If the permission system denies an action: don't retry or work around it. Log it under
+    "Decisions needed" in MORNING_REPORT.md, set the task to `WAITING-MANUAL`, and go to B.
   5. FAIL → failure policy (attempt numbers are in current.json):
      - attempt 1 → write `.worktrees/<task>/.task/feedback.md`: specific problems, failing test
        output (trimmed), exact fix expectations. current.json: same worker, `prompt` = feedback.md,
