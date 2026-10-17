@@ -19,6 +19,7 @@ Run in progress.
 | T09 Export JSON/CSV | opencode | deepseek-v4.1-flash-free | 1 | bf08295 |
 | T10 Import native | opencode | deepseek-v4.1-flash-free | 1 | b9d08ac |
 | T11 Manual entry | opencode | deepseek-v4.1-flash-free | 1 | 58e56f4 |
+| T12 HTTP API | antigravity | gemini-3.8-flash-high | 1 | 23e5426 |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
