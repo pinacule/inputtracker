@@ -9,11 +9,20 @@ import type { Database } from "bun:sqlite";
 import { existsSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { Hono } from "hono";
-import type { Config } from "../core/config.ts";
+import { redactString, type Config } from "../core/config.ts";
+import { LocalDbSink, type Sink } from "../core/sink.ts";
 import { exportCsv } from "../io/export-csv.ts";
 import { exportJson } from "../io/export-json.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
 import { addManual, type ManualInput } from "../io/manual.ts";
+import { createAbsClient } from "../sources/audiobookshelf/client.ts";
+import {
+  syncAudiobookshelf,
+  SyncFailedError,
+  type AbsSyncResult,
+  type SyncAbsDeps,
+  type SyncClient,
+} from "../sources/audiobookshelf/sync.ts";
 import {
   getCalendar,
   getHeatmapDays,
@@ -26,10 +35,37 @@ export interface AppDeps {
   db: Database;
   config: Config;
   webDist?: string;
+  /**
+   * Injectable Audiobookshelf sync; defaults to the real `syncAudiobookshelf`.
+   * Tests use this so no network access is ever attempted.
+   */
+  syncAudiobookshelf?: (deps: SyncAbsDeps) => Promise<AbsSyncResult>;
+  /** Injectable ABS client factory so tests never hit the network. */
+  createAbsClient?: (config: Config) => SyncClient;
+  /** Injectable sink factory; defaults to a `LocalDbSink`. */
+  sinkFor?: (db: Database) => Sink;
 }
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const YEAR_RE = /^\d{4}$/;
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Audiobookshelf is usable only when both a URL and a token are configured.
+ * The token is non-enumerable on `Config`, but readable here.
+ */
+function isAbsConfigured(config: Config): boolean {
+  const abs = config.audiobookshelf;
+  if (!abs) {
+    return false;
+  }
+  const url = typeof abs.url === "string" ? abs.url.trim() : "";
+  const token = typeof abs.token === "string" ? abs.token.trim() : "";
+  return url !== "" && token !== "";
+}
 
 function validateQueryParams(
   urlStr: string,
@@ -48,6 +84,9 @@ export function createApp(deps: AppDeps): Hono {
   const { db, config } = deps;
   const tz = config.timezone;
   const webDist = resolve(deps.webDist ?? "web/dist");
+
+  /** Guards against overlapping Audiobookshelf syncs from the same server. */
+  let absSyncRunning = false;
 
   const app = new Hono();
 
@@ -259,6 +298,83 @@ export function createApp(deps: AppDeps): Hono {
         400
       );
     }
+  });
+
+  // POST /api/sync/audiobookshelf
+  app.post("/api/sync/audiobookshelf", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    if (!isAbsConfigured(config)) {
+      return c.json(
+        {
+          error:
+            "Audiobookshelf is not configured (set audiobookshelf.url and audiobookshelf.token)",
+        },
+        400
+      );
+    }
+
+    if (absSyncRunning) {
+      return c.json({ error: "An Audiobookshelf sync is already running" }, 409);
+    }
+
+    absSyncRunning = true;
+    try {
+      const doSync = deps.syncAudiobookshelf ?? syncAudiobookshelf;
+      const makeClient =
+        deps.createAbsClient ?? ((cfg: Config) => createAbsClient(cfg));
+      const sink = (deps.sinkFor ?? ((database: Database) => new LocalDbSink(database)))(
+        db
+      );
+      const client = makeClient(config);
+      const result = await doSync({ client, sink, db, config });
+      return c.json({
+        runId: result.runId,
+        seen: result.seen,
+        inserted: result.inserted,
+      });
+    } catch (caught) {
+      // `SyncFailedError.message` is already redacted by the sync module;
+      // applying `redactString` again guards against a raw token in any other
+      // error reaching the client.
+      const message =
+        caught instanceof SyncFailedError ? caught.message : errorText(caught);
+      return c.json({ error: redactString(message, config) }, 502);
+    } finally {
+      absSyncRunning = false;
+    }
+  });
+
+  // GET /api/sync/status — latest run per source (read-only)
+  app.get("/api/sync/status", (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const runs = db
+      .query<
+        {
+          source: string;
+          started_at: string;
+          finished_at: string | null;
+          rows_seen: number;
+          rows_inserted: number;
+          error: string | null;
+        },
+        []
+      >(
+        `SELECT source, started_at, finished_at, rows_seen, rows_inserted, error
+         FROM ingest_runs
+         WHERE id IN (SELECT MAX(id) FROM ingest_runs GROUP BY source)
+         ORDER BY source ASC;`
+      )
+      .all();
+
+    return c.json({ runs });
   });
 
   // Fallback for unknown /api routes
