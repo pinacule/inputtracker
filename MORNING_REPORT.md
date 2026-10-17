@@ -9,7 +9,7 @@ green on main (419 tests), `bun run smoke` merged with T19.
 
 **Phase 2 (Simkl + YouTube Takeout, approved 2026-10-17) started 18:17.** Order: P01 stats chart
 polish → S01 Simkl auth → S02 Simkl sync → S03 Simkl UI → Y01 Takeout import → Y03 YouTube UI →
-T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). Running now: S01 Simkl config/client/auth (antigravity, attempt 2 after review feedback).
+T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). S01 Simkl config/client/auth DONE 18:58 (d6636d7, 480 tests green, attempt 2 after review feedback).
 
 Check on the phone:
 1. Open the app via your Tailscale URL and install it ("Install app"), if not done yet.
@@ -55,12 +55,14 @@ Check on the phone:
 | T20 Docs: README.md + DATA_FORMAT.md (+ `test/docs.test.ts`) | opencode | deepseek-v4.1-flash-free | 1 | 6443580 |
 | T21 Offline-synced ABS sessions, T22 install = update, M03 real ABS sync check | Claude (interactive) | — | 1 | see git log |
 | P01 Stats chart polish (gap bars, short labels) | opencode | deepseek-v4.1-flash-free | 1 | 26bd63c |
+| S01 Simkl config, client, token store, `it auth simkl` | antigravity | gemini-3.8-flash-high | 2 | d6636d7 |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
 - T20 (passed, not sent back): manager fixed two doc lines before merging. DATA_FORMAT.md listed `native-import` as an `events.source` value (it is only `ingest_runs.source`; imported rows keep their own source), and README said `bun.lock` pins the Bun version (it does not). The worker also noted that `test/pwa.test.ts` fails inside the jail (Vite can't write its temp dir to the read-only parent `node_modules`). It passes outside the jail and on main.
 - T01: worker result passed review, but the manager accidentally removed the worktree before committing (manager error). T01 re-run from scratch, attempt 1 not counted against the worker.
 - S01 attempt 1 (antigravity gemini-3.8-flash-high, 18:43): the run ended on a network error (broken pipe while it waited for its own reviewer subagent). The code was complete and `bun run check` passed (475 tests), but it was sent back to the same session for: missing tests of the form bodies (device/poll/refresh); a network failure during token refresh was reported as "run 'it auth simkl' again"; `Config.simkl` optional (made required); `get()` silently dropped a query string in the path and `query` could override `client_id`; README line placement.
+- S01 attempt 2 (antigravity, 18:52): all review points fixed (form-body tests, refresh outage → `SourceUnavailable`, `Config.simkl` required, `?` in GET path rejected, mandatory params not overridable). The run again ended on a broken pipe *after* writing its final summary, and the supervisor classified it as `limit`; the manager reviewed the finished worktree instead of discarding it (480 tests green, CLI checked with a synthetic config) and merged. Manager changed one README bullet from `` `it auth simkl` `` to `` `auth simkl` `` to match the other bullets.
 
 ## BLOCKED
 
