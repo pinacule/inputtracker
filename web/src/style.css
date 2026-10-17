@@ -1849,6 +1849,11 @@ body {
   font-size: 0.55rem;
 }
 
+/* Stats colours its bars per source with segments; here one plain fill. */
+.yr-months .stats-bar-fill {
+  background: var(--accent);
+}
+
 /* Weekday horizontal bars */
 .yr-weekday-list {
   list-style: none;
@@ -1894,4 +1899,17 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Screen-reader-only text (e.g. form labels shown visually by the control itself) */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
