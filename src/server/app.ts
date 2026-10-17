@@ -53,6 +53,12 @@ import {
 } from "./aggregate.ts";
 import { getInsights } from "./insights.ts";
 import { getYearReview } from "./year-review.ts";
+import {
+  addGoalRevision,
+  getGoals,
+  GoalNotFoundError,
+  type AddGoalInput,
+} from "./goals.ts";
 import { getTitleHistory, search } from "./search.ts";
 import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
@@ -304,6 +310,80 @@ export function createApp(deps: AppDeps): Hono {
     const source = c.req.query("source") || undefined;
     const result = getYearReview(db, { tz, year, today, source });
     return c.json(result);
+  });
+
+  // GET /api/goals?year=YYYY[&date=YYYY-MM-DD][&archived=1]
+  app.get("/api/goals", (c) => {
+    const err = validateQueryParams(c.req.url, ["year", "date", "archived"]);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const date = c.req.query("date") || undefined;
+    if (date !== undefined && !isValidDateStr(date)) {
+      return c.json(
+        { error: `Invalid date format: '${date}' (expected YYYY-MM-DD)` },
+        400
+      );
+    }
+
+    const today = date ?? formatLocalParts(new Date().toISOString(), tz).date;
+    const yearRaw = c.req.query("year");
+    if (yearRaw !== undefined && !YEAR_RE.test(yearRaw)) {
+      return c.json(
+        { error: `Invalid year format: '${yearRaw}' (expected YYYY)` },
+        400
+      );
+    }
+    const year =
+      yearRaw !== undefined ? Number(yearRaw) : Number(today.slice(0, 4));
+
+    const archivedParam = c.req.query("archived");
+    const includeArchived = archivedParam === "1";
+
+    const goals = getGoals(db, {
+      year,
+      tz,
+      today,
+      includeArchived,
+    });
+
+    return c.json({ year, goals });
+  });
+
+  // POST /api/goals
+  app.post("/api/goals", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch (caught) {
+      return c.json(
+        {
+          error: `Invalid JSON body: ${
+            caught instanceof Error ? caught.message : String(caught)
+          }`,
+        },
+        400
+      );
+    }
+
+    try {
+      const result = addGoalRevision(db, body as AddGoalInput);
+      return c.json(result, 201);
+    } catch (caught) {
+      if (caught instanceof GoalNotFoundError) {
+        return c.json({ error: caught.message }, 404);
+      }
+      return c.json(
+        { error: caught instanceof Error ? caught.message : String(caught) },
+        400
+      );
+    }
   });
 
   // GET /api/search?q=&source=&media_type=&limit=&offset= — read-only search

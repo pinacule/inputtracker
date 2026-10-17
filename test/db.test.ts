@@ -109,10 +109,15 @@ describe("db core", () => {
         )
         .all();
 
-      expect(migrationRows).toHaveLength(1);
+      expect(migrationRows).toHaveLength(2);
       expect(migrationRows[0]?.version).toBe(1);
+      expect(migrationRows[1]?.version).toBe(2);
       expect(typeof migrationRows[0]?.applied_at).toBe("string");
       expect(migrationRows[0]?.applied_at).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+      );
+      expect(typeof migrationRows[1]?.applied_at).toBe("string");
+      expect(migrationRows[1]?.applied_at).toMatch(
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
       );
     });
@@ -384,7 +389,7 @@ describe("db core", () => {
             "SELECT version FROM schema_migrations;"
           )
           .all();
-        expect(migrationRows).toHaveLength(1);
+        expect(migrationRows).toHaveLength(2);
       } finally {
         reopenedDb.close();
       }
