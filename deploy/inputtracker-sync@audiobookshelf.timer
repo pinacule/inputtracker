@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly InputTracker Audiobookshelf sync
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=120
+Unit=inputtracker-sync@audiobookshelf.service
+
+[Install]
+WantedBy=timers.target
