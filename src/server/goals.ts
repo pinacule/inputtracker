@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { VALID_MEDIA_TYPES } from "../core/events.ts";
 import type { GoalRow } from "../core/schema.ts";
 import {
-  getLatestConsumptionEvents,
+  getDisplayConsumptionEvents,
   type ConsumptionEvent,
 } from "./aggregate.ts";
 import { computeYearReview } from "./year-review.ts";
@@ -374,7 +374,7 @@ export function computeGoalProgress(
 
 /**
  * Reads `goals_latest` (skip archived unless asked) and consumption events
- * via `getLatestConsumptionEvents`. Returns newest goal first.
+ * via `getDisplayConsumptionEvents` (deduplicated). Returns newest goal first.
  */
 export function getGoals(
   db: Database,
@@ -400,7 +400,8 @@ export function getGoals(
   query += " ORDER BY id DESC;";
 
   const rows = db.query<GoalRow, (number | string)[]>(query).all(...params);
-  const events = getLatestConsumptionEvents(db);
+  // Deduplicated like every other display (a manual + Simkl watch counts once).
+  const events = getDisplayConsumptionEvents(db, undefined, options.tz);
 
   return rows.map((row) => ({
     goal_id: row.goal_id,
