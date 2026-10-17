@@ -14,6 +14,7 @@ describe("SOURCES", () => {
     expect(SOURCES.map((s) => s.value)).toEqual([
       "audiobookshelf",
       "simkl",
+      "youtube",
       "manual",
     ]);
   });
@@ -32,6 +33,12 @@ describe("SOURCES", () => {
       icon: "🎬",
       color: "#f59e0b",
     });
+    expect(byValue.get("youtube")).toEqual({
+      value: "youtube",
+      label: "YouTube",
+      icon: "▶️",
+      color: "#ef4444",
+    });
     expect(byValue.get("manual")).toEqual({
       value: "manual",
       label: "Manual",
@@ -47,11 +54,21 @@ describe("sourceLabel", () => {
     expect(sourceLabel("abs")).toBe("Audiobookshelf");
     expect(sourceLabel("ABS")).toBe("Audiobookshelf");
     expect(sourceLabel("simkl")).toBe("Simkl");
+    expect(sourceLabel("youtube")).toBe("YouTube");
     expect(sourceLabel("manual")).toBe("Manual");
   });
 
+  test("labels ingest-run sources that are not event sources", () => {
+    expect(sourceLabel("youtube-takeout")).toBe("YouTube Takeout");
+    expect(sourceLabel("native-import")).toBe("Import");
+    // These must never show up as filter entries.
+    const values = SOURCES.map((s) => s.value);
+    expect(values).not.toContain("youtube-takeout");
+    expect(values).not.toContain("native-import");
+  });
+
   test("falls back to the trimmed raw value for unknown sources", () => {
-    expect(sourceLabel("youtube")).toBe("youtube");
+    expect(sourceLabel("custom")).toBe("custom");
     expect(sourceLabel("  custom  ")).toBe("custom");
     expect(sourceLabel("")).toBe("");
   });
@@ -62,6 +79,7 @@ describe("sourceColor", () => {
     expect(sourceColor("audiobookshelf")).toBe("#8b5cf6");
     expect(sourceColor("abs")).toBe("#8b5cf6");
     expect(sourceColor("simkl")).toBe("#f59e0b");
+    expect(sourceColor("youtube")).toBe("#ef4444");
     expect(sourceColor("manual")).toBe("#10b981");
   });
 
@@ -84,14 +102,19 @@ describe("source lists include Simkl", () => {
     const values = HEATMAP_SOURCES.map((s) => s.value);
     expect(values).toContain("audiobookshelf");
     expect(values).toContain("simkl");
+    expect(values).toContain("youtube");
     expect(values).toContain("manual");
     expect(HEATMAP_SOURCES.find((s) => s.value === "simkl")?.label).toBe("Simkl");
+    expect(HEATMAP_SOURCES.find((s) => s.value === "youtube")?.label).toBe(
+      "YouTube"
+    );
   });
 
   test("STATS_SOURCES has 'All sources' first, then every SOURCES entry", () => {
     expect(STATS_SOURCES[0]).toEqual({ value: "", label: "All sources" });
     const values = STATS_SOURCES.map((s) => s.value);
     expect(values).toContain("simkl");
+    expect(values).toContain("youtube");
     for (const source of SOURCES) {
       expect(values).toContain(source.value);
     }

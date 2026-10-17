@@ -171,6 +171,12 @@ describe("sourceIcon", () => {
     expect(sourceIcon("other", "book")).toBe("📖");
   });
 
+  test("a YouTube video shows the YouTube icon, other videos keep 📹", () => {
+    expect(sourceIcon("youtube", "video")).toBe("▶️");
+    expect(sourceIcon("youtube")).toBe("▶️");
+    expect(sourceIcon("manual", "video")).toBe("📹");
+  });
+
   test("maps known sources", () => {
     expect(sourceIcon("youtube")).toBe("▶️");
     expect(sourceIcon("simkl")).toBe("🎬");

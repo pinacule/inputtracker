@@ -97,6 +97,8 @@ export interface WeekBucketLike {
   readonly week: string;
   readonly by_source: Record<string, number>;
   readonly minutes: number;
+  readonly count: number;
+  readonly count_by_source: Record<string, number>;
 }
 
 /** Minimal structural shape needed to fill month gaps. */
@@ -104,6 +106,8 @@ export interface MonthBucketLike {
   readonly month: string;
   readonly by_source: Record<string, number>;
   readonly minutes: number;
+  readonly count: number;
+  readonly count_by_source: Record<string, number>;
 }
 
 const MS_PER_WEEK = 7 * 24 * 3600 * 1000;
@@ -165,7 +169,13 @@ export function fillWeekGaps<T extends WeekBucketLike>(
     const existing = byKey.get(key);
     result.push(
       existing ??
-        ({ week: key, by_source: {}, minutes: 0 } as unknown as T)
+        ({
+          week: key,
+          by_source: {},
+          minutes: 0,
+          count: 0,
+          count_by_source: {},
+        } as unknown as T)
     );
     cursor = new Date(cursor.getTime() + MS_PER_WEEK);
   }
@@ -198,7 +208,13 @@ export function fillMonthGaps<T extends MonthBucketLike>(
     const existing = byKey.get(key);
     result.push(
       existing ??
-        ({ month: key, by_source: {}, minutes: 0 } as unknown as T)
+        ({
+          month: key,
+          by_source: {},
+          minutes: 0,
+          count: 0,
+          count_by_source: {},
+        } as unknown as T)
     );
     month += 1;
     if (month > 12) {
@@ -271,6 +287,117 @@ export function computeStackedSegments(
     minutes,
     percentage: Math.round((minutes / totalBarMinutes) * 1000) / 10,
   }));
+}
+
+/** Metric chosen by the Stats and Heat map charts. */
+export type ActivityMetric = "minutes" | "count";
+
+/**
+ * YouTube events carry no duration, so a minutes view shows 0 for them. When
+ * the source filter is YouTube the charts default to the Count metric; the user
+ * can still switch back. Pure and DOM-free so it is unit-testable.
+ */
+export function autoMetricForSource(source: string): ActivityMetric {
+  return source === "youtube" ? "count" : "minutes";
+}
+
+/**
+ * While showing minutes, a short note reminds the user that YouTube counts
+ * views, not minutes. Shown for the All and YouTube filters (those can contain
+ * YouTube events); hidden for every other specific source.
+ */
+export function showYoutubeMetricNote(
+  metric: ActivityMetric,
+  source: string
+): boolean {
+  return metric === "minutes" && (source === "" || source === "youtube");
+}
+
+/** The numeric value of an item or bucket under the chosen metric. */
+export function metricValue(
+  item: { minutes: number; count: number },
+  metric: ActivityMetric
+): number {
+  return metric === "minutes" ? item.minutes : item.count;
+}
+
+/** One stacked segment of a bar under either metric. */
+export interface MetricSegment {
+  source: string;
+  value: number;
+  percentage: number;
+}
+
+/**
+ * Computes stacked segments from a per-source value map (minutes or counts),
+ * relative to `total`. Percentages sum to 100% (0% when `total` is 0).
+ */
+export function computeMetricSegments(
+  byValue: Record<string, number>,
+  total: number
+): MetricSegment[] {
+  if (total <= 0) {
+    return [];
+  }
+  return Object.entries(byValue)
+    .filter(([, value]) => value > 0)
+    .map(([source, value]) => ({
+      source,
+      value,
+      percentage: Math.round((value / total) * 1000) / 10,
+    }));
+}
+
+/** Maximum bucket value under the chosen metric (for bar scaling). */
+export function computeMaxMetric(
+  buckets: ReadonlyArray<{ minutes: number; count: number }>,
+  metric: ActivityMetric
+): number {
+  let max = 0;
+  for (const bucket of buckets) {
+    const value = metricValue(bucket, metric);
+    if (value > max) {
+      max = value;
+    }
+  }
+  return max;
+}
+
+/** Full label for a bucket value under the chosen metric (e.g. "2h 5m" / "12 items"). */
+export function formatMetricValue(
+  value: number,
+  metric: ActivityMetric
+): string {
+  if (metric === "count") {
+    const n = Math.max(0, Math.round(value));
+    return `${n} ${n === 1 ? "item" : "items"}`;
+  }
+  return formatMinutes(value);
+}
+
+/** Compact label for a bar value under the chosen metric (e.g. "45m" / "12"). */
+export function formatMetricShort(
+  value: number,
+  metric: ActivityMetric
+): string {
+  if (metric === "count") {
+    return `${Math.max(0, Math.round(value))}`;
+  }
+  return formatMinutesShort(value);
+}
+
+/**
+ * Value label for a top item. YouTube items (and any item with 0 minutes but a
+ * positive count) read `N views` instead of `0m`.
+ */
+export function formatTopItemMetric(item: {
+  minutes: number;
+  count: number;
+}): string {
+  if (item.minutes <= 0 && item.count > 0) {
+    return `${item.count} ${item.count === 1 ? "view" : "views"}`;
+  }
+  return formatHoursMinutes(item.minutes);
 }
 
 /**

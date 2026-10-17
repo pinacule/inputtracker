@@ -169,14 +169,11 @@ export function sourceIcon(
     return "📺";
   }
   if (m === "video") {
-    return "📹";
+    // A YouTube video shows the YouTube icon; any other video keeps 📹.
+    return s === "youtube" ? "▶️" : "📹";
   }
   if (m === "book") {
     return "📖";
-  }
-  // YouTube is not in `SOURCES` yet (task Y03); keep its icon here until then.
-  if (s === "youtube") {
-    return "▶️";
   }
   return sourceEntry(s)?.icon ?? "📌";
 }

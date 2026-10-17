@@ -59,6 +59,9 @@ describe("loadConfig defaults", () => {
       poster_base_url: "https://simkl.in/posters",
       timeout_s: 20,
     });
+    expect(config.youtube).toEqual({
+      thumb_base_url: "https://i.ytimg.com/vi",
+    });
     expect(config.notify).toEqual({ desktop: true, ntfy_url: "" });
   });
 
@@ -98,6 +101,9 @@ describe("loadConfig file merging", () => {
         'poster_base_url = "https://posters.example"',
         "timeout_s = 15",
         "",
+        "[youtube]",
+        'thumb_base_url = "https://thumbs.example"',
+        "",
         "[notify]",
         "desktop = false",
         'ntfy_url = "https://ntfy.example/topic"',
@@ -120,6 +126,7 @@ describe("loadConfig file merging", () => {
     expect(config.simkl.base_url).toBe("https://simkl.example");
     expect(config.simkl.poster_base_url).toBe("https://posters.example");
     expect(config.simkl.timeout_s).toBe(15);
+    expect(config.youtube.thumb_base_url).toBe("https://thumbs.example");
     expect(config.notify.desktop).toBe(false);
     expect(config.notify.ntfy_url).toBe("https://ntfy.example/topic");
   });
@@ -202,6 +209,19 @@ describe("loadConfig errors", () => {
 
     const badTable = writeConfig("badtable.toml", 'simkl = "not-a-table"\n');
     expect(() => loadConfig({ path: badTable, env: {} })).toThrow(/simkl/);
+  });
+
+  test("wrong type for youtube keys throws", () => {
+    const badThumb = writeConfig(
+      "badthumb.toml",
+      "[youtube]\nthumb_base_url = 12345\n"
+    );
+    expect(() => loadConfig({ path: badThumb, env: {} })).toThrow(
+      /youtube\.thumb_base_url/
+    );
+
+    const badTable = writeConfig("badytable.toml", 'youtube = "not-a-table"\n');
+    expect(() => loadConfig({ path: badTable, env: {} })).toThrow(/youtube/);
   });
 });
 

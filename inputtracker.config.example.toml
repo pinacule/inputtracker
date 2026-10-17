@@ -31,3 +31,7 @@ ntfy_url = ""
 # poster_base_url = "https://simkl.in/posters"
 # timeout_s = 20
 
+# [youtube]
+# Base URL used to fetch video thumbnails (YouTube Takeout imports carry a video id).
+# thumb_base_url = "https://i.ytimg.com/vi"
+

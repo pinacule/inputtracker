@@ -51,6 +51,7 @@ import {
 } from "./aggregate.ts";
 import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
+import { getYoutubeThumb, isValidYoutubeVideoId } from "./thumbs.ts";
 
 export interface AppDeps {
   db: Database;
@@ -336,6 +337,45 @@ export function createApp(deps: AppDeps): Hono {
       return c.json({ error: err }, 400);
     }
     return c.json({ error: "Invalid poster path" }, 400);
+  });
+
+  // GET /api/thumb/youtube/:videoId — proxy (and cache) a YouTube thumbnail.
+  // The video id is re-validated here, so a malformed value never causes a fetch.
+  app.get("/api/thumb/youtube/:videoId", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const videoId = c.req.param("videoId");
+    if (!isValidYoutubeVideoId(videoId)) {
+      return c.json({ error: "Invalid video id" }, 400);
+    }
+
+    const thumb = await getYoutubeThumb(videoId, {
+      config,
+      fetch: deps.fetchImage ?? fetch,
+    });
+    if (thumb === null) {
+      return c.json({ error: "Thumbnail not available" }, 404);
+    }
+
+    return new Response(thumb.bytes, {
+      status: 200,
+      headers: {
+        "Content-Type": thumb.contentType,
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
+  });
+
+  // Any other /api/thumb/youtube/... shape is invalid; reject without fetching.
+  app.all("/api/thumb/youtube/*", (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+    return c.json({ error: "Invalid video id" }, 400);
   });
 
   // GET /api/export.json

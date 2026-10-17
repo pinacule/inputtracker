@@ -15,8 +15,13 @@ import {
   monthLabels,
   WEEKDAYS_SHORT,
 } from "../lib/heatmap";
+import {
+  autoMetricForSource,
+  showYoutubeMetricNote,
+  type ActivityMetric,
+} from "../lib/stats";
 
-type Metric = "minutes" | "count";
+type Metric = ActivityMetric;
 
 function getCurrentYear(): number {
   return new Date().getFullYear();
@@ -123,6 +128,16 @@ export function Heatmap() {
     return max;
   }, [hoursData, metric]);
 
+  // YouTube events carry no duration: picking YouTube defaults to Count.
+  const handleSourceChange = (value: string) => {
+    setSource(value);
+    if (autoMetricForSource(value) === "count") {
+      setMetric("count");
+    }
+  };
+
+  const youtubeNote = showYoutubeMetricNote(metric, source);
+
   // Scroll year grid to the right (current end) on load or data update
   useEffect(() => {
     if (yearScrollRef.current) {
@@ -184,7 +199,9 @@ export function Heatmap() {
               id="heatmap-source-select"
               class="heatmap-select"
               value={source}
-              onChange={(e) => setSource((e.target as HTMLSelectElement).value)}
+              onChange={(e) =>
+                handleSourceChange((e.target as HTMLSelectElement).value)
+              }
               aria-label="Source filter"
             >
               <option value="">All</option>
@@ -225,6 +242,10 @@ export function Heatmap() {
           </div>
         </div>
       </header>
+
+      {youtubeNote && (
+        <p class="heatmap-note">YouTube counts views, not minutes.</p>
+      )}
 
       {error && (
         <div class="heatmap-error" role="alert">

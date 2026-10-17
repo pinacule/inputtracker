@@ -374,10 +374,15 @@ export function Calendar({ date }: CalendarProps = {}) {
                         </span>
                       )}
                       <span class="calendar-item-bullet">·</span>
-                      <span class="calendar-item-duration">
-                        {formatDuration(item.duration_seconds)}
-                      </span>
-                      <span class="calendar-item-bullet">·</span>
+                      {item.duration_seconds !== null &&
+                        item.duration_seconds !== undefined && (
+                          <>
+                            <span class="calendar-item-duration">
+                              {formatDuration(item.duration_seconds)}
+                            </span>
+                            <span class="calendar-item-bullet">·</span>
+                          </>
+                        )}
                       <span class="calendar-item-source">
                         {sourceLabel(item.source)}
                       </span>

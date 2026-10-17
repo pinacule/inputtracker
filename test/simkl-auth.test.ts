@@ -32,6 +32,7 @@ function makeMockConfig(dir: string, clientId = FAKE_CLIENT_ID, timezone = "Euro
       poster_base_url: "https://simkl.in/posters",
       timeout_s: 5,
     },
+    youtube: { thumb_base_url: "https://i.ytimg.com/vi" },
     notify: { desktop: false, ntfy_url: "" },
     toJSON: () => ({ ...cfg }),
     toString: () => JSON.stringify(cfg),

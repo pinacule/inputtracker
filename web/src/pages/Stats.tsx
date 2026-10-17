@@ -3,17 +3,22 @@ import { getStats, type StatsResult, type WeekStatBucket, type MonthStatBucket }
 import { sourceIcon } from "../lib/calendar";
 import { sourceLabel } from "../lib/sources";
 import {
+  autoMetricForSource,
   computeBarHeight,
-  computeMaxMinutes,
-  computeStackedSegments,
+  computeMaxMetric,
+  computeMetricSegments,
   fillMonthGaps,
   fillWeekGaps,
   formatHoursMinutes,
-  formatMinutes,
-  formatMinutesShort,
+  formatMetricShort,
+  formatMetricValue,
   formatPeriodLabel,
+  formatTopItemMetric,
+  metricValue,
+  showYoutubeMetricNote,
   sourceColor,
   STATS_SOURCES,
+  type ActivityMetric,
 } from "../lib/stats";
 
 type Period = "week" | "month";
@@ -21,9 +26,18 @@ type Period = "week" | "month";
 export function Stats() {
   const [period, setPeriod] = useState<Period>("week");
   const [source, setSource] = useState<string>("");
+  const [metric, setMetric] = useState<ActivityMetric>("minutes");
   const [data, setData] = useState<StatsResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // YouTube events have no duration: picking YouTube defaults to Count.
+  const handleSourceChange = (value: string) => {
+    setSource(value);
+    if (autoMetricForSource(value) === "count") {
+      setMetric("count");
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -58,9 +72,11 @@ export function Stats() {
       : fillMonthGaps(data.by_month);
   }, [data, period]);
 
-  const maxMinutes = useMemo(() => {
-    return computeMaxMinutes(buckets);
-  }, [buckets]);
+  const maxMetric = useMemo(() => {
+    return computeMaxMetric(buckets, metric);
+  }, [buckets, metric]);
+
+  const youtubeNote = showYoutubeMetricNote(metric, source);
 
   // Active sources for chart legend
   const activeSources = useMemo(() => {
@@ -116,7 +132,9 @@ export function Stats() {
               id="stats-source"
               class="form-input stats-source-select"
               value={source}
-              onChange={(e) => setSource((e.target as HTMLSelectElement).value)}
+              onChange={(e) =>
+                handleSourceChange((e.target as HTMLSelectElement).value)
+              }
             >
               {STATS_SOURCES.map((s) => (
                 <option key={s.value} value={s.value}>
@@ -125,8 +143,42 @@ export function Stats() {
               ))}
             </select>
           </div>
+
+          {/* Metric Toggle */}
+          <div
+            class="heatmap-metric-toggle"
+            role="group"
+            aria-label="Metric toggle"
+          >
+            <button
+              type="button"
+              class={`heatmap-metric-btn ${
+                metric === "minutes" ? "heatmap-metric-btn-active" : ""
+              }`}
+              onClick={() => setMetric("minutes")}
+              aria-pressed={metric === "minutes"}
+            >
+              Minutes
+            </button>
+            <button
+              type="button"
+              class={`heatmap-metric-btn ${
+                metric === "count" ? "heatmap-metric-btn-active" : ""
+              }`}
+              onClick={() => setMetric("count")}
+              aria-pressed={metric === "count"}
+            >
+              Count
+            </button>
+          </div>
         </div>
       </header>
+
+      {youtubeNote && (
+        <p class="muted stats-youtube-note">
+          YouTube counts views, not minutes.
+        </p>
+      )}
 
       {error && (
         <div class="alert alert-error" role="alert">
@@ -184,14 +236,17 @@ export function Stats() {
               {buckets.map((b) => {
                 const periodKey = "week" in b ? (b as WeekStatBucket).week : (b as MonthStatBucket).month;
                 const label = formatPeriodLabel(periodKey, period);
-                const fullValue = formatMinutes(b.minutes);
-                const hasValue = b.minutes > 0;
+                const value = metricValue(b, metric);
+                const fullValue = formatMetricValue(value, metric);
+                const hasValue = value > 0;
                 const heightPct = computeBarHeight(
-                  b.minutes,
-                  maxMinutes,
+                  value,
+                  maxMetric,
                   hasValue ? 2 : 0
                 );
-                const segments = computeStackedSegments(b.by_source, b.minutes);
+                const byValue =
+                  metric === "minutes" ? b.by_source : b.count_by_source;
+                const segments = computeMetricSegments(byValue, value);
 
                 return (
                   <div
@@ -204,7 +259,7 @@ export function Stats() {
                       title={`${fullValue} total`}
                       aria-hidden="true"
                     >
-                      {hasValue ? formatMinutesShort(b.minutes) : ""}
+                      {hasValue ? formatMetricShort(value, metric) : ""}
                     </span>
                     <div
                       class="stats-bar-track"
@@ -222,7 +277,7 @@ export function Stats() {
                               height: `${seg.percentage}%`,
                               backgroundColor: sourceColor(seg.source),
                             }}
-                            title={`${sourceLabel(seg.source)}: ${formatMinutes(seg.minutes)} (${seg.percentage}%)`}
+                            title={`${sourceLabel(seg.source)}: ${formatMetricValue(seg.value, metric)} (${seg.percentage}%)`}
                           />
                         ))}
                       </div>
@@ -271,7 +326,7 @@ export function Stats() {
                 </div>
                 <div class="stats-top-stats">
                   <span class="stats-top-time">
-                    {formatHoursMinutes(item.minutes)}
+                    {formatTopItemMetric(item)}
                   </span>
                   <span class="stats-top-count">
                     {item.count} {item.count === 1 ? "entry" : "entries"}
