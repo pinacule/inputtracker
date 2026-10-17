@@ -197,12 +197,14 @@ function parsePlay(raw: unknown, index: number): YoutubePlay {
     raw.media_duration_seconds !== undefined &&
     raw.media_duration_seconds !== null
   ) {
-    if (!isIntInRange(raw.media_duration_seconds, 0, 86400)) {
+    if (!Number.isSafeInteger(raw.media_duration_seconds)) {
       throw new IngestValidationError(
-        `plays[${index}].media_duration_seconds must be an integer 0-86400 or null`
+        `plays[${index}].media_duration_seconds must be an integer or null`
       );
     }
-    media_duration_seconds = raw.media_duration_seconds;
+    // Out of range (e.g. a livestream's huge or negative length) → null, so one
+    // odd value never makes the phone drop a whole batch of plays.
+    media_duration_seconds = isIntInRange(raw.media_duration_seconds, 0, 86400) ? raw.media_duration_seconds : null;
   }
 
   let last_position_seconds: number | null = null;
@@ -210,12 +212,14 @@ function parsePlay(raw: unknown, index: number): YoutubePlay {
     raw.last_position_seconds !== undefined &&
     raw.last_position_seconds !== null
   ) {
-    if (!isIntInRange(raw.last_position_seconds, 0, 86400)) {
+    if (!Number.isSafeInteger(raw.last_position_seconds)) {
       throw new IngestValidationError(
-        `plays[${index}].last_position_seconds must be an integer 0-86400 or null`
+        `plays[${index}].last_position_seconds must be an integer or null`
       );
     }
-    last_position_seconds = raw.last_position_seconds;
+    // Out of range (e.g. a livestream's huge or negative length) → null, so one
+    // odd value never makes the phone drop a whole batch of plays.
+    last_position_seconds = isIntInRange(raw.last_position_seconds, 0, 86400) ? raw.last_position_seconds : null;
   }
 
   return {

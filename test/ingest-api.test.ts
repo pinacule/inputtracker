@@ -230,8 +230,8 @@ describe("POST /api/ingest/youtube-plays", () => {
       ["watched_seconds over 86400", { device: "phone", plays: [validPlay({ watched_seconds: 86401 })] }],
       ["watched_seconds float", { device: "phone", plays: [validPlay({ watched_seconds: 41.5 })] }],
       ["watched_seconds string", { device: "phone", plays: [validPlay({ watched_seconds: "420" })] }],
-      ["media_duration_seconds over 86400", { device: "phone", plays: [validPlay({ media_duration_seconds: 86401 })] }],
-      ["last_position_seconds negative", { device: "phone", plays: [validPlay({ last_position_seconds: -1 })] }],
+      ["media_duration_seconds float", { device: "phone", plays: [validPlay({ media_duration_seconds: 900.5 })] }],
+      ["last_position_seconds string", { device: "phone", plays: [validPlay({ last_position_seconds: "412" })] }],
       ["second play bad names index", { device: "phone", plays: [validPlay(), validPlay({ watched_seconds: 99999 })] }],
     ];
 
@@ -442,6 +442,25 @@ describe("POST /api/ingest/youtube-plays", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]?.progress).toBeNull();
     expect(rows[1]?.progress).toBeNull();
+  });
+
+  test("out-of-range media duration or position → null, play still accepted", async () => {
+    const { app } = appWithConfig();
+    const res = await post(
+      validBody([
+        validPlay({ media_duration_seconds: 86401, last_position_seconds: 412, play_id: "33333333-2222-4333-8444-555555555555" }),
+        validPlay({ media_duration_seconds: 900, last_position_seconds: -1, play_id: "44444444-2222-4333-8444-555555555555" }),
+      ]),
+      { app }
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ accepted: 2, inserted: 2 });
+    const rows = db
+      .query<{ progress: number | null }, []>(
+        "SELECT progress FROM events WHERE source_kind = 'phone_play' ORDER BY id;"
+      )
+      .all();
+    expect(rows.map((r) => r.progress)).toEqual([null, null]);
   });
 
   test("an ingest failure marks the run failed and returns 500", async () => {

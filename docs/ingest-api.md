@@ -48,8 +48,8 @@ Field rules:
 | `started_at` | UTC ISO 8601 `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$`; more than 5 minutes in the future is rejected |
 | `ended_at` | same format; `>= started_at` |
 | `watched_seconds` | integer 0–86400 |
-| `media_duration_seconds` | integer 0–86400 or `null` |
-| `last_position_seconds` | integer 0–86400 or `null` |
+| `media_duration_seconds` | integer or `null`; outside 0–86400 it is stored as `null` |
+| `last_position_seconds` | integer or `null`; outside 0–86400 it is stored as `null` |
 
 Unknown extra fields are ignored. The body is at most 1 MB (larger → `413`,
 checked on `Content-Length` when present and on the actual body).
