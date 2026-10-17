@@ -12,9 +12,13 @@ mkdir -p "$ORCH"
 OPENCODE_MODELS=(
   opencode/deepseek-v4.1-flash-free
   opencode/glm-5.3-flash-free
-  opencode/nemotron-3-ultra-free
   opencode/mimo-v2.6-flash-free
-  opencode/big-pickle
+  opencode/nemotron-3-ultra-free
+  opencode/longcat-2.5-preview-free
+  opencode/nemotron-3.5-super-vl-free
+  opencode/nemotron-3.5-lightning-free
+  opencode/beam-free
+  opencode/space-bunny-free
 )
 AGY_MODEL="gemini-3.8-flash-high"
 

@@ -121,14 +121,15 @@ opencode/mimo-v2.6-flash-free
 opencode/longcat-2.5-preview-free
 opencode/space-bunny-free
 opencode/beam-free
-opencode/big-pickle
 ```
+
+`opencode/big-pickle` is listed too but not labelled Free, so it is not used.
 
 Paid Nebius models (`nebius/*`) are also listed — **not allowed** (your decision 2026-10-17:
 free models only). Local `ollama/qwen2.5:3b` is too small for coding.
 
 Plan: start on `opencode/deepseek-v4.1-flash-free`, fall back to `opencode/glm-5.3-flash-free`,
-then `opencode/nemotron-3-ultra-free`, then the other free ones.
+then the other free ones in the order of `OPENCODE_MODELS` in `scripts/lib.sh` (all nine Free models).
 Every run's model is logged in `MORNING_REPORT.md`.
 
 ### Headless command (tested inside the jail, 2026-10-17)
