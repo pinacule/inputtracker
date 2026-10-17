@@ -3,7 +3,21 @@
 Updated by the manager after every task. If the run stopped early, this is the state at that point.
 
 ## Summary
-Run in progress. T19 smoke test merged (30 checks green, also on main after T21/T22; manager confirmed a fake-ABS 500 makes it fail). Now: T20 docs (opencode).
+**v1 finished (2026-10-17 17:45).** 31 v1 tasks DONE (28 by workers, all on the first attempt; T21, T22 and M03
+done by Claude interactively) plus manager setup M01/M02/M04. 0 BLOCKED, 0 skipped. `bun run check`
+green on main (419 tests), `bun run smoke` merged with T19. Next work (S01–Y03 Simkl/YouTube) is
+listed under "After v1" in TASKS.md and was not started.
+
+Check on the phone:
+1. Open the app via your Tailscale URL and install it ("Install app"), if not done yet.
+2. Calendar: today's and recent Audiobookshelf sessions with covers; offline-synced phone sessions
+   show "synced HH:MM (offline)".
+3. Heat map: year grid plus hour×weekday grid (the "unplaced" note counts offline sessions); source filter works.
+4. Stats and In progress / Finished pages show sensible numbers.
+5. Import/Export: "Sync now" works and the last run shows `17.10.2026 HH:MM`; JSON/CSV export downloads.
+6. Airplane mode, then reload: the cached calendar is shown with the offline banner.
+7. On the PC: `systemctl --user list-timers` shows the hourly sync and the 03:30 backup; after tonight
+   there should be `inputtracker-YYYY-MM-DD.db/.json` files in the backup dir.
 
 ## Done
 | Task | Worker | Model | Attempts | Commit |
@@ -35,9 +49,12 @@ Run in progress. T19 smoke test merged (30 checks green, also on main after T21/
 | T16b Date format polish | opencode | deepseek-v4.1-flash-free | 1 | ae84fd7 |
 | T18b Bun path in units | opencode | deepseek-v4.1-flash-free | 1 | 6d20a7b |
 | T19 Smoke test (`bun run smoke`, 30 checks) | antigravity | gemini-3.8-flash-high | 1 | a98a955 |
+| T20 Docs: README.md + DATA_FORMAT.md (+ `test/docs.test.ts`) | opencode | deepseek-v4.1-flash-free | 1 | 6443580 |
+| T21 Offline-synced ABS sessions, T22 install = update, M03 real ABS sync check | Claude (interactive) | — | 1 | see git log |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
+- T20 (passed, not sent back): manager fixed two doc lines before merging. DATA_FORMAT.md listed `native-import` as an `events.source` value (it is only `ingest_runs.source`; imported rows keep their own source), and README said `bun.lock` pins the Bun version (it does not). The worker also noted that `test/pwa.test.ts` fails inside the jail (Vite can't write its temp dir to the read-only parent `node_modules`). It passes outside the jail and on main.
 - T01: worker result passed review, but the manager accidentally removed the worktree before committing (manager error). T01 re-run from scratch, attempt 1 not counted against the worker.
 
 ## BLOCKED
