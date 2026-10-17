@@ -255,6 +255,17 @@ What needs the server:
 The exact column types, the `events_latest` view and worked SQL examples are in
 [`DATA_FORMAT.md`](DATA_FORMAT.md).
 
+## Moving to another machine
+
+- `it doctor` checks the environment (architecture, Bun, config, database, backup
+  directory, port, systemd, lingering, Tailscale) and exits non-zero on a real
+  problem. It is strictly read-only.
+- `it verify-copy <copy.db>` checks a copied database against the configured one
+  and reports any events missing from the copy.
+
+The step-by-step PC → VM move (Tailscale, snapshot, copy, install, rollback) is
+in [`MIGRATION.md`](MIGRATION.md).
+
 ## Data safety rules in short
 
 - `events` is append-only: database triggers abort every `UPDATE` and `DELETE`.
