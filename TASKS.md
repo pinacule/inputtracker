@@ -80,6 +80,7 @@ reviews and merges with `scripts/merge-task.sh`. Read-only features only (no sch
 |---|---|---|---|---|---|
 | Z01 | **Streaks (F2) + On this day (F6)**: `src/server/insights.ts` (pure functions), `GET /api/insights`, shown on the Stats page | ZCode desktop (GLM-5.3-Flash) | — | Unit tests for day boundaries in Europe/Bratislava, DST, leap day, source filter; `bun run check` passes | DONE (4951c1a) |
 | Z02 | **Year in review (F7)**: `src/server/year-review.ts` (pure), `GET /api/year-review`, `#/year` page linked from Stats, "Save image" PNG via canvas | ZCode desktop (GLM-5.3-Flash) | Z01 | Unit tests for local-year boundary, months/weekdays, top lists, ties, streak cut at Jan 1, partial/leap years; 375 px, dark mode; `bun run check` passes | DONE (00432f1) |
+| Z03 | **Search (F5)**: in-memory search over titles, series, authors and YouTube channels (`src/server/search.ts`), `GET /api/search` + `/api/title-history`, `#/search` page linked from Calendar/Progress/Stats | ZCode desktop (GLM-5.3-Flash) | Z02 | No schema change; diacritics-insensitive, multi-word AND, ranking, YouTube channel hits, 50k-event speed test, local dates; 375 px, dark mode; `bun run check` passes | RUNNING (zcode, hand-fed) |
 
 ## After phase 2 (later, not now)
 
