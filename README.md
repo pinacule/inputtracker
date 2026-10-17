@@ -46,12 +46,42 @@ Every key, its default and what it means:
 | `simkl.timeout_s` | `20` | Per-request timeout, in seconds. |
 | `youtube.thumb_base_url` | `https://i.ytimg.com/vi` | Base URL for YouTube video thumbnails. |
 | `notify.desktop` | `true` | Desktop notification on sync failure (via `notify-send`; silently ignored when missing). |
-| `notify.ntfy_url` | empty | Optional ntfy topic URL for sync failure alerts. |
+| `notify.ntfy_url` | empty | Optional ntfy topic URL for failure alerts, recovery notices and the weekly summary. |
+| `notify.ntfy_token` | empty | Optional ntfy access token (`Authorization: Bearer …`); never logged. |
+| `notify.app_url` | empty | Web app URL sent as the ntfy `Click` header (e.g. its Tailscale address). |
+| `notify.weekly_summary` | `false` | Enable the weekly summary push (title of what you consumed only reaches the ntfy server when this is on). |
 
 The Audiobookshelf token stays server-side. It is read from the config and is
 never sent to the browser: cover images and every Audiobookshelf call are
 proxied by the server, so the browser never sees the token or the
 Audiobookshelf URL either.
+
+## Phone notifications (ntfy)
+
+Sync failures, backup failures (one alert per outage plus one recovery), and
+the optional weekly summary go to [ntfy](https://ntfy.sh) so they reach your
+phone:
+
+1. Install the ntfy app on the phone.
+2. Pick a **long random topic name** — ntfy.sh topics are public by name, so
+   anyone who learns the string can see your pushes — and subscribe to it.
+3. Set `[notify] ntfy_url` (e.g. `"https://ntfy.sh/<your-random-topic>"`) in
+   `inputtracker.config.toml`; optionally `ntfy_token` for an access-token
+   protected server and `app_url` (e.g. the Tailscale URL of the web app) to
+   make the pushes tappable.
+4. Check the setup:
+
+   ```sh
+   bun run it notify test
+   ```
+
+   It sends one test notification through every configured channel and prints
+   which ones succeeded (never the URL or token).
+
+The weekly summary is off by default; enable `[notify] weekly_summary = true`
+and install (`scripts/install.sh`) the `inputtracker-weekly.timer`, which runs
+`it notify weekly` Sundays at 19:00 local time. Note that enabling the summary
+also puts the titles of what you watched on the ntfy server.
 
 ## Run in development
 

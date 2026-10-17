@@ -1,0 +1,10 @@
+[Unit]
+Description=InputTracker weekly summary notification
+
+[Service]
+Type=oneshot
+WorkingDirectory=@APP_DIR@
+# Config path: the app reads INPUTTRACKER_CONFIG from the environment when set,
+# otherwise its own default. Nothing is hard-coded here.
+PassEnvironment=INPUTTRACKER_CONFIG
+ExecStart=@BUN@ run src/cli/index.ts notify weekly

@@ -53,7 +53,7 @@ function cliCommands(): string[] {
       break;
     }
     const match = /^ {2}(\S+)/.exec(line);
-    if (match) {
+    if (match && !commands.includes(match[1] as string)) {
       commands.push(match[1] as string);
     }
   }
@@ -108,6 +108,7 @@ describe("README.md matches the code", () => {
       "export",
       "import",
       "backup",
+      "notify",
       "doctor",
       "verify-copy",
     ]);

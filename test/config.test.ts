@@ -62,7 +62,15 @@ describe("loadConfig defaults", () => {
     expect(config.youtube).toEqual({
       thumb_base_url: "https://i.ytimg.com/vi",
     });
-    expect(config.notify).toEqual({ desktop: true, ntfy_url: "" });
+    // ntfy_token "" is part of the (public-by-value) defaults; redact() masks
+    // any `*token*` key, so no serialized form of the config reveals it.
+    expect(config.notify).toEqual({
+      desktop: true,
+      ntfy_url: "",
+      app_url: "",
+      weekly_summary: false,
+      ntfy_token: "",
+    } as Config["notify"]);
   });
 
   test("missing file falls back to the home directory when XDG_DATA_HOME is unset", () => {

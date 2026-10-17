@@ -33,7 +33,14 @@ function mockConfig(notify: Partial<Config["notify"]> = {}): Config {
     server: { bind: "127.0.0.1", port: 8787 },
     storage: { db_path: ":memory:", backup_dir: "/tmp/synthetic", backup_keep: 14 },
     audiobookshelf: { url: "http://abs.test:13378", token: "", timeout_s: 20 },
-    notify: { desktop: false, ntfy_url: "", ...notify },
+    notify: {
+      desktop: false,
+      ntfy_url: "",
+      ntfy_token: "",
+      app_url: "",
+      weekly_summary: false,
+      ...notify,
+    },
     toJSON: () => ({}),
     toString: () => "",
   } as Config;
@@ -173,7 +180,7 @@ describe("NtfyNotifier", () => {
       throw new Error(`connect ECONNREFUSED ${url}`);
     }) as unknown as typeof fetch;
 
-    const ntfy = new NtfyNotifier({ url });
+    const ntfy = new NtfyNotifier({ url, sleep: async () => {} });
     await expect(ntfy.notify("t", "b")).rejects.toThrow(/ntfy notification failed/);
     await ntfy.notify("t", "b").catch((err: unknown) => {
       expect(String(err)).not.toContain(url);
