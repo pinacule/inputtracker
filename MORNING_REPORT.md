@@ -11,6 +11,7 @@ Run in progress.
 | T01 Scaffold | opencode | deepseek-v4.1-flash-free | 1 | 8725ad5 |
 | T02 DB core | antigravity | gemini-3.8-flash-high | 1 | ce2b215 |
 | T03 Event model | antigravity | gemini-3.8-flash-high | 1 | b100706 |
+| T04 Time utils | opencode | deepseek-v4.1-flash-free | 1 | 5cc2e85 |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
