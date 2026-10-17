@@ -25,6 +25,7 @@ Run in progress.
 | T15 Heat map view | antigravity | gemini-3.8-flash-high | 1 | 7d974d8 |
 | T16 Import/Export/Add page | opencode | deepseek-v4.1-flash-free | 1 | 79c19be |
 | T17 PWA | opencode | deepseek-v4.1-flash-free | 1 | 001ac0c |
+| T18 Deploy | opencode | deepseek-v4.1-flash-free | 1 | 9616016 |
 | F01 Stats dashboard | antigravity | gemini-3.8-flash-high | 1 | e88e92f |
 | F09 ABS covers | opencode | deepseek-v4.1-flash-free | 1 | c7513d6 |
 | F10 In progress / finished | opencode | deepseek-v4.1-flash-free | 1 | eec42e0 |
