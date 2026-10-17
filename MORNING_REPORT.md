@@ -26,6 +26,8 @@ green on main (419 tests), `bun run smoke` merged with T19.
 polish → S01 Simkl auth → S02 Simkl sync → S03 Simkl UI → Y01 Takeout import → Y03 YouTube UI →
 T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). S01 Simkl config/client/auth DONE 18:58 (d6636d7, 480 tests green, attempt 2 after review feedback). Y01 YouTube Takeout import DONE (e7beab2; fixture renamed by Claude interactively, see "Decisions needed"). S02 Simkl sync DONE 19:25 (b34e428, 535 tests green on main after merging with Y01). S03 Simkl in the UI DONE 19:36 (48a4dce, 561 tests green): shared source list, `S01E03 · Show` titles, poster proxy `/api/poster/simkl/…`, "Sync Simkl now" button, `simkl.poster_base_url` config key. Y03 YouTube in the UI DONE 19:46 (201dc05, 586 tests green): YouTube in the shared source list, thumbnail proxy `/api/thumb/youtube/<id>` (`youtube.thumb_base_url` config key), Minutes/Count toggle on Stats, auto-Count for the YouTube filter, note "YouTube counts views, not minutes.". T24 smoke test for Simkl + YouTube DONE 20:05 (c588fc1, 586 tests green, `bun run smoke` 48/48 ok): fake Simkl server (device flow, activities, all-items) and fake image server on 127.0.0.1, 18 new checks (Simkl auth/sync/calendar/poster/allowed requests, Takeout via CLI and web upload, YouTube calendar/heat map/stats/thumbnails); the stale ABS cover check now expects the cover prefetched by the sync. T25 docs for phase 2 DONE 20:14 (9e8bd3f, 590 tests green): README Simkl and YouTube Takeout setup steps, new config keys, Simkl timer, CLI `sync <source>`; DATA_FORMAT `simkl`/`youtube` sources, source_id formats, external_ids keys, ingest_runs sources, token file location.
 
+**Phase 3 (cloud prep, cross-source dedup, goals, ratings + notes, approved 2026-10-17) started 22:14.** Order: V01 cloud VM prep (`it doctor`, `it verify-copy`, MIGRATION.md) → D01 dedup → G01 goals → R01 ratings/notes → X01 export/import → T31 docs + smoke. V01 RUNNING on opencode (its routed worker).
+
 Check on the phone:
 1. Open the app via your Tailscale URL and install it ("Install app"), if not done yet.
 2. Calendar: today's and recent Audiobookshelf sessions with covers; offline-synced phone sessions
@@ -111,3 +113,4 @@ Check on the phone:
 - 2026-10-17 18:52 CEST — antigravity gemini-3.8-flash-high LIMIT HIT on S01, retry after 19:07 CEST — no message
 - 2026-10-17 19:21 CEST — antigravity (gemini-3.8-flash-high) RECOVERED
 - 2026-10-17 20:09 CEST — overnight loop ENDED after 10 steps
+- 2026-10-17 22:14 CEST — overnight loop STARTED

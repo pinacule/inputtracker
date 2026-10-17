@@ -62,6 +62,8 @@ Worktree: `.worktrees/<task>`, worker output in `.worktrees/<task>/.task/`
 ### B. Otherwise — prepare the next task
 - The "ZCode (hand-fed)" table and its `.worktrees/Z*` are Claude's (interactive): never pick, review,
   change or report them as unknown.
+- Same for the "Antigravity lane (Claude-run)" table and `.worktrees/A*`: never pick, review, change or
+  report them; only read their Status when a task depends on them (e.g. T31 on A01, A04).
 - Pick the first task in TASKS.md order (M0 → v1 table incl. F-rows → M03 → Phase 2 table → Phase 3 table) with status TODO or
   `WAITING-<worker>` (worker now available), whose dependencies are all DONE. Skip tasks that
   depend on a BLOCKED task (list them in the report as "skipped: depends on <id>").
