@@ -10,9 +10,11 @@
 # INPUTTRACKER_CONFIG from the environment, falling back to its own default.
 # This script never reads or prints the app config file.
 #
-# Usage: scripts/install.sh [--no-start] [--dry-run]
+# Usage: scripts/install.sh [--no-start] [--no-build] [--dry-run]
 #   --no-start  render units and reload systemd, but do not enable/start them
+#   --no-build  skip `bun install` and the web build before starting
 #   --dry-run   print what would happen and touch nothing
+# Re-running it is also the update step: it rebuilds the web app and restarts the server.
 
 set -euo pipefail
 
@@ -23,18 +25,20 @@ UNIT_DST="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
 
 DRY_RUN=0
 NO_START=0
+NO_BUILD=0
 
 for arg in "$@"; do
   case "${arg}" in
     --dry-run) DRY_RUN=1 ;;
     --no-start) NO_START=1 ;;
+    --no-build) NO_BUILD=1 ;;
     -h|--help)
-      sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
       echo "install.sh: unknown option: ${arg}" >&2
-      echo "Usage: $0 [--no-start] [--dry-run]" >&2
+      echo "Usage: $0 [--no-start] [--no-build] [--dry-run]" >&2
       exit 2
       ;;
   esac
@@ -79,7 +83,11 @@ if [ "${DRY_RUN}" -eq 1 ]; then
   echo "  Would render: ${UNITS[*]}"
   echo "  Would run:    systemctl --user daemon-reload"
   if [ "${NO_START}" -eq 0 ]; then
+    if [ "${NO_BUILD}" -eq 0 ]; then
+      echo "  Would run:    ${BUN} install --frozen-lockfile && ${BUN} run build:web"
+    fi
     echo "  Would run:    systemctl --user enable --now inputtracker.service ${TIMERS[*]}"
+    echo "  Would run:    systemctl --user restart inputtracker.service"
   else
     echo "  (--no-start) would not enable or start any unit"
   fi
@@ -120,7 +128,13 @@ fi
 systemctl --user daemon-reload
 
 if [ "${NO_START}" -eq 0 ]; then
+  if [ "${NO_BUILD}" -eq 0 ]; then
+    # The server serves web/dist, which is not in git: build it before (re)starting.
+    (cd "${APP_DIR}" && "${BUN}" install --frozen-lockfile && "${BUN}" run build:web)
+  fi
   systemctl --user enable --now "inputtracker.service" "${TIMERS[@]}"
+  # enable --now leaves an already running server on old code; restart picks up updates.
+  systemctl --user restart "inputtracker.service"
   echo "InputTracker service and timers enabled."
 else
   echo "--no-start: units reloaded; enable them with: systemctl --user enable --now inputtracker.service ${TIMERS[*]}"

@@ -424,4 +424,48 @@ describe("systemd-analyze verification", () => {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  test("a full run builds the web app, enables the units and restarts the server", async () => {
+    const root = mkdtempSync(join(tmpdir(), "it-deploy-full-"));
+    try {
+      const home = join(root, "home");
+      mkdirSync(home);
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      const logPath = join(root, "calls.log");
+      // Shims log their calls instead of installing, building or touching systemd.
+      for (const name of ["bun", "systemctl"]) {
+        const shim = join(bin, name);
+        writeFileSync(shim, `#!/bin/sh\nprintf '${name} %s\\n' "$*" >> "\${CALLS_LOG}"\n`);
+        chmodSync(shim, 0o755);
+      }
+      const env = cleanEnv({
+        HOME: home,
+        XDG_CONFIG_HOME: home,
+        CALLS_LOG: logPath,
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+      });
+
+      const { code } = await runInstall([], env);
+      expect(code).toBe(0);
+      const calls = readFileSync(logPath, "utf8").trim().split("\n");
+      expect(calls).toEqual([
+        "systemctl --user daemon-reload",
+        "bun install --frozen-lockfile",
+        "bun run build:web",
+        "systemctl --user enable --now inputtracker.service inputtracker-sync@audiobookshelf.timer inputtracker-backup.timer",
+        "systemctl --user restart inputtracker.service",
+      ]);
+
+      // --no-build skips the build but still restarts.
+      rmSync(logPath);
+      const noBuild = await runInstall(["--no-build"], env);
+      expect(noBuild.code).toBe(0);
+      const noBuildCalls = readFileSync(logPath, "utf8");
+      expect(noBuildCalls).not.toContain("bun ");
+      expect(noBuildCalls).toContain("systemctl --user restart inputtracker.service");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
