@@ -242,6 +242,74 @@ export interface InProgressItem {
   cover_url: string | null;
 }
 
+/** Which field of a group matched the search query. */
+export type MatchField = "title" | "series" | "parent" | "channel";
+
+/** One grouped result of `GET /api/search`. */
+export interface SearchHit {
+  /** Stable id of the group (opaque; pass back to `/api/title-history`). */
+  key: string;
+  title: string;
+  source: string;
+  media_type: string | null;
+  /** Which fields matched (deduped, in the order title/series/parent/channel). */
+  matched: MatchField[];
+  /** parent_title (author / channel) of the most recent event, or null. */
+  subtitle: string | null;
+  count: number;
+  minutes: number;
+  /** Local "YYYY-MM-DD" of the earliest event. */
+  first_date: string;
+  /** Local "YYYY-MM-DD" of the latest event. */
+  last_date: string;
+  cover_url: string | null;
+}
+
+/** Result of `GET /api/search`. */
+export interface SearchResult {
+  query: string;
+  /** Number of hits before limit/offset. */
+  total: number;
+  hits: SearchHit[];
+}
+
+export interface SearchParams {
+  q: string;
+  source?: string;
+  media_type?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** One event in a title's full history. */
+export interface TitleHistoryItem {
+  id: number;
+  started_at: string;
+  /** Local "YYYY-MM-DD". */
+  local_date: string;
+  /** Local "HH:mm". */
+  local_time: string;
+  media_type: string | null;
+  season: number | null;
+  episode: number | null;
+  minutes: number;
+  /** The raw event title (e.g. YouTube video / episode name). */
+  event_title: string | null;
+}
+
+/** Result of `GET /api/title-history` (full history of one search hit). */
+export interface TitleHistory {
+  key: string;
+  title: string;
+  source: string;
+  subtitle: string | null;
+  cover_url: string | null;
+  count: number;
+  minutes: number;
+  /** Newest first, capped at 500 (count/minutes still cover all events). */
+  items: TitleHistoryItem[];
+}
+
 /** One item in the in-progress or finished progress list. */
 export interface ProgressItem {
   id: number;
@@ -457,6 +525,23 @@ export function getYearReview(
 
 export function getInProgress(): Promise<InProgressItem[]> {
   return getJson<InProgressItem[]>("/api/in-progress");
+}
+
+export function search(params: SearchParams): Promise<SearchResult> {
+  return getJson<SearchResult>(
+    withQuery("/api/search", {
+      q: params.q,
+      source: params.source,
+      media_type: params.media_type,
+      limit: params.limit !== undefined ? String(params.limit) : undefined,
+      offset: params.offset !== undefined ? String(params.offset) : undefined,
+    })
+  );
+}
+
+export function getTitleHistory(key: string): Promise<TitleHistory> {
+  // The key is opaque and can contain any characters: always URL-encode it.
+  return getJson<TitleHistory>(withQuery("/api/title-history", { key }));
 }
 
 export function getProgress(source?: string): Promise<ProgressLists> {

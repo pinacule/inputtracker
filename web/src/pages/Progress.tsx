@@ -141,6 +141,9 @@ export function Progress() {
         <p class="muted">
           Items you are part-way through, and what you have finished.
         </p>
+        <a class="search-header-link" href="#/search">
+          🔍 Search
+        </a>
       </header>
 
       {error && (
