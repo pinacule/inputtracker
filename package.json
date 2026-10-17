@@ -4,12 +4,15 @@
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit && bun test",
-    "dev": "bun run src/server/index.ts",
+    "dev": "bun run src/server/main.ts",
     "it": "bun run src/cli/index.ts",
     "build:web": "echo \"web scaffold comes in T13\""
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "hono": "^4.13.13"
   }
 }

@@ -1,11 +1,13 @@
 /**
  * InputTracker HTTP server entry point.
- *
- * Scaffold only: the real server is added in a later task.
  */
 
-export const NOT_IMPLEMENTED = "not implemented";
+export * from "./aggregate.ts";
+export * from "./app.ts";
+export * from "./main.ts";
+
+import { main } from "./main.ts";
 
 if (import.meta.main) {
-  console.log(NOT_IMPLEMENTED);
+  main();
 }
