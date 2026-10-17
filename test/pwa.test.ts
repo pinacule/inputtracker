@@ -31,6 +31,7 @@ function mockConfig(): Config {
       backup_keep: 14,
     },
     audiobookshelf: { url: "", token: "", timeout_s: 20 },
+    simkl: { client_id: "", base_url: "https://api.simkl.test", timeout_s: 20 },
     notify: { desktop: false, ntfy_url: "" },
     toJSON: () => ({ ...cfg }),
     toString: () => JSON.stringify(cfg),

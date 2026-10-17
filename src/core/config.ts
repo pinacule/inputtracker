@@ -32,6 +32,12 @@ export interface AudiobookshelfConfig {
   timeout_s: number;
 }
 
+export interface SimklConfig {
+  client_id: string;
+  base_url: string;
+  timeout_s: number;
+}
+
 export interface NotifyConfig {
   desktop: boolean;
   ntfy_url: string;
@@ -42,6 +48,7 @@ export interface Config {
   server: ServerConfig;
   storage: StorageConfig;
   audiobookshelf: AudiobookshelfConfig;
+  simkl: SimklConfig;
   notify: NotifyConfig;
   /** Redacted plain object (JSON.stringify uses this automatically). */
   toJSON(): unknown;
@@ -220,13 +227,20 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     configurable: false,
   });
 
+  const simklTable = readTable(file, "simkl", "simkl");
+  const simkl: SimklConfig = {
+    client_id: readString(simklTable, "client_id", "simkl.client_id", ""),
+    base_url: readString(simklTable, "base_url", "simkl.base_url", "https://api.simkl.com"),
+    timeout_s: readNumber(simklTable, "timeout_s", "simkl.timeout_s", 20),
+  };
+
   const notifyTable = readTable(file, "notify", "notify");
   const notify: NotifyConfig = {
     desktop: readBoolean(notifyTable, "desktop", "notify.desktop", true),
     ntfy_url: readString(notifyTable, "ntfy_url", "notify.ntfy_url", ""),
   };
 
-  const config = { timezone, server, storage, audiobookshelf, notify } as Config;
+  const config = { timezone, server, storage, audiobookshelf, simkl, notify } as Config;
 
   // Redacted serialization: token is non-enumerable, so it is already omitted.
   Object.defineProperty(config, "toJSON", {

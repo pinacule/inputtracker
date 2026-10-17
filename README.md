@@ -117,6 +117,7 @@ Run commands with `bun run it <command>`.
 | Command | Options | Example |
 |---|---|---|
 | `sync audiobookshelf` | source name; only `audiobookshelf` is accepted | `bun run it sync audiobookshelf` |
+| `auth simkl` | `[--status]` | `bun run it auth simkl` |
 | `add` | `--type <t> --title <title> --start <local> [--end <local>] [--duration-min <n>] [--parent <title>] [--season <n>] [--episode <n>] [--progress <0..1>] [--device <name>]` | `bun run it add --type audiobook --title "The Synthetic Tale" --start "2026-10-17 21:30" --duration-min 45` |
 | `export` | `--format json\|csv --out <file>` | `bun run it export --format json --out archive.json` |
 | `import` | `<file> [--format json\|csv]` | `bun run it import archive.json` |
@@ -126,6 +127,8 @@ Details:
 
 - `sync audiobookshelf` fetches sessions, media progress and daily stats from
   Audiobookshelf and inserts the new rows. It only ever issues GET requests.
+- `auth simkl` connects Simkl via device flow (prints a link + code);
+  `--status` shows whether it is connected, without network.
 - `add` records a consumed item by hand. `--type`, `--title` and `--start` are
   required. `--duration-min` (minutes) wins over `--end`; without either the
   duration is left empty. `--progress` is a fraction between 0 and 1;
