@@ -28,3 +28,5 @@ Run in progress.
 - 2026-10-17 02:09 CEST — overnight loop ENDED after 4 steps
 - 2026-10-17 02:10 CEST — overnight loop STARTED
 - 2026-10-17 12:05 CEST — overnight loop STARTED
+- 2026-10-17 12:45 CEST — overnight loop ENDED after 6 steps
+- 2026-10-17 14:36 CEST — overnight loop STARTED
