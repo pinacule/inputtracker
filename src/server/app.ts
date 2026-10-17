@@ -42,6 +42,7 @@ import {
   type SimklToken,
 } from "../sources/simkl/token.ts";
 import {
+  formatLocalParts,
   getCalendar,
   getHeatmapDays,
   getHeatmapHours,
@@ -49,6 +50,7 @@ import {
   getProgressLists,
   getStats,
 } from "./aggregate.ts";
+import { getInsights } from "./insights.ts";
 import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
 import { getYoutubeThumb, isValidYoutubeVideoId } from "./thumbs.ts";
@@ -242,6 +244,29 @@ export function createApp(deps: AppDeps): Hono {
 
     const source = c.req.query("source") || undefined;
     const result = getStats(db, { from, to, source, tz });
+    return c.json(result);
+  });
+
+  // GET /api/insights[?source=][&date=YYYY-MM-DD] — streaks + "On this day".
+  // `date` overrides "today" (mainly for tests); it defaults to the current
+  // local day in the configured timezone.
+  app.get("/api/insights", (c) => {
+    const err = validateQueryParams(c.req.url, ["source", "date"]);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const date = c.req.query("date") || undefined;
+    if (date !== undefined && !isValidDateStr(date)) {
+      return c.json(
+        { error: `Invalid date format: '${date}' (expected YYYY-MM-DD)` },
+        400
+      );
+    }
+
+    const source = c.req.query("source") || undefined;
+    const today = date ?? formatLocalParts(new Date().toISOString(), tz).date;
+    const result = getInsights(db, { tz, today, source });
     return c.json(result);
   });
 

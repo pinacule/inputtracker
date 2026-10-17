@@ -1,7 +1,22 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { getStats, type StatsResult, type WeekStatBucket, type MonthStatBucket } from "../api";
+import {
+  getInsights,
+  getStats,
+  type InsightsResult,
+  type OnThisDayItem,
+  type StatsResult,
+  type WeekStatBucket,
+  type MonthStatBucket,
+} from "../api";
 import { sourceIcon } from "../lib/calendar";
-import { sourceLabel } from "../lib/sources";
+import { formatLocalDay } from "../lib/format-date";
+import {
+  describeCurrentStreak,
+  formatDayCount,
+  formatOnThisDayHeading,
+  formatStreakRange,
+} from "../lib/insights";
+import { SOURCES, sourceLabel } from "../lib/sources";
 import {
   autoMetricForSource,
   computeBarHeight,
@@ -23,11 +38,37 @@ import {
 
 type Period = "week" | "month";
 
+/** Cover thumbnail with a source-icon fallback when missing or broken. */
+function OnThisDayThumbnail({ item }: { item: OnThisDayItem }) {
+  const [failed, setFailed] = useState(false);
+
+  if (item.cover_url && !failed) {
+    return (
+      <img
+        class="otd-item-cover"
+        src={item.cover_url}
+        alt=""
+        width={40}
+        height={40}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <span class="otd-item-icon-badge" aria-hidden="true">
+      {sourceIcon(item.source, item.media_type)}
+    </span>
+  );
+}
+
 export function Stats() {
   const [period, setPeriod] = useState<Period>("week");
   const [source, setSource] = useState<string>("");
   const [metric, setMetric] = useState<ActivityMetric>("minutes");
   const [data, setData] = useState<StatsResult | null>(null);
+  const [insights, setInsights] = useState<InsightsResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,10 +86,11 @@ export function Stats() {
     setError(null);
 
     const srcParam = source !== "" ? source : undefined;
-    getStats({ source: srcParam })
-      .then((res) => {
+    Promise.all([getStats({ source: srcParam }), getInsights(srcParam)])
+      .then(([statsRes, insightsRes]) => {
         if (!cancelled) {
-          setData(res);
+          setData(statsRes);
+          setInsights(insightsRes);
           setLoading(false);
         }
       })
@@ -85,6 +127,20 @@ export function Stats() {
       (src) => (data.by_source[src]?.count ?? 0) > 0
     );
   }, [data]);
+
+  // Per-source streaks: known sources first (in SOURCES order), then any
+  // unknown source ids alphabetically.
+  const streakSources = useMemo(() => {
+    if (!insights) return [];
+    const bySource = insights.streaks.by_source;
+    const known = SOURCES.map((s) => s.value).filter(
+      (value) => bySource[value] !== undefined
+    );
+    const unknown = Object.keys(bySource)
+      .filter((src) => !SOURCES.some((s) => s.value === src))
+      .sort((a, b) => a.localeCompare(b));
+    return [...known, ...unknown];
+  }, [insights]);
 
   return (
     <div class="page stats-page">
@@ -293,6 +349,74 @@ export function Stats() {
         )}
       </section>
 
+      {/* Streaks Section */}
+      <section class="card stats-card" aria-labelledby="stats-streaks-heading">
+        <div class="stats-card-header">
+          <h2 id="stats-streaks-heading" class="stats-card-title">
+            Streaks
+          </h2>
+          <span class="muted stats-card-subtitle">Consecutive active days</span>
+        </div>
+
+        {loading ? (
+          <p class="muted stats-loading">Loading streaks...</p>
+        ) : !insights ? (
+          <p class="muted stats-empty">No streaks recorded yet.</p>
+        ) : (
+          <>
+            <div class="insights-duo">
+              <div class="insight-figure">
+                <span class="insight-figure-label">Current Streak</span>
+                <span class="insight-figure-value">
+                  {formatDayCount(insights.streaks.overall.current)}
+                </span>
+                <span class="insight-figure-sub">
+                  {describeCurrentStreak(
+                    insights.streaks.overall.current,
+                    insights.streaks.overall.last_active,
+                    insights.streaks.today
+                  )}
+                </span>
+              </div>
+              <div class="insight-figure">
+                <span class="insight-figure-label">Longest Streak</span>
+                <span class="insight-figure-value">
+                  {formatDayCount(insights.streaks.overall.longest)}
+                </span>
+                <span class="insight-figure-sub">
+                  {formatStreakRange(
+                    insights.streaks.overall.longest_start,
+                    insights.streaks.overall.longest_end
+                  ) ?? "No active days yet"}
+                </span>
+              </div>
+            </div>
+
+            {streakSources.length > 0 && (
+              <ul class="streak-source-list">
+                {streakSources.map((src) => {
+                  const info = insights.streaks.by_source[src]!;
+                  return (
+                    <li key={src} class="streak-source-item">
+                      <span
+                        class="stats-legend-dot"
+                        style={{ backgroundColor: sourceColor(src) }}
+                        aria-hidden="true"
+                      />
+                      <span class="streak-source-name">{sourceLabel(src)}</span>
+                      <span class="streak-source-figures">
+                        Current {formatDayCount(info.current)} · Longest{" "}
+                        {formatDayCount(info.longest)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
+
       {/* Top Items Section */}
       <section class="card stats-card" aria-labelledby="stats-top-heading">
         <div class="stats-card-header">
@@ -335,6 +459,52 @@ export function Stats() {
               </li>
             ))}
           </ol>
+        )}
+      </section>
+
+      {/* On this day Section */}
+      <section class="card stats-card" aria-labelledby="stats-otd-heading">
+        <div class="stats-card-header">
+          <h2 id="stats-otd-heading" class="stats-card-title">
+            On this day
+          </h2>
+          {insights && (
+            <span class="muted stats-card-subtitle">
+              {formatLocalDay(insights.on_this_day.date)}
+            </span>
+          )}
+        </div>
+
+        {loading ? (
+          <p class="muted stats-loading">Loading...</p>
+        ) : !insights || insights.on_this_day.years.length === 0 ? (
+          <p class="muted stats-empty">
+            Nothing on this date in earlier years.
+          </p>
+        ) : (
+          insights.on_this_day.years.map((group) => (
+            <div key={group.year} class="otd-year-group">
+              <h3 class="otd-year-heading">
+                {formatOnThisDayHeading(group.year, group.years_ago)}
+              </h3>
+              <ul class="otd-item-list">
+                {group.items.map((item) => (
+                  <li
+                    key={`${item.source}-${item.started_at}-${item.title}`}
+                    class="otd-item"
+                  >
+                    <OnThisDayThumbnail item={item} />
+                    <div class="otd-item-body">
+                      <span class="otd-item-title">{item.title}</span>
+                      <span class="otd-item-meta">
+                        {sourceLabel(item.source)}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
         )}
       </section>
     </div>
