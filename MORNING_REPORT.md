@@ -19,3 +19,5 @@ Run in progress.
 
 ## Limit pauses (log)
 - 2026-10-17 02:06 CEST — overnight loop STARTED
+- 2026-10-17 02:09 CEST — overnight loop ENDED after 4 steps
+- 2026-10-17 02:10 CEST — overnight loop STARTED
