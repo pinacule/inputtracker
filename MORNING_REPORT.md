@@ -3,13 +3,28 @@
 Updated by the manager after every task. If the run stopped early, this is the state at that point.
 
 ## Summary
+**All planned work finished (2026-10-17 20:15).** 39 tasks DONE: 31 v1 tasks + 8 phase 2 tasks
+(P01, S01, S02, S03, Y01, Y03, T24, T25), plus manager setup M01/M02/M04. 0 BLOCKED, 0 skipped.
+Y02 (yt-dlp poller) stays DEFERRED as you decided. Main is green: `bun run check` 590 tests,
+`bun run smoke` 48 checks (as of T24). Everything is pushed (last merge 9e8bd3f).
+
+To start using phase 2 (all steps are in README.md, sections "Simkl" and "YouTube watch history"):
+1. Simkl: register a V2 app ("TV, devices & command line") at simkl.com/settings/developer, put its
+   `client_id` under `[simkl]` in `inputtracker.config.toml`, run `bun run it auth simkl`, then re-run
+   `scripts/install.sh` so `inputtracker-sync@simkl.timer` (hourly at :30) is installed and enabled.
+2. YouTube: request a Google Takeout of "YouTube and YouTube Music" → history only, format **JSON**,
+   then `bun run it import youtube-takeout <watch-history.json>` (or upload it on Import/Export, max 512 MB).
+3. On the phone after that: Calendar shows Simkl episodes as `S01E03 · Show` with posters and YouTube
+   views with thumbnails; Stats/Heat map with the YouTube filter switch to Count and show
+   "YouTube counts views, not minutes."; Import/Export has "Sync Simkl now".
+
 **v1 finished (2026-10-17 17:45).** 31 v1 tasks DONE (28 by workers, all on the first attempt; T21, T22 and M03
 done by Claude interactively) plus manager setup M01/M02/M04. 0 BLOCKED, 0 skipped. `bun run check`
 green on main (419 tests), `bun run smoke` merged with T19.
 
 **Phase 2 (Simkl + YouTube Takeout, approved 2026-10-17) started 18:17.** Order: P01 stats chart
 polish → S01 Simkl auth → S02 Simkl sync → S03 Simkl UI → Y01 Takeout import → Y03 YouTube UI →
-T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). S01 Simkl config/client/auth DONE 18:58 (d6636d7, 480 tests green, attempt 2 after review feedback). Y01 YouTube Takeout import DONE (e7beab2; fixture renamed by Claude interactively, see "Decisions needed"). S02 Simkl sync DONE 19:25 (b34e428, 535 tests green on main after merging with Y01). S03 Simkl in the UI DONE 19:36 (48a4dce, 561 tests green): shared source list, `S01E03 · Show` titles, poster proxy `/api/poster/simkl/…`, "Sync Simkl now" button, `simkl.poster_base_url` config key. Y03 YouTube in the UI DONE 19:46 (201dc05, 586 tests green): YouTube in the shared source list, thumbnail proxy `/api/thumb/youtube/<id>` (`youtube.thumb_base_url` config key), Minutes/Count toggle on Stats, auto-Count for the YouTube filter, note "YouTube counts views, not minutes.". T24 smoke test for Simkl + YouTube DONE 20:05 (c588fc1, 586 tests green, `bun run smoke` 48/48 ok): fake Simkl server (device flow, activities, all-items) and fake image server on 127.0.0.1, 18 new checks (Simkl auth/sync/calendar/poster/allowed requests, Takeout via CLI and web upload, YouTube calendar/heat map/stats/thumbnails); the stale ABS cover check now expects the cover prefetched by the sync. Running now: T25 docs for phase 2 (opencode, from 20:06), the last phase 2 task.
+T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). S01 Simkl config/client/auth DONE 18:58 (d6636d7, 480 tests green, attempt 2 after review feedback). Y01 YouTube Takeout import DONE (e7beab2; fixture renamed by Claude interactively, see "Decisions needed"). S02 Simkl sync DONE 19:25 (b34e428, 535 tests green on main after merging with Y01). S03 Simkl in the UI DONE 19:36 (48a4dce, 561 tests green): shared source list, `S01E03 · Show` titles, poster proxy `/api/poster/simkl/…`, "Sync Simkl now" button, `simkl.poster_base_url` config key. Y03 YouTube in the UI DONE 19:46 (201dc05, 586 tests green): YouTube in the shared source list, thumbnail proxy `/api/thumb/youtube/<id>` (`youtube.thumb_base_url` config key), Minutes/Count toggle on Stats, auto-Count for the YouTube filter, note "YouTube counts views, not minutes.". T24 smoke test for Simkl + YouTube DONE 20:05 (c588fc1, 586 tests green, `bun run smoke` 48/48 ok): fake Simkl server (device flow, activities, all-items) and fake image server on 127.0.0.1, 18 new checks (Simkl auth/sync/calendar/poster/allowed requests, Takeout via CLI and web upload, YouTube calendar/heat map/stats/thumbnails); the stale ABS cover check now expects the cover prefetched by the sync. T25 docs for phase 2 DONE 20:14 (9e8bd3f, 590 tests green): README Simkl and YouTube Takeout setup steps, new config keys, Simkl timer, CLI `sync <source>`; DATA_FORMAT `simkl`/`youtube` sources, source_id formats, external_ids keys, ingest_runs sources, token file location.
 
 Check on the phone:
 1. Open the app via your Tailscale URL and install it ("Install app"), if not done yet.
@@ -61,9 +76,11 @@ Check on the phone:
 | S03 Simkl in UI (source list, S01E03 titles, poster proxy, Sync Simkl now) | opencode | deepseek-v4.1-flash-free | 1 | 48a4dce |
 | Y03 YouTube in UI (source entry, thumbnail proxy, Count metric on Stats/Heat map) | opencode | deepseek-v4.1-flash-free | 1 | 201dc05 |
 | T24 Smoke test for Simkl + YouTube (`bun run smoke`, 48 checks) | antigravity | gemini-3.8-flash-high | 1 | c588fc1 |
+| T25 Docs for phase 2 (README Simkl/YouTube setup, DATA_FORMAT new sources) | opencode | deepseek-v4.1-flash-free | 1 | 9e8bd3f |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
+- T25 (passed, not sent back, info): the manager checked every stated fact against the code and fixed one DATA_FORMAT.md sentence before merging. It said `it backup` writes `events` rows only; in fact it copies the whole database (`VACUUM INTO`) plus the JSON export. Neither includes the Simkl token file, so the conclusion was right. `merge-task.sh` merged and pushed successfully. Its exit code 1 came only from the manager's shell, whose working directory was the removed worktree.
 - 2026-10-17 19:48 (info, found by the manager before T24): `bun run smoke` on main fails 1 of 30 checks, `GET /api/cover/item-fake-book-1 (first fetch)` (`fetches=3`). Not a code bug: since T23 the sync already prefetches covers, and the check still expects the first `/api/cover` request to fetch from ABS. T24 updates this check. `bun run check` (586 tests) is green.
 - S02 (passed, not sent back, info): Simkl's `max_items` split asks for all five statuses for every type as `docs/simkl-api.md` says, including `movies/watching` and `movies/hold`, which movies don't have. If Simkl answers those with an error instead of an empty list, the split fails; this only matters for very large libraries. Also changed by the worker: `test/abs-sync.test.ts` (its "unknown source" test used `simkl`, now `unknown`). No Simkl failure notification from the web "Sync now" route, the same as for ABS.
 - T20 (passed, not sent back): manager fixed two doc lines before merging. DATA_FORMAT.md listed `native-import` as an `events.source` value (it is only `ingest_runs.source`; imported rows keep their own source), and README said `bun.lock` pins the Bun version (it does not). The worker also noted that `test/pwa.test.ts` fails inside the jail (Vite can't write its temp dir to the read-only parent `node_modules`). It passes outside the jail and on main.
