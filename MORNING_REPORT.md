@@ -9,7 +9,7 @@ green on main (419 tests), `bun run smoke` merged with T19.
 
 **Phase 2 (Simkl + YouTube Takeout, approved 2026-10-17) started 18:17.** Order: P01 stats chart
 polish → S01 Simkl auth → S02 Simkl sync → S03 Simkl UI → Y01 Takeout import → Y03 YouTube UI →
-T24 smoke → T25 docs. Running now: P01 (opencode).
+T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green).
 
 Check on the phone:
 1. Open the app via your Tailscale URL and install it ("Install app"), if not done yet.
@@ -54,6 +54,7 @@ Check on the phone:
 | T19 Smoke test (`bun run smoke`, 30 checks) | antigravity | gemini-3.8-flash-high | 1 | a98a955 |
 | T20 Docs: README.md + DATA_FORMAT.md (+ `test/docs.test.ts`) | opencode | deepseek-v4.1-flash-free | 1 | 6443580 |
 | T21 Offline-synced ABS sessions, T22 install = update, M03 real ABS sync check | Claude (interactive) | — | 1 | see git log |
+| P01 Stats chart polish (gap bars, short labels) | opencode | deepseek-v4.1-flash-free | 1 | 26bd63c |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
