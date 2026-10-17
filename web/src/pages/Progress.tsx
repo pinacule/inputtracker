@@ -5,28 +5,16 @@ import {
   type ProgressLists,
 } from "../api";
 import { sourceIcon } from "../lib/calendar";
+import { DEFAULT_TIMEZONE, formatDateTime } from "../lib/format-date";
 
 /** All dates are stored UTC and shown in the configured local timezone. */
-const DISPLAY_TZ = "Europe/Bratislava";
-
-const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
-  timeZone: DISPLAY_TZ,
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-function formatDateTime(iso: string | null): string {
+function formatTimestamp(iso: string | null): string {
   if (iso === null || iso === "") {
     return "—";
   }
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-  return dateTimeFormatter.format(date);
+  const formatted = formatDateTime(iso, DEFAULT_TIMEZONE);
+  // `formatDateTime` returns its input unchanged for invalid input.
+  return formatted === iso ? "—" : formatted;
 }
 
 function formatPercent(progress: number | null): string {
@@ -82,8 +70,8 @@ function ProgressBar({ progress }: { progress: number | null }) {
 function ProgressRow({ item }: { item: ProgressItem }) {
   const title = item.title?.trim() || "Untitled";
   const dateLabel = item.is_finished
-    ? `Finished ${formatDateTime(item.finished_at ?? item.last_update)}`
-    : `Updated ${formatDateTime(item.last_update)}`;
+    ? `Finished ${formatTimestamp(item.finished_at ?? item.last_update)}`
+    : `Updated ${formatTimestamp(item.last_update)}`;
 
   return (
     <li class="progress-item">
