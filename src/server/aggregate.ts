@@ -8,6 +8,9 @@
  * - Timestamps are stored UTC; bucketed by local day/hour in the configured timezone using `Intl`.
  * - Minutes = `duration_seconds / 60` (null -> 0 minutes, still counts as 1 item).
  * - Count = number of latest rows.
+ * - A session whose listening time is longer than its wall-clock span (see
+ *   `isTimeUncertain`) was synced in a batch from an offline device: it stays on
+ *   its sync day, but its time of day is unknown, so the hour grid leaves it out.
  */
 
 import type { Database } from "bun:sqlite";
@@ -30,7 +33,30 @@ export interface ConsumptionEvent {
   season?: number | null;
   episode?: number | null;
   started_at: string;
+  ended_at?: string | null;
   duration_seconds?: number | null;
+}
+
+/** Rounding slack (s) between listening time and wall-clock span before a session counts as uncertain. */
+export const UNCERTAIN_SLACK_SECONDS = 60;
+
+/**
+ * True when the event reports more listening time than fits between its start and
+ * end. The Audiobookshelf Android app does this for sessions played offline: the
+ * server stamps start and end at sync time, while the listening happened earlier.
+ */
+export function isTimeUncertain(event: {
+  started_at: string;
+  ended_at?: string | null;
+  duration_seconds?: number | null;
+}): boolean {
+  if (event.ended_at === null || event.ended_at === undefined) return false;
+  if (event.duration_seconds === null || event.duration_seconds === undefined) return false;
+  const start = Date.parse(event.started_at);
+  const end = Date.parse(event.ended_at);
+  if (Number.isNaN(start) || Number.isNaN(end)) return false;
+  const wallSeconds = Math.max(0, (end - start) / 1000);
+  return event.duration_seconds > wallSeconds + UNCERTAIN_SLACK_SECONDS;
 }
 
 export interface CalendarItem {
@@ -46,6 +72,8 @@ export interface CalendarItem {
   duration_seconds: number | null;
   /** `/api/cover/<abs_item>` for ABS items, else null. */
   cover_url: string | null;
+  /** Synced later from an offline device: the day is the sync day, the time is unknown. */
+  time_uncertain: boolean;
 }
 
 export interface CalendarDay {
@@ -80,6 +108,9 @@ export interface HeatmapHourCell {
 
 export interface HeatmapHoursResult {
   cells: HeatmapHourCell[];
+  /** Sessions left out of the grid because their time of day is unknown. */
+  unplaced_count: number;
+  unplaced_minutes: number;
 }
 
 export interface StatBucket {
@@ -353,6 +384,7 @@ export function aggregateCalendar(
       local_time: local.localTime,
       duration_seconds: durationSeconds,
       cover_url: coverUrlFor(event),
+      time_uncertain: isTimeUncertain(event),
     });
     day.totalSeconds += durationSeconds ?? 0;
   }
@@ -426,6 +458,8 @@ export function aggregateHeatmapHours(
     string,
     { weekday: number; hour: number; count: number; totalSeconds: number }
   >();
+  let unplacedCount = 0;
+  let unplacedSeconds = 0;
 
   for (const event of events) {
     if (!CONSUMPTION_KINDS.has(event.source_kind)) {
@@ -433,6 +467,11 @@ export function aggregateHeatmapHours(
     }
     const local = formatLocalParts(event.started_at, tz);
     if (yearPrefix !== null && !local.date.startsWith(yearPrefix)) {
+      continue;
+    }
+    if (isTimeUncertain(event)) {
+      unplacedCount += 1;
+      unplacedSeconds += event.duration_seconds ?? 0;
       continue;
     }
     const cellWeekday = local.weekday - 1; // 0=Mon .. 6=Sun
@@ -456,7 +495,7 @@ export function aggregateHeatmapHours(
       minutes: cell.totalSeconds / 60,
     }));
 
-  return { cells };
+  return { cells, unplaced_count: unplacedCount, unplaced_minutes: unplacedSeconds / 60 };
 }
 
 /** Options for stats aggregation. */
@@ -745,6 +784,7 @@ export function getLatestConsumptionEvents(
           season,
           episode,
           started_at,
+          ended_at,
           duration_seconds
         FROM events_latest
         WHERE source_kind IN ('listening_session', 'watch', 'history_item')
@@ -768,6 +808,7 @@ export function getLatestConsumptionEvents(
         season,
         episode,
         started_at,
+        ended_at,
         duration_seconds
       FROM events_latest
       WHERE source_kind IN ('listening_session', 'watch', 'history_item')
