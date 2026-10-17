@@ -3,7 +3,7 @@
 Updated by the manager after every task. If the run stopped early, this is the state at that point.
 
 ## Summary
-Run in progress.
+Run in progress. Now: T19 smoke test (antigravity).
 
 ## Done
 | Task | Worker | Model | Attempts | Commit |
@@ -33,6 +33,7 @@ Run in progress.
 | F15 Sync failure notification | opencode | deepseek-v4.1-flash-free | 1 | 3070e18 |
 | F14b Backup hardening | opencode | deepseek-v4.1-flash-free | 1 | 0124e83 |
 | T16b Date format polish | opencode | deepseek-v4.1-flash-free | 1 | ae84fd7 |
+| T18b Bun path in units | opencode | deepseek-v4.1-flash-free | 1 | 6d20a7b |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
@@ -41,6 +42,7 @@ Run in progress.
 ## BLOCKED
 
 ## Decisions needed
+- 2026-10-17 17:22: a worktree `.worktrees/T21` (branch `task/T21`, from main 6d20a7b) appeared that the manager did not create. T21 is not in TASKS.md. Left untouched; please check whether it is yours.
 
 ## Limit pauses (log)
 - 2026-10-17 02:06 CEST — overnight loop STARTED
