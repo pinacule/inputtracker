@@ -15,20 +15,38 @@ const ROUTES: ReadonlyArray<{ id: Route; label: string }> = [
 
 const DEFAULT_ROUTE: Route = "calendar";
 
-/** Read the route out of the hash (e.g. `#/heatmap`). */
-function parseHash(hash: string): Route {
-  const raw = hash.replace(/^#\/?/, "").split(/[?/]/, 1)[0];
+interface ParsedRoute {
+  route: Route;
+  date?: string;
+}
+
+/** Read the route and optional query params out of the hash (e.g. `#/calendar?date=2026-10-17`). */
+function parseHash(hash: string): ParsedRoute {
+  const stripped = hash.replace(/^#\/?/, "");
+  const [pathPart, queryPart] = stripped.split("?");
+  const raw = (pathPart ?? "").split(/[?/]/, 1)[0];
   const match = ROUTES.find((route) => route.id === raw);
-  return match ? match.id : DEFAULT_ROUTE;
+  const route = match ? match.id : DEFAULT_ROUTE;
+
+  let date: string | undefined;
+  if (queryPart) {
+    const params = new URLSearchParams(queryPart);
+    const d = params.get("date");
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      date = d;
+    }
+  }
+
+  return { route, date };
 }
 
 export function App() {
-  const [route, setRoute] = useState<Route>(() =>
+  const [{ route, date }, setLocation] = useState<ParsedRoute>(() =>
     parseHash(window.location.hash)
   );
 
   useEffect(() => {
-    const onHashChange = () => setRoute(parseHash(window.location.hash));
+    const onHashChange = () => setLocation(parseHash(window.location.hash));
     window.addEventListener("hashchange", onHashChange);
     if (window.location.hash === "") {
       window.location.hash = `#/${DEFAULT_ROUTE}`;
@@ -39,7 +57,7 @@ export function App() {
   return (
     <div class="app">
       <main class="content">
-        {route === "calendar" && <Calendar />}
+        {route === "calendar" && <Calendar date={date} />}
         {route === "heatmap" && <Heatmap />}
         {route === "importexport" && <ImportExport />}
         {route === "add" && <Add />}
