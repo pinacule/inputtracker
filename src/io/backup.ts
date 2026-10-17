@@ -5,14 +5,20 @@
  * Naming is fixed: `inputtracker-YYYY-MM-DD.db` and `…json`, where the date is
  * the UTC day of `now` (injectable so tests never depend on the wall clock).
  * Pruning only ever touches files that match exactly that pattern, keeping the
- * newest `keep` dates; anything else in the directory is left alone.
+ * newest `keep` dates (at least one); anything else in the directory is left
+ * alone.
+ *
+ * Both artifacts are first written next to the final name with a `.tmp` suffix
+ * and only renamed into place once fully written. A failed run therefore never
+ * clobbers the same day's existing backup, and any leftover `.tmp` is removed
+ * before a retry and again if the run fails.
  *
  * `events` is append-only, so a backup only ever reads: `VACUUM INTO` copies the
  * database and `exportJson` reads every row of the archive.
  */
 
 import type { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { exportJson } from "./export-json.ts";
 
@@ -22,7 +28,7 @@ export const BACKUP_FILE_RE = /^inputtracker-(\d{4}-\d{2}-\d{2})\.(db|json)$/;
 export interface BackupOptions {
   /** Directory the snapshot and export are written to (created if missing). */
   dir: string;
-  /** Number of newest date sets to keep; older date sets are pruned. */
+  /** Number of newest date sets to keep (clamped to at least 1). */
   keep: number;
   /** Timestamp the date stamp is taken from; defaults to the current time. */
   now?: Date;
@@ -43,7 +49,11 @@ export function backupDateStamp(now: Date): string {
 /**
  * Delete every file in `dir` that matches {@link BACKUP_FILE_RE} and belongs to
  * a date older than the newest `keep` dates. Files that do not match the
- * pattern (`notes.txt`, `inputtracker-latest.db`, …) are never touched.
+ * pattern (`notes.txt`, `inputtracker-latest.db`, a `.tmp` left behind by an
+ * interrupted run, …) are never touched.
+ *
+ * `keep` is clamped to at least 1 so the set that was just written is never
+ * pruned away by a `0`, negative or nonsensical value.
  */
 export function pruneBackups(dir: string, keep: number): string[] {
   const byDate = new Map<string, string[]>();
@@ -64,7 +74,7 @@ export function pruneBackups(dir: string, keep: number): string[] {
 
   // ISO dates sort lexicographically, so a plain ascending sort is oldest first.
   const dates = [...byDate.keys()].sort();
-  const keepCount = Number.isFinite(keep) ? Math.max(0, Math.trunc(keep)) : 0;
+  const keepCount = Number.isFinite(keep) ? Math.max(1, Math.trunc(keep)) : 1;
   const removeCount = Math.max(0, dates.length - keepCount);
   const stale = dates.slice(0, removeCount);
 
@@ -80,9 +90,18 @@ export function pruneBackups(dir: string, keep: number): string[] {
   return pruned;
 }
 
+/** Remove a path if present; used to clear partially written temp files. */
+function removeIfExists(path: string): void {
+  rmSync(path, { force: true });
+}
+
 /**
  * Write a snapshot and a JSON export for today's UTC date, then prune old date
- * sets. Re-running on the same day overwrites that day's files.
+ * sets. Re-running on the same day replaces that day's files.
+ *
+ * The snapshot and export are written to `.tmp` siblings and renamed over the
+ * final names only after both are complete, so a failed rerun (for example a
+ * failing `VACUUM INTO`) leaves the previous same-day files untouched.
  */
 export function runBackup(db: Database, options: BackupOptions): BackupResult {
   const { dir, keep } = options;
@@ -92,14 +111,28 @@ export function runBackup(db: Database, options: BackupOptions): BackupResult {
 
   const dbPath = join(dir, `inputtracker-${date}.db`);
   const jsonPath = join(dir, `inputtracker-${date}.json`);
+  const dbTmpPath = `${dbPath}.tmp`;
+  const jsonTmpPath = `${jsonPath}.tmp`;
 
-  // `VACUUM INTO` refuses to overwrite an existing file. This is our own backup
-  // file, so remove it first to make same-day reruns work.
-  if (existsSync(dbPath)) {
-    rmSync(dbPath);
+  // Clear leftovers from an earlier failed run before we start.
+  removeIfExists(dbTmpPath);
+  removeIfExists(jsonTmpPath);
+
+  try {
+    // `VACUUM INTO` refuses to overwrite an existing file; the temp path was
+    // just cleared, so this always writes a fresh snapshot.
+    db.run("VACUUM INTO ?", [dbTmpPath]);
+    writeFileSync(jsonTmpPath, exportJson(db), "utf8");
+
+    // Both temp files are complete: swap them into place. Renaming over the
+    // final names keeps the existing files intact if anything above throws.
+    renameSync(dbTmpPath, dbPath);
+    renameSync(jsonTmpPath, jsonPath);
+  } catch (caught) {
+    removeIfExists(dbTmpPath);
+    removeIfExists(jsonTmpPath);
+    throw caught;
   }
-  db.run("VACUUM INTO ?", [dbPath]);
-  writeFileSync(jsonPath, exportJson(db), "utf8");
 
   const pruned = pruneBackups(dir, keep);
 
