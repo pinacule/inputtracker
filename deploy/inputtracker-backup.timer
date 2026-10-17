@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly InputTracker backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+Unit=inputtracker-backup.service
+
+[Install]
+WantedBy=timers.target

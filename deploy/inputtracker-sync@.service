@@ -1,0 +1,12 @@
+[Unit]
+Description=InputTracker sync (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@APP_DIR@
+# Config path: the app reads INPUTTRACKER_CONFIG from the environment when set,
+# otherwise its own default. Nothing is hard-coded here.
+PassEnvironment=INPUTTRACKER_CONFIG
+ExecStart=/usr/bin/env bun run src/cli/index.ts sync %i
