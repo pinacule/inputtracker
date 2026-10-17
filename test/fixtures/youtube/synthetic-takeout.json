@@ -1,0 +1,110 @@
+[
+  {
+    "header": "YouTube",
+    "title": "Watched Some Synthetic Video",
+    "titleUrl": "https://www.youtube.com/watch?v=AbCdEfGhIjK",
+    "subtitles": [
+      {
+        "name": "Synthetic Channel",
+        "url": "https://www.youtube.com/channel/UCsyntheticchannel000001"
+      }
+    ],
+    "time": "2026-10-17T08:15:00.123Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched No Milliseconds Clip",
+    "titleUrl": "https://www.youtube.com/watch?v=BbCcDdEeFfG",
+    "subtitles": [
+      {
+        "name": "Synthetic Channel",
+        "url": "https://www.youtube.com/channel/UCsyntheticchannel000001"
+      }
+    ],
+    "time": "2026-10-17T08:14:00Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Some Ad",
+    "titleUrl": "https://www.youtube.com/watch?v=ZzZzZzZzZzZ",
+    "time": "2026-10-16T21:00:00.000Z",
+    "products": ["YouTube"],
+    "details": [{ "name": "From Google Ads" }]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched a video that has been removed",
+    "time": "2026-10-16T20:30:00.000Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube Music",
+    "title": "Watched Some Song",
+    "titleUrl": "https://music.youtube.com/watch?v=MmMmMmMmMmM",
+    "subtitles": [
+      {
+        "name": "Some Artist - Topic",
+        "url": "https://www.youtube.com/channel/UCsyntheticchannel000002"
+      }
+    ],
+    "time": "2026-10-16T20:00:00.000Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Short Link Video",
+    "titleUrl": "https://youtu.be/NnNnNnNnNnN",
+    "subtitles": [
+      {
+        "name": "Synthetic Channel Two",
+        "url": "https://www.youtube.com/channel/UCsyntheticchannel000003"
+      }
+    ],
+    "time": "2026-10-16T19:00:00.000Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Mobile Video",
+    "titleUrl": "https://m.youtube.com/watch?v=OoOoOoOoOoO",
+    "time": "2026-10-16T18:00:00.000Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Visto Algo",
+    "titleUrl": "https://www.youtube.com/watch?v=PpPpPpPpPpP",
+    "time": "2026-10-16T17:00:00.000Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Search Result",
+    "titleUrl": "https://www.youtube.com/watch?v=QqQqQqQqQqQ",
+    "time": "2026-10-16T16:00:00.000Z",
+    "products": ["Search"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Timeless Video",
+    "titleUrl": "https://www.youtube.com/watch?v=RrRrRrRrRrR",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Twice Video",
+    "titleUrl": "https://www.youtube.com/watch?v=SsSsSsSsSsS",
+    "time": "2026-10-18T09:00:00.000Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Twice Video",
+    "titleUrl": "https://www.youtube.com/watch?v=SsSsSsSsSsS",
+    "time": "2026-10-18T10:00:00.000Z",
+    "products": ["YouTube"]
+  }
+]

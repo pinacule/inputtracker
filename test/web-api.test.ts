@@ -205,4 +205,15 @@ describe("api.ts write helpers", () => {
       "Could not infer format (expected json or csv)"
     );
   });
+
+  test("importFile turns a 413 into a CLI hint for large Takeout files", async () => {
+    mockFetch(() => new Response(null, { status: 413 }));
+
+    const file = new File(["[{}]"], "watch-history.json", {
+      type: "application/json",
+    });
+    await expect(importFile(file)).rejects.toThrow(
+      /File too large for upload\. On the server run: bun run it import youtube-takeout <file>/
+    );
+  });
 });

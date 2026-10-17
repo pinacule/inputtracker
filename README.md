@@ -121,6 +121,7 @@ Run commands with `bun run it <command>`.
 | `add` | `--type <t> --title <title> --start <local> [--end <local>] [--duration-min <n>] [--parent <title>] [--season <n>] [--episode <n>] [--progress <0..1>] [--device <name>]` | `bun run it add --type audiobook --title "The Synthetic Tale" --start "2026-10-17 21:30" --duration-min 45` |
 | `export` | `--format json\|csv --out <file>` | `bun run it export --format json --out archive.json` |
 | `import` | `<file> [--format json\|csv]` | `bun run it import archive.json` |
+| `import youtube-takeout` | `<file>` | `bun run it import youtube-takeout watch-history.json` |
 | `backup` | none | `bun run it backup` |
 
 Details:

@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Config } from "../src/core/config.ts";
 import { openDb } from "../src/core/db.ts";
 import { finishRun, insertEvents, startRun, type NewEvent } from "../src/core/events.ts";
 import { createApp } from "../src/server/app.ts";
+import { MAX_UPLOAD_BYTES } from "../src/server/main.ts";
 import type {
   CalendarResult,
   HeatmapDaysResult,
@@ -704,6 +705,96 @@ describe("HTTP API", () => {
       const resMissing = await appMissingDist.request("/anything");
       expect(resMissing.status).toBe(404);
       expect(await resMissing.text()).toBe("Not found");
+    });
+  });
+
+  describe("POST /api/import (YouTube Takeout)", () => {
+    const fixture = readFileSync(
+      join(import.meta.dir, "fixtures", "youtube", "synthetic-takeout.json"),
+      "utf8"
+    );
+
+    interface TakeoutImportBody {
+      kind?: string;
+      records?: number;
+      seen: number;
+      inserted: number;
+      skipped?: Record<string, number>;
+      runId?: number;
+    }
+
+    test("a Takeout JSON array returns kind youtube-takeout with counts", async () => {
+      const app = createApp({ db, config });
+      const form = new FormData();
+      form.append(
+        "file",
+        new Blob([fixture], { type: "application/json" }),
+        "watch-history.json"
+      );
+
+      const res = await app.request("/api/import", { method: "POST", body: form });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as TakeoutImportBody;
+
+      expect(body.kind).toBe("youtube-takeout");
+      expect(body.records).toBe(12);
+      expect(body.seen).toBe(8);
+      expect(body.inserted).toBe(8);
+      expect(body.skipped).toEqual({
+        ads: 1,
+        no_video: 1,
+        other: 1,
+        invalid: 1,
+      });
+      expect(typeof body.runId).toBe("number");
+    });
+
+    test("a malformed Takeout array returns 400", async () => {
+      const app = createApp({ db, config });
+      const form = new FormData();
+      form.append(
+        "file",
+        new Blob(["[ not valid json"], { type: "application/json" }),
+        "watch-history.json"
+      );
+
+      const res = await app.request("/api/import", { method: "POST", body: form });
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("JSON array");
+    });
+
+    test("a native export still returns kind native", async () => {
+      const app = createApp({ db, config });
+      seedRun(db, [
+        {
+          source: "manual",
+          source_kind: "history_item",
+          source_id: "native-kind-1",
+          media_type: "book",
+          title: "Native Book",
+          started_at: "2026-10-17T08:00:00.000Z",
+          duration_seconds: 600,
+        },
+      ]);
+      const exportRes = await app.request("/api/export.json");
+      const content = await exportRes.text();
+
+      const targetDb = openDb(":memory:");
+      const targetApp = createApp({ db: targetDb, config });
+      const form = new FormData();
+      form.append("file", new Blob([content], { type: "application/json" }), "export.json");
+
+      const res = await targetApp.request("/api/import", { method: "POST", body: form });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as TakeoutImportBody;
+      expect(body.kind).toBe("native");
+      expect(body.inserted).toBe(1);
+      targetDb.close();
+    });
+
+    test("MAX_UPLOAD_BYTES is at least 300 MB", () => {
+      expect(MAX_UPLOAD_BYTES).toBeGreaterThanOrEqual(300 * 1024 * 1024);
     });
   });
 });

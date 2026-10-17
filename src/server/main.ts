@@ -11,6 +11,13 @@ export interface MainDeps {
   openDb?: (path: string) => ReturnType<typeof openDb>;
 }
 
+/**
+ * Maximum accepted request body size. Bun's default is 128 MB, too small for
+ * large YouTube Takeout exports; the CLI route (`it import youtube-takeout`)
+ * has no limit and is the fallback for bigger files.
+ */
+export const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+
 export function main(deps: MainDeps = {}) {
   const doLoadConfig = deps.loadConfig ?? loadConfig;
   const doOpenDb = deps.openDb ?? openDb;
@@ -23,6 +30,7 @@ export function main(deps: MainDeps = {}) {
     hostname: config.server.bind,
     port: config.server.port,
     fetch: app.fetch,
+    maxRequestBodySize: MAX_UPLOAD_BYTES,
   });
 
   console.log(

@@ -17,6 +17,10 @@ import { detectFormat, importNative } from "../io/import-native.ts";
 import { addManual, type ManualInput } from "../io/manual.ts";
 import { createAbsClient } from "../sources/audiobookshelf/client.ts";
 import {
+  importYoutubeTakeout,
+  looksLikeTakeout,
+} from "../sources/youtube/takeout.ts";
+import {
   syncAudiobookshelf,
   SyncFailedError,
   type AbsSyncResult,
@@ -332,6 +336,19 @@ export function createApp(deps: AppDeps): Hono {
     }
 
     const format = detectFormat(filename) ?? detectFormat(text);
+
+    if (looksLikeTakeout(text)) {
+      try {
+        const result = importYoutubeTakeout(db, text);
+        return c.json({ kind: "youtube-takeout", ...result });
+      } catch (caught) {
+        return c.json(
+          { error: caught instanceof Error ? caught.message : String(caught) },
+          400
+        );
+      }
+    }
+
     if (format === null) {
       return c.json(
         { error: "Could not infer format (expected json or csv)" },
@@ -341,7 +358,7 @@ export function createApp(deps: AppDeps): Hono {
 
     try {
       const result = importNative(db, text, format);
-      return c.json(result);
+      return c.json({ kind: "native", ...result });
     } catch (caught) {
       return c.json(
         { error: caught instanceof Error ? caught.message : String(caught) },
