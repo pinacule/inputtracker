@@ -25,6 +25,7 @@ Run in progress.
 | T15 Heat map view | antigravity | gemini-3.8-flash-high | 1 | 7d974d8 |
 | T16 Import/Export/Add page | opencode | deepseek-v4.1-flash-free | 1 | 79c19be |
 | T17 PWA | opencode | deepseek-v4.1-flash-free | 1 | 001ac0c |
+| F01 Stats dashboard | antigravity | gemini-3.8-flash-high | 1 | e88e92f |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
