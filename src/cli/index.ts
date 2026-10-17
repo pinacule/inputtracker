@@ -18,10 +18,12 @@ import {
   type LoadConfigOptions,
 } from "../core/config.ts";
 import { openDb } from "../core/db.ts";
+import type { MediaType } from "../core/events.ts";
 import { LocalDbSink, type Sink } from "../core/sink.ts";
 import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
+import { addManual, localToUtcIso, type ManualInput } from "../io/manual.ts";
 import { createAbsClient, type AbsClient } from "../sources/audiobookshelf/client.ts";
 import {
   ABS_SOURCE,
@@ -42,10 +44,11 @@ export function usage(): string {
     "",
     "Commands:",
     "  sync audiobookshelf                      fetch new Audiobookshelf activity into the DB",
+    "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
     "  import <file> [--format json|csv]        import a native export file into the DB",
     "",
-    "More commands (add, serve) will be added in later tasks.",
+    "More commands (serve) will be added in later tasks.",
   ].join("\n");
 }
 
@@ -60,6 +63,7 @@ export interface CliDeps {
   out?: (line: string) => void;
   err?: (line: string) => void;
   env?: Record<string, string | undefined>;
+  newId?: () => string;
 }
 
 function errorText(err: unknown): string {
@@ -355,6 +359,173 @@ function runImport(args: string[], ctx: SyncContext): number {
   }
 }
 
+interface AddArgs {
+  type: string;
+  title: string;
+  start: string;
+  end?: string;
+  durationMin?: number;
+  parent?: string;
+  season?: number;
+  episode?: number;
+  progress?: number;
+  device?: string;
+}
+
+type AddParseResult =
+  | { ok: true; value: AddArgs }
+  | { ok: false; message: string };
+
+const ADD_STRING_FLAGS = new Set([
+  "--type",
+  "--title",
+  "--start",
+  "--end",
+  "--parent",
+  "--device",
+]);
+const ADD_NUMBER_FLAGS = new Set([
+  "--duration-min",
+  "--season",
+  "--episode",
+  "--progress",
+]);
+
+function parseAddArgs(args: string[]): AddParseResult {
+  const strings: Record<string, string> = {};
+  const numbers: Record<string, number> = {};
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+
+    let flag = arg;
+    let value: string | undefined;
+    const eq = arg.indexOf("=");
+    if (arg.startsWith("--") && eq !== -1) {
+      flag = arg.slice(0, eq);
+      value = arg.slice(eq + 1);
+    } else if (ADD_STRING_FLAGS.has(arg) || ADD_NUMBER_FLAGS.has(arg)) {
+      value = args[i + 1];
+      i += 1;
+    }
+
+    if (!ADD_STRING_FLAGS.has(flag) && !ADD_NUMBER_FLAGS.has(flag)) {
+      return { ok: false, message: `Unknown option: ${arg}` };
+    }
+    if (value === undefined || value === "") {
+      return { ok: false, message: `Missing value for ${flag}.` };
+    }
+
+    if (ADD_STRING_FLAGS.has(flag)) {
+      strings[flag] = value;
+    } else {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) {
+        return { ok: false, message: `Invalid value for ${flag}: ${value}` };
+      }
+      numbers[flag] = parsed;
+    }
+  }
+
+  if (strings["--type"] === undefined) {
+    return { ok: false, message: "Missing --type." };
+  }
+  if (strings["--title"] === undefined) {
+    return { ok: false, message: "Missing --title." };
+  }
+  if (strings["--start"] === undefined) {
+    return { ok: false, message: "Missing --start." };
+  }
+
+  return {
+    ok: true,
+    value: {
+      type: strings["--type"] as string,
+      title: strings["--title"] as string,
+      start: strings["--start"] as string,
+      end: strings["--end"],
+      durationMin: numbers["--duration-min"],
+      parent: strings["--parent"],
+      season: numbers["--season"],
+      episode: numbers["--episode"],
+      progress: numbers["--progress"],
+      device: strings["--device"],
+    },
+  };
+}
+
+function runAdd(args: string[], ctx: SyncContext): number {
+  const { deps, out, err } = ctx;
+
+  const parsed = parseAddArgs(args);
+  if (!parsed.ok) {
+    err(parsed.message);
+    err(usage());
+    return EXIT_USAGE;
+  }
+  const addArgs = parsed.value;
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const tz = config.timezone;
+
+    // `--duration-min` wins; otherwise derive the duration from `--end`.
+    let durationSeconds: number | null = null;
+    if (addArgs.durationMin !== undefined) {
+      durationSeconds = addArgs.durationMin * 60;
+    } else if (addArgs.end !== undefined) {
+      const startUtc = localToUtcIso(addArgs.start, tz);
+      const endUtc = localToUtcIso(addArgs.end, tz);
+      durationSeconds = (Date.parse(endUtc) - Date.parse(startUtc)) / 1000;
+    }
+
+    const title = addArgs.title.trim();
+    const input: ManualInput = {
+      media_type: addArgs.type as MediaType,
+      title,
+      parent_title: addArgs.parent ?? null,
+      season: addArgs.season ?? null,
+      episode: addArgs.episode ?? null,
+      started_at: addArgs.start,
+      ended_at: addArgs.end ?? null,
+      duration_seconds: durationSeconds,
+      progress: addArgs.progress ?? null,
+      device: addArgs.device ?? null,
+    };
+
+    const result = addManual(db, input, tz, { newId: deps.newId });
+    out(`added ${title} (${result.id})`);
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_USAGE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
 /**
  * Run the CLI for the given argument list (without the program name).
  * Returns the process exit code; never calls `process.exit`.
@@ -379,6 +550,10 @@ export async function runCli(
 
   if (command === "sync") {
     return await runSync(rest[0], { deps, out, err });
+  }
+
+  if (command === "add") {
+    return runAdd(rest, { deps, out, err });
   }
 
   if (command === "export") {
