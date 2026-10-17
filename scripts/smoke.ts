@@ -17,17 +17,23 @@
  */
 
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Server, Subprocess } from "bun";
+import { APP_VERSION } from "../src/core/version.ts";
 
 const FAKE_TOKEN = "smoke-token";
+const FAKE_SIMKL_DEVICE_CODE = "smoke-simkl-device-code";
+const FAKE_SIMKL_ACCESS_TOKEN = "simkl_at_smokefake1234567890abcdef";
+const FAKE_SIMKL_REFRESH_TOKEN = "simkl_rt_smokefake1234567890abcdef";
 
 interface CheckFailure {
   name: string;
@@ -40,6 +46,9 @@ let passedCount = 0;
 
 function redact(text: string, tmpDir?: string): string {
   let out = text.replaceAll(FAKE_TOKEN, "***");
+  out = out.replaceAll(FAKE_SIMKL_DEVICE_CODE, "***");
+  out = out.replaceAll(FAKE_SIMKL_ACCESS_TOKEN, "***");
+  out = out.replaceAll(FAKE_SIMKL_REFRESH_TOKEN, "***");
   if (tmpDir) {
     out = out.replaceAll(tmpDir, "<temp-dir>");
   }
@@ -71,6 +80,8 @@ async function main(): Promise<void> {
   const backupDir = join(tmpDir, "backups");
 
   let fakeAbsServer: Server<unknown> | null = null;
+  let fakeSimklServer: Server<unknown> | null = null;
+  let fakeImageServer: Server<unknown> | null = null;
   let serverProc: Subprocess | null = null;
   const serverStderrLines: string[] = [];
 
@@ -174,6 +185,203 @@ async function main(): Promise<void> {
       },
     });
 
+    // 3b. Start fake Simkl server
+    const simklDeviceCodeFixture = JSON.parse(
+      readFileSync("test/fixtures/simkl/device-code.json", "utf8")
+    );
+    const simklDeviceResponse = JSON.stringify({
+      ...simklDeviceCodeFixture,
+      device_code: FAKE_SIMKL_DEVICE_CODE,
+      interval: 1,
+    });
+    const simklActivitiesJson = readFileSync(
+      "test/fixtures/simkl/activities.json",
+      "utf8"
+    );
+    const simklAllItemsJson = readFileSync(
+      "test/fixtures/simkl/all-items.json",
+      "utf8"
+    );
+    const simklAllItems = JSON.parse(simklAllItemsJson) as {
+      shows?: unknown[];
+      movies?: unknown[];
+      anime?: unknown[];
+    };
+
+    interface RecordedSimklRequest {
+      method: string;
+      url: string;
+      path: string;
+      query: Record<string, string>;
+      headers: Record<string, string>;
+      status: number;
+    }
+    const fakeSimklRequests: RecordedSimklRequest[] = [];
+    let simklTokenPollCount = 0;
+
+    fakeSimklServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url);
+        const path = url.pathname;
+        const query: Record<string, string> = {};
+        for (const [k, v] of url.searchParams.entries()) {
+          query[k] = v;
+        }
+        const headers: Record<string, string> = {};
+        for (const [k, v] of req.headers.entries()) {
+          headers[k.toLowerCase()] = v;
+        }
+
+        let status = 200;
+        let response: Response;
+
+        if (req.method === "POST" && path === "/oauth2/device") {
+          status = 200;
+          response = new Response(simklDeviceResponse, {
+            status,
+            headers: { "Content-Type": "application/json" },
+          });
+        } else if (req.method === "POST" && path === "/oauth2/token") {
+          simklTokenPollCount++;
+          if (simklTokenPollCount === 1) {
+            status = 400;
+            response = new Response(
+              JSON.stringify({ error: "authorization_pending" }),
+              {
+                status,
+                headers: { "Content-Type": "application/json" },
+              }
+            );
+          } else {
+            status = 200;
+            response = new Response(
+              JSON.stringify({
+                access_token: FAKE_SIMKL_ACCESS_TOKEN,
+                token_type: "Bearer",
+                expires_in: 604800,
+                refresh_token: FAKE_SIMKL_REFRESH_TOKEN,
+                scope: "media:read",
+              }),
+              {
+                status,
+                headers: { "Content-Type": "application/json" },
+              }
+            );
+          }
+        } else if (req.method === "GET" && path === "/sync/activities") {
+          status = 200;
+          response = new Response(simklActivitiesJson, {
+            status,
+            headers: { "Content-Type": "application/json" },
+          });
+        } else if (req.method === "GET" && path === "/sync/all-items/shows") {
+          status = 200;
+          response = new Response(
+            JSON.stringify({ shows: simklAllItems.shows ?? [] }),
+            {
+              status,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        } else if (req.method === "GET" && path === "/sync/all-items/movies") {
+          status = 200;
+          response = new Response(
+            JSON.stringify({ movies: simklAllItems.movies ?? [] }),
+            {
+              status,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        } else if (req.method === "GET" && path === "/sync/all-items/anime") {
+          status = 200;
+          response = new Response(
+            JSON.stringify({ anime: simklAllItems.anime ?? [] }),
+            {
+              status,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        } else if (req.method === "GET" && path === "/sync/all-items") {
+          status = 200;
+          response = new Response(
+            JSON.stringify({ shows: [], movies: [], anime: [] }),
+            {
+              status,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        } else {
+          status = 404;
+          response = new Response("Not Found", { status: 404 });
+        }
+
+        fakeSimklRequests.push({
+          method: req.method,
+          url: req.url,
+          path,
+          query,
+          headers,
+          status,
+        });
+
+        return response;
+      },
+    });
+
+    // 3c. Start fake Image server for posters and thumbnails
+    interface RecordedImageRequest {
+      method: string;
+      url: string;
+      path: string;
+      headers: Record<string, string>;
+    }
+    const fakeImageRequests: RecordedImageRequest[] = [];
+    const fakeImageRequestsPerPath = new Map<string, number>();
+
+    fakeImageServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url);
+        const path = url.pathname;
+        const headers: Record<string, string> = {};
+        for (const [k, v] of req.headers.entries()) {
+          headers[k.toLowerCase()] = v;
+        }
+
+        fakeImageRequests.push({
+          method: req.method,
+          url: req.url,
+          path,
+          headers,
+        });
+        fakeImageRequestsPerPath.set(
+          path,
+          (fakeImageRequestsPerPath.get(path) ?? 0) + 1
+        );
+
+        if (req.method !== "GET") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+
+        if (path.startsWith("/posters/") && path.endsWith("_m.webp")) {
+          return new Response(tinyPng, {
+            headers: { "Content-Type": "image/webp" },
+          });
+        }
+
+        if (path.startsWith("/vi/") && path.endsWith("/mqdefault.jpg")) {
+          return new Response(tinyPng, {
+            headers: { "Content-Type": "image/jpeg" },
+          });
+        }
+
+        return new Response("Not Found", { status: 404 });
+      },
+    });
+
     // 4. Reserve a free port for the InputTracker server
     const portProbe = Bun.serve({
       hostname: "127.0.0.1",
@@ -202,6 +410,15 @@ async function main(): Promise<void> {
       `url = "http://127.0.0.1:${fakeAbsServer.port}"`,
       `token = "${FAKE_TOKEN}"`,
       "timeout_s = 20",
+      "",
+      "[simkl]",
+      'client_id = "smoke-fake-client-id"',
+      `base_url = "http://127.0.0.1:${fakeSimklServer.port}"`,
+      `poster_base_url = "http://127.0.0.1:${fakeImageServer.port}/posters"`,
+      "timeout_s = 20",
+      "",
+      "[youtube]",
+      `thumb_base_url = "http://127.0.0.1:${fakeImageServer.port}/vi"`,
       "",
       "[notify]",
       "desktop = false",
@@ -731,13 +948,14 @@ async function main(): Promise<void> {
         res1.status === 200 &&
         res1.headers.get("content-type")?.startsWith("image/") &&
         bytes1.length > 0 &&
-        fakeAbsCoverFetches === fetchesBefore + 1
+        fetchesBefore >= 1 &&
+        fakeAbsCoverFetches === fetchesBefore
       ) {
         recordPass("GET /api/cover/item-fake-book-1 (first fetch)");
       } else {
         recordFail(
           "GET /api/cover/item-fake-book-1 (first fetch)",
-          `status=${res1.status}, bytes=${bytes1.length}, fetches=${fakeAbsCoverFetches}`,
+          `status=${res1.status}, bytes=${bytes1.length}, fetchesBefore=${fetchesBefore}, fetches=${fakeAbsCoverFetches}`,
           res1.status,
           tmpDir
         );
@@ -1043,6 +1261,705 @@ async function main(): Promise<void> {
         );
       }
     }
+
+    // 9. Simkl checks
+
+    // 1. CLI sync simkl (not authorised)
+    {
+      const cliProc = Bun.spawn(
+        ["bun", "run", "src/cli/index.ts", "sync", "simkl"],
+        {
+          env: {
+            ...process.env,
+            INPUTTRACKER_CONFIG: tempConfigPath,
+            XDG_DATA_HOME: tmpDir,
+            XDG_CONFIG_HOME: tmpDir,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        }
+      );
+      const cliExit = await cliProc.exited;
+      const stdout = await new Response(cliProc.stdout).text();
+      const stderr = await new Response(cliProc.stderr).text();
+
+      const statusRes = await fetch(`${baseUrl}/api/sync/status`);
+      const statusBody = (await statusRes.json()) as {
+        runs?: { source: string }[];
+      } | null;
+      const hasSimklRun = statusBody?.runs?.some((r) => r.source === "simkl");
+
+      if (
+        cliExit === 0 &&
+        stdout.toLowerCase().includes("not authorised") &&
+        !hasSimklRun &&
+        fakeSimklRequests.length === 0
+      ) {
+        recordPass("CLI sync simkl (not authorised)");
+      } else {
+        recordFail(
+          "CLI sync simkl (not authorised)",
+          `exit=${cliExit}, stdout=${stdout}, stderr=${stderr}, hasSimklRun=${hasSimklRun}, fakeReqs=${fakeSimklRequests.length}`,
+          undefined,
+          tmpDir
+        );
+      }
+    }
+
+    // 2. CLI auth simkl
+    {
+      const authStart = Date.now();
+      const authProc = Bun.spawn(
+        ["bun", "run", "src/cli/index.ts", "auth", "simkl"],
+        {
+          env: {
+            ...process.env,
+            INPUTTRACKER_CONFIG: tempConfigPath,
+            XDG_DATA_HOME: tmpDir,
+            XDG_CONFIG_HOME: tmpDir,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        }
+      );
+      const authExit = await authProc.exited;
+      const durationMs = Date.now() - authStart;
+      const stdout = await new Response(authProc.stdout).text();
+      const stderr = await new Response(authProc.stderr).text();
+
+      const tokenFilePath = join(tmpDir, "secrets", "simkl-token.json");
+      const tokenDir = dirname(tokenFilePath);
+      const tokenFileExists = existsSync(tokenFilePath);
+      const fileMode = tokenFileExists ? statSync(tokenFilePath).mode & 0o777 : 0;
+      const dirMode = existsSync(tokenDir) ? statSync(tokenDir).mode & 0o777 : 0;
+
+      const devicePosts = fakeSimklRequests.filter(
+        (r) => r.method === "POST" && r.path === "/oauth2/device"
+      ).length;
+      const tokenPosts = fakeSimklRequests.filter(
+        (r) => r.method === "POST" && r.path === "/oauth2/token"
+      ).length;
+
+      const hasCompleteUri = stdout.includes(
+        "https://simkl.com/pin?user_code=BDWP-HQPK"
+      );
+      const hasUserCode = stdout.includes("BDWP-HQPK");
+      const leaksSecrets =
+        stdout.includes(FAKE_SIMKL_DEVICE_CODE) ||
+        stdout.includes(FAKE_SIMKL_ACCESS_TOKEN) ||
+        stdout.includes(FAKE_SIMKL_REFRESH_TOKEN);
+
+      if (
+        authExit === 0 &&
+        durationMs < 15000 &&
+        hasCompleteUri &&
+        hasUserCode &&
+        !leaksSecrets &&
+        devicePosts === 1 &&
+        tokenPosts === 2 &&
+        tokenFileExists &&
+        fileMode === 0o600 &&
+        dirMode === 0o700
+      ) {
+        recordPass("CLI auth simkl");
+      } else {
+        recordFail(
+          "CLI auth simkl",
+          `exit=${authExit}, dur=${durationMs}ms, uri=${hasCompleteUri}, code=${hasUserCode}, leak=${leaksSecrets}, devPosts=${devicePosts}, tokPosts=${tokenPosts}, fileExists=${tokenFileExists}, fileMode=${fileMode.toString(8)}, dirMode=${dirMode.toString(8)}, stderr=${stderr}`,
+          undefined,
+          tmpDir
+        );
+      }
+    }
+
+    // 3. CLI auth simkl --status
+    {
+      const statusProc = Bun.spawn(
+        ["bun", "run", "src/cli/index.ts", "auth", "simkl", "--status"],
+        {
+          env: {
+            ...process.env,
+            INPUTTRACKER_CONFIG: tempConfigPath,
+            XDG_DATA_HOME: tmpDir,
+            XDG_CONFIG_HOME: tmpDir,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        }
+      );
+      const statusExit = await statusProc.exited;
+      const stdout = await new Response(statusProc.stdout).text();
+      const stderr = await new Response(statusProc.stderr).text();
+
+      const saysConnected = stdout.toLowerCase().includes("connected");
+      const leaksSecrets =
+        stdout.includes(FAKE_SIMKL_ACCESS_TOKEN) ||
+        stdout.includes(FAKE_SIMKL_REFRESH_TOKEN) ||
+        stdout.includes(FAKE_SIMKL_DEVICE_CODE);
+
+      if (statusExit === 0 && saysConnected && !leaksSecrets) {
+        recordPass("CLI auth simkl --status");
+      } else {
+        recordFail(
+          "CLI auth simkl --status",
+          `exit=${statusExit}, connected=${saysConnected}, leak=${leaksSecrets}, stdout=${stdout}, stderr=${stderr}`,
+          undefined,
+          tmpDir
+        );
+      }
+    }
+
+    // 4. POST /api/sync/simkl (first sync)
+    {
+      const reqsBefore = fakeSimklRequests.length;
+      const res = await fetch(`${baseUrl}/api/sync/simkl`, { method: "POST" });
+      const body = (await res.json()) as {
+        runId?: number;
+        seen?: number;
+        inserted?: number;
+        mode?: string;
+      } | null;
+
+      const syncReqs = fakeSimklRequests.slice(reqsBefore);
+      const actIdx = syncReqs.findIndex(
+        (r) => r.method === "GET" && r.path === "/sync/activities"
+      );
+      const showsReq = syncReqs.find(
+        (r) => r.method === "GET" && r.path === "/sync/all-items/shows"
+      );
+      const moviesReq = syncReqs.find(
+        (r) => r.method === "GET" && r.path === "/sync/all-items/movies"
+      );
+      const animeReq = syncReqs.find(
+        (r) => r.method === "GET" && r.path === "/sync/all-items/anime"
+      );
+
+      const showsIdx = syncReqs.indexOf(showsReq!);
+      const moviesIdx = syncReqs.indexOf(moviesReq!);
+      const animeIdx = syncReqs.indexOf(animeReq!);
+
+      const orderValid =
+        actIdx !== -1 &&
+        showsIdx > actIdx &&
+        moviesIdx > actIdx &&
+        animeIdx > actIdx;
+
+      const paramsValid = (req?: RecordedSimklRequest) =>
+        req?.query["extended"] === "full" &&
+        req?.query["episode_watched_at"] === "yes" &&
+        req?.query["include_all_episodes"] === "original";
+
+      const queryValid =
+        paramsValid(showsReq) &&
+        paramsValid(moviesReq) &&
+        paramsValid(animeReq);
+
+      if (
+        res.status === 200 &&
+        typeof body?.inserted === "number" &&
+        body.inserted > 0 &&
+        orderValid &&
+        queryValid
+      ) {
+        recordPass("POST /api/sync/simkl (first sync)");
+      } else {
+        recordFail(
+          "POST /api/sync/simkl (first sync)",
+          `status=${res.status}, inserted=${body?.inserted}, order=${orderValid}, query=${queryValid}, body=${JSON.stringify(body)}`,
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 5. POST /api/sync/simkl (unchanged, second run)
+    {
+      const reqsBefore = fakeSimklRequests.length;
+      const res = await fetch(`${baseUrl}/api/sync/simkl`, { method: "POST" });
+      const body = (await res.json()) as {
+        runId?: number;
+        seen?: number;
+        inserted?: number;
+        mode?: string;
+      } | null;
+
+      const secondReqs = fakeSimklRequests.slice(reqsBefore);
+      const hasAllItemsCall = secondReqs.some((r) =>
+        r.path.startsWith("/sync/all-items")
+      );
+
+      if (
+        res.status === 200 &&
+        body?.inserted === 0 &&
+        body?.mode === "unchanged" &&
+        !hasAllItemsCall
+      ) {
+        recordPass("POST /api/sync/simkl (unchanged, second run)");
+      } else {
+        recordFail(
+          "POST /api/sync/simkl (unchanged, second run)",
+          `status=${res.status}, inserted=${body?.inserted}, mode=${body?.mode}, hasAllItems=${hasAllItemsCall}`,
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 6. GET /api/calendar?month=2026-04&source=simkl
+    {
+      const res = await fetch(
+        `${baseUrl}/api/calendar?month=2026-04&source=simkl`
+      );
+      const body = (await res.json()) as {
+        month?: string;
+        days?: {
+          date: string;
+          items: {
+            title: string | null;
+            source: string;
+            season: number | null;
+            episode: number | null;
+            cover_url: string | null;
+          }[];
+        }[];
+      } | null;
+
+      const allItems = body?.days?.flatMap((d) => d.items) ?? [];
+      const hasSimklEpisode = allItems.some(
+        (it) =>
+          it.source === "simkl" &&
+          it.title === "Synthetic Show 1" &&
+          it.season === 1 &&
+          it.episode === 1 &&
+          typeof it.cover_url === "string" &&
+          it.cover_url.startsWith("/api/poster/simkl/")
+      );
+
+      if (res.status === 200 && allItems.length > 0 && hasSimklEpisode) {
+        recordPass("GET /api/calendar?month=2026-04&source=simkl");
+      } else {
+        recordFail(
+          "GET /api/calendar?month=2026-04&source=simkl",
+          `status=${res.status}, itemsCount=${allItems.length}, hasEpisode=${hasSimklEpisode}, body=${JSON.stringify(body).slice(0, 200)}`,
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 7. GET /api/poster/simkl/<path> (first fetch and cache hit)
+    {
+      const posterPath = "12/12345678abcdef01";
+      const expectedRemotePath = `/posters/${posterPath}_m.webp`;
+      const fetchesBefore =
+        fakeImageRequestsPerPath.get(expectedRemotePath) ?? 0;
+
+      const res1 = await fetch(`${baseUrl}/api/poster/simkl/${posterPath}`);
+      const bytes1 = new Uint8Array(await res1.arrayBuffer());
+      const fetchesAfter1 =
+        fakeImageRequestsPerPath.get(expectedRemotePath) ?? 0;
+
+      if (
+        res1.status === 200 &&
+        res1.headers.get("content-type")?.startsWith("image/") &&
+        bytes1.length > 0 &&
+        fetchesAfter1 === fetchesBefore + 1
+      ) {
+        recordPass(`GET /api/poster/simkl/${posterPath} (first fetch)`);
+      } else {
+        recordFail(
+          `GET /api/poster/simkl/${posterPath} (first fetch)`,
+          `status=${res1.status}, bytes=${bytes1.length}, fetchesBefore=${fetchesBefore}, fetchesAfter=${fetchesAfter1}`,
+          res1.status,
+          tmpDir
+        );
+      }
+
+      const res2 = await fetch(`${baseUrl}/api/poster/simkl/${posterPath}`);
+      const bytes2 = new Uint8Array(await res2.arrayBuffer());
+      const fetchesAfter2 =
+        fakeImageRequestsPerPath.get(expectedRemotePath) ?? 0;
+
+      if (
+        res2.status === 200 &&
+        bytes2.length > 0 &&
+        fetchesAfter2 === fetchesAfter1
+      ) {
+        recordPass(`GET /api/poster/simkl/${posterPath} (cache hit)`);
+      } else {
+        recordFail(
+          `GET /api/poster/simkl/${posterPath} (cache hit)`,
+          `status=${res2.status}, bytes=${bytes2.length}, fetchesBefore=${fetchesAfter1}, fetchesAfter=${fetchesAfter2}`,
+          res2.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 8. fake Simkl received only allowed requests
+    {
+      let valid = true;
+      let failureReason = "";
+
+      for (const req of fakeSimklRequests) {
+        const isSyncGet = req.method === "GET" && req.path.startsWith("/sync/");
+        const isDevicePost =
+          req.method === "POST" && req.path === "/oauth2/device";
+        const isTokenPost =
+          req.method === "POST" && req.path === "/oauth2/token";
+
+        if (!isSyncGet && !isDevicePost && !isTokenPost) {
+          valid = false;
+          failureReason = `Disallowed method/path: ${req.method} ${req.path}`;
+          break;
+        }
+
+        if (req.query["client_id"] !== "smoke-fake-client-id") {
+          valid = false;
+          failureReason = `Invalid client_id in query: ${req.query["client_id"]}`;
+          break;
+        }
+
+        if (req.query["app-name"] !== "inputtracker") {
+          valid = false;
+          failureReason = `Invalid app-name in query: ${req.query["app-name"]}`;
+          break;
+        }
+
+        if (req.query["app-version"] !== APP_VERSION) {
+          valid = false;
+          failureReason = `Invalid app-version in query: ${req.query["app-version"]}`;
+          break;
+        }
+
+        if (req.headers["user-agent"] !== `inputtracker/${APP_VERSION}`) {
+          valid = false;
+          failureReason = `Invalid User-Agent header: ${req.headers["user-agent"]}`;
+          break;
+        }
+
+        if (req.path.startsWith("/sync/")) {
+          if (
+            req.headers["authorization"] !== `Bearer ${FAKE_SIMKL_ACCESS_TOKEN}`
+          ) {
+            valid = false;
+            failureReason = `Invalid or missing Authorization header on ${req.path}`;
+            break;
+          }
+        }
+
+        if (req.status === 404) {
+          valid = false;
+          failureReason = `404 status recorded for ${req.path}`;
+          break;
+        }
+      }
+
+      for (const req of fakeImageRequests) {
+        if (req.method !== "GET") {
+          valid = false;
+          failureReason = `Image request method was not GET: ${req.method}`;
+          break;
+        }
+        if (req.headers["authorization"] !== undefined) {
+          valid = false;
+          failureReason = `Image request contained Authorization header`;
+          break;
+        }
+        if (req.headers["cookie"] !== undefined) {
+          valid = false;
+          failureReason = `Image request contained Cookie header`;
+          break;
+        }
+      }
+
+      if (
+        valid &&
+        fakeSimklRequests.length > 0 &&
+        fakeImageRequests.length > 0
+      ) {
+        recordPass("fake Simkl received only allowed requests");
+      } else {
+        recordFail(
+          "fake Simkl received only allowed requests",
+          failureReason ||
+            `fakeSimklReqs=${fakeSimklRequests.length}, fakeImageReqs=${fakeImageRequests.length}`,
+          undefined,
+          tmpDir
+        );
+      }
+    }
+
+    // 9. GET /api/sync/status (simkl)
+    {
+      const res = await fetch(`${baseUrl}/api/sync/status`);
+      const body = (await res.json()) as {
+        runs?: {
+          source: string;
+          error: string | null;
+          rows_inserted: number;
+        }[];
+      } | null;
+      const simklRun = body?.runs?.find((r) => r.source === "simkl");
+      if (
+        res.status === 200 &&
+        simklRun &&
+        simklRun.error === null &&
+        simklRun.finished_at !== null
+      ) {
+        recordPass("GET /api/sync/status (simkl)");
+      } else {
+        recordFail(
+          "GET /api/sync/status (simkl)",
+          JSON.stringify(body),
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 10. YouTube Takeout checks
+
+    // 10. CLI import youtube-takeout
+    {
+      const youtubeFixturePath = "test/fixtures/youtube/synthetic-takeout.json";
+      const importProc = Bun.spawn(
+        [
+          "bun",
+          "run",
+          "src/cli/index.ts",
+          "import",
+          "youtube-takeout",
+          youtubeFixturePath,
+        ],
+        {
+          env: {
+            ...process.env,
+            INPUTTRACKER_CONFIG: tempConfigPath,
+            XDG_DATA_HOME: tmpDir,
+            XDG_CONFIG_HOME: tmpDir,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        }
+      );
+      const importExit = await importProc.exited;
+      const stdout = await new Response(importProc.stdout).text();
+      const stderr = await new Response(importProc.stderr).text();
+
+      const hasPrefix = stdout.includes("youtube-takeout:");
+      const hasCounts =
+        stdout.includes("views") &&
+        stdout.includes("new") &&
+        stdout.includes("skipped");
+
+      const match = stdout.match(/(\d+)\s+new/);
+      const insertedCount = match ? Number(match[1]) : 0;
+
+      if (importExit === 0 && hasPrefix && hasCounts && insertedCount > 0) {
+        recordPass("CLI import youtube-takeout");
+      } else {
+        recordFail(
+          "CLI import youtube-takeout",
+          `exit=${importExit}, inserted=${insertedCount}, stdout=${stdout}, stderr=${stderr}`,
+          undefined,
+          tmpDir
+        );
+      }
+    }
+
+    // 11. POST /api/import (YouTube Takeout, re-import)
+    {
+      const youtubeTakeoutContent = readFileSync(
+        "test/fixtures/youtube/synthetic-takeout.json",
+        "utf8"
+      );
+      const form = new FormData();
+      form.append(
+        "file",
+        new Blob([youtubeTakeoutContent], { type: "application/json" }),
+        "synthetic-takeout.json"
+      );
+      const res = await fetch(`${baseUrl}/api/import`, {
+        method: "POST",
+        body: form,
+      });
+      const body = (await res.json()) as {
+        kind?: string;
+        inserted?: number;
+      } | null;
+
+      if (
+        res.status === 200 &&
+        body?.kind === "youtube-takeout" &&
+        body?.inserted === 0
+      ) {
+        recordPass("POST /api/import (YouTube Takeout, re-import)");
+      } else {
+        recordFail(
+          "POST /api/import (YouTube Takeout, re-import)",
+          JSON.stringify(body),
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 12. GET /api/calendar?month=2026-10&source=youtube
+    {
+      const res = await fetch(
+        `${baseUrl}/api/calendar?month=2026-10&source=youtube`
+      );
+      const body = (await res.json()) as {
+        month?: string;
+        days?: {
+          date: string;
+          items: {
+            title: string | null;
+            parent_title: string | null;
+            source: string;
+            cover_url: string | null;
+          }[];
+        }[];
+      } | null;
+
+      const allItems = body?.days?.flatMap((d) => d.items) ?? [];
+      const hasYoutubeItem = allItems.some(
+        (it) =>
+          it.source === "youtube" &&
+          typeof it.parent_title === "string" &&
+          it.parent_title.length > 0 &&
+          typeof it.cover_url === "string" &&
+          /^\/api\/thumb\/youtube\/[A-Za-z0-9_-]{11}$/.test(it.cover_url)
+      );
+
+      if (res.status === 200 && allItems.length > 0 && hasYoutubeItem) {
+        recordPass("GET /api/calendar?month=2026-10&source=youtube");
+      } else {
+        recordFail(
+          "GET /api/calendar?month=2026-10&source=youtube",
+          `status=${res.status}, itemsCount=${allItems.length}, hasYoutubeItem=${hasYoutubeItem}, body=${JSON.stringify(body).slice(0, 200)}`,
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 13a. GET /api/heatmap/days?year=2026&source=youtube
+    {
+      const res = await fetch(
+        `${baseUrl}/api/heatmap/days?year=2026&source=youtube`
+      );
+      const body = (await res.json()) as {
+        year?: string;
+        days?: { date: string; count: number; minutes: number }[];
+      } | null;
+
+      const hasActiveDay = body?.days?.some(
+        (d) => d.count > 0 && d.minutes === 0
+      );
+
+      if (res.status === 200 && body?.year === "2026" && hasActiveDay) {
+        recordPass("GET /api/heatmap/days?year=2026&source=youtube");
+      } else {
+        recordFail(
+          "GET /api/heatmap/days?year=2026&source=youtube",
+          JSON.stringify(body).slice(0, 200),
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 13b. GET /api/stats?source=youtube
+    {
+      const res = await fetch(`${baseUrl}/api/stats?source=youtube`);
+      const body = (await res.json()) as {
+        total_items?: number;
+        by_source?: Record<string, { count: number; minutes: number }>;
+      } | null;
+
+      const youtubeSource = body?.by_source?.youtube;
+      const hasCount =
+        typeof body?.total_items === "number" &&
+        body.total_items > 0 &&
+        typeof youtubeSource?.count === "number" &&
+        youtubeSource.count > 0 &&
+        youtubeSource.minutes === 0;
+
+      if (res.status === 200 && hasCount) {
+        recordPass("GET /api/stats?source=youtube");
+      } else {
+        recordFail(
+          "GET /api/stats?source=youtube",
+          JSON.stringify(body).slice(0, 200),
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 14. GET /api/thumb/youtube/<id> (first fetch, cache hit, bad)
+    {
+      const videoId = "AbCdEfGhIjK";
+      const expectedRemotePath = `/vi/${videoId}/mqdefault.jpg`;
+      const fetchesBefore =
+        fakeImageRequestsPerPath.get(expectedRemotePath) ?? 0;
+
+      const res1 = await fetch(`${baseUrl}/api/thumb/youtube/${videoId}`);
+      const bytes1 = new Uint8Array(await res1.arrayBuffer());
+      const fetchesAfter1 =
+        fakeImageRequestsPerPath.get(expectedRemotePath) ?? 0;
+
+      if (
+        res1.status === 200 &&
+        res1.headers.get("content-type") === "image/jpeg" &&
+        bytes1.length > 0 &&
+        fetchesAfter1 === fetchesBefore + 1
+      ) {
+        recordPass(`GET /api/thumb/youtube/${videoId} (first fetch)`);
+      } else {
+        recordFail(
+          `GET /api/thumb/youtube/${videoId} (first fetch)`,
+          `status=${res1.status}, bytes=${bytes1.length}, type=${res1.headers.get("content-type")}, fetchesBefore=${fetchesBefore}, fetchesAfter=${fetchesAfter1}`,
+          res1.status,
+          tmpDir
+        );
+      }
+
+      const res2 = await fetch(`${baseUrl}/api/thumb/youtube/${videoId}`);
+      const bytes2 = new Uint8Array(await res2.arrayBuffer());
+      const fetchesAfter2 =
+        fakeImageRequestsPerPath.get(expectedRemotePath) ?? 0;
+
+      if (
+        res2.status === 200 &&
+        res2.headers.get("content-type") === "image/jpeg" &&
+        bytes2.length > 0 &&
+        fetchesAfter2 === fetchesAfter1
+      ) {
+        recordPass(`GET /api/thumb/youtube/${videoId} (cache hit)`);
+      } else {
+        recordFail(
+          `GET /api/thumb/youtube/${videoId} (cache hit)`,
+          `status=${res2.status}, bytes=${bytes2.length}, fetchesBefore=${fetchesAfter1}, fetchesAfter=${fetchesAfter2}`,
+          res2.status,
+          tmpDir
+        );
+      }
+
+      const resBad = await fetch(`${baseUrl}/api/thumb/youtube/bad`);
+      if (resBad.status === 400) {
+        recordPass("GET /api/thumb/youtube/bad");
+      } else {
+        recordFail(
+          "GET /api/thumb/youtube/bad",
+          `status=${resBad.status}`,
+          resBad.status,
+          tmpDir
+        );
+      }
+    }
   } finally {
     // Teardown: kill server, stop fake ABS, clean up temp dir
     if (serverProc) {
@@ -1057,6 +1974,22 @@ async function main(): Promise<void> {
     if (fakeAbsServer) {
       try {
         fakeAbsServer.stop(true);
+      } catch {
+        // ignore stop error
+      }
+    }
+
+    if (fakeSimklServer) {
+      try {
+        fakeSimklServer.stop(true);
+      } catch {
+        // ignore stop error
+      }
+    }
+
+    if (fakeImageServer) {
+      try {
+        fakeImageServer.stop(true);
       } catch {
         // ignore stop error
       }
