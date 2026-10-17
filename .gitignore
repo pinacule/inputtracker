@@ -10,6 +10,8 @@ data/
 exports/
 watch-history*.json
 Takeout/
+secrets/
+simkl-token*.json
 
 # orchestration scratch
 .task/

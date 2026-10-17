@@ -10,7 +10,7 @@ GITLEAKS=$(command -v gitleaks || echo "mise exec gitleaks@latest -- gitleaks")
 $GITLEAKS git . --no-banner --redact --log-level warn || { echo "check-secrets: gitleaks found a leak" >&2; fail=1; }
 
 # 2. No secret/personal-data files tracked.
-bad=$(git ls-files | grep -E '(^|/)inputtracker\.config\.toml$|\.db$|\.db-|\.sqlite|cookies|watch-history|(^|/)Takeout/|^data/|^exports/|^backups/|\.env' || true)
+bad=$(git ls-files | grep -E '(^|/)inputtracker\.config\.toml$|\.db$|\.db-|\.sqlite|cookies|watch-history|(^|/)Takeout/|^data/|^exports/|^backups/|(^|/)secrets/|simkl-token[^/]*\.json$|\.env' || true)
 [ -n "$bad" ] && { echo "check-secrets: forbidden files tracked:" >&2; echo "$bad" >&2; fail=1; }
 
 # 3. The real ABS token must not appear anywhere in tracked content.
