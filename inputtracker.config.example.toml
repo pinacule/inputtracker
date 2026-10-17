@@ -46,3 +46,10 @@ ntfy_url = ""
 # Base URL used to fetch video thumbnails (YouTube Takeout imports carry a video id).
 # thumb_base_url = "https://i.ytimg.com/vi"
 
+# [activitywatch]
+# ActivityWatch runs locally on the PC with aw-watcher-web in Chrome/Firefox.
+# url = "http://127.0.0.1:5600"
+# timeout_s = 20
+# device = "pc"
+# include_music = false
+

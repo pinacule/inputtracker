@@ -32,6 +32,7 @@ const UNIT_FILES = [
   "inputtracker-sync@.service",
   "inputtracker-sync@audiobookshelf.timer",
   "inputtracker-sync@simkl.timer",
+  "inputtracker-sync@activitywatch.timer",
   "inputtracker-backup.service",
   "inputtracker-backup.timer",
   "inputtracker-weekly.service",
@@ -48,6 +49,7 @@ const SERVICE_FILES = [
 const TIMER_FILES = [
   "inputtracker-sync@audiobookshelf.timer",
   "inputtracker-sync@simkl.timer",
+  "inputtracker-sync@activitywatch.timer",
   "inputtracker-backup.timer",
   "inputtracker-weekly.timer",
 ] as const;
@@ -208,6 +210,16 @@ describe("deploy files: required directives", () => {
     expect(directive(text, "RandomizedDelaySec")).toBe("120");
     expect(directive(text, "Unit")).toBe(
       "inputtracker-sync@simkl.service"
+    );
+  });
+
+  test("activitywatch timer runs every 10 minutes and points at its service", () => {
+    const text = readDeploy("inputtracker-sync@activitywatch.timer");
+    expect(directive(text, "OnCalendar")).toBe("*:0/10");
+    expect(directive(text, "Persistent")).toBe("true");
+    expect(directive(text, "RandomizedDelaySec")).toBe("30");
+    expect(directive(text, "Unit")).toBe(
+      "inputtracker-sync@activitywatch.service"
     );
   });
 
@@ -542,7 +554,7 @@ describe("systemd-analyze verification", () => {
         "systemctl --user daemon-reload",
         "bun install --frozen-lockfile",
         "bun run build:web",
-        "systemctl --user enable --now inputtracker.service inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-backup.timer inputtracker-weekly.timer",
+        "systemctl --user enable --now inputtracker.service inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-sync@activitywatch.timer inputtracker-backup.timer inputtracker-weekly.timer",
         "systemctl --user restart inputtracker.service",
       ]);
 
