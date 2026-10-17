@@ -18,5 +18,8 @@ token = "YOUR_ABS_API_KEY"
 timeout_s = 20
 
 [notify]
+# Desktop notifications via notify-send. On by default; silently ignored when
+# the binary is missing (e.g. a headless server).
 desktop = true
-ntfy_url = ""   # later
+# Optional ntfy topic URL (e.g. "https://ntfy.sh/my-topic"); leave empty to off.
+ntfy_url = ""
