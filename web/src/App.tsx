@@ -141,7 +141,7 @@ export function App() {
               href={`#/${item.id}`}
               aria-current={route === item.id ? "page" : undefined}
               aria-label={
-                waiting ? `Add, ${queueCount} entries waiting to send` : undefined
+                waiting ? `Add, ${queueCount} ${queueCount === 1 ? "entry" : "entries"} waiting to send` : undefined
               }
             >
               {item.label}

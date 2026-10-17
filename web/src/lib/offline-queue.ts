@@ -171,12 +171,16 @@ interface IdbObjectStoreLike {
 
 interface IdbTransactionLike {
   objectStore(name: string): IdbObjectStoreLike;
+  readonly error: unknown;
+  oncomplete: ((event: unknown) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onabort: ((event: unknown) => void) | null;
 }
 
 interface IdbDatabaseLike {
   objectStoreNames: { contains(name: string): boolean };
   createObjectStore(name: string, options?: { keyPath?: string }): unknown;
-  transaction(name: string): IdbTransactionLike;
+  transaction(name: string, mode?: "readonly" | "readwrite"): IdbTransactionLike;
 }
 
 interface IdbOpenRequestLike extends IdbRequestLike {
@@ -199,6 +203,15 @@ function requestToPromise(request: IdbRequestLike): Promise<unknown> {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
       reject(idbError(request.error, "IndexedDB request failed"));
+  });
+}
+
+/** Resolves once a write transaction is committed (a request's success alone is not durable yet). */
+function transactionDone(tx: IdbTransactionLike): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(idbError(tx.error, "IndexedDB transaction failed"));
+    tx.onabort = () => reject(idbError(tx.error, "IndexedDB transaction aborted"));
   });
 }
 
@@ -228,19 +241,19 @@ function createIdbStore(db: IdbDatabaseLike): QueueStore {
       const result = await requestToPromise(request);
       return Array.isArray(result) ? (result as QueuedEntry[]) : [];
     },
+    // Writes need a "readwrite" transaction (the default is read-only) and
+    // only count as saved once the transaction has committed.
     async put(entry) {
-      const request = db
-        .transaction(IDB_STORE_NAME)
-        .objectStore(IDB_STORE_NAME)
-        .put(entry);
-      await requestToPromise(request);
+      const tx = db.transaction(IDB_STORE_NAME, "readwrite");
+      const done = transactionDone(tx);
+      tx.objectStore(IDB_STORE_NAME).put(entry);
+      await done;
     },
     async remove(id) {
-      const request = db
-        .transaction(IDB_STORE_NAME)
-        .objectStore(IDB_STORE_NAME)
-        .delete(id);
-      await requestToPromise(request);
+      const tx = db.transaction(IDB_STORE_NAME, "readwrite");
+      const done = transactionDone(tx);
+      tx.objectStore(IDB_STORE_NAME).delete(id);
+      await done;
     },
   };
 }
