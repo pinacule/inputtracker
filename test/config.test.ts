@@ -53,6 +53,11 @@ describe("loadConfig defaults", () => {
     expect(config.audiobookshelf.url).toBe("http://localhost:13378");
     expect(config.audiobookshelf.token).toBe("");
     expect(config.audiobookshelf.timeout_s).toBe(20);
+    expect(config.simkl).toEqual({
+      client_id: "",
+      base_url: "https://api.simkl.com",
+      timeout_s: 20,
+    });
     expect(config.notify).toEqual({ desktop: true, ntfy_url: "" });
   });
 
@@ -86,6 +91,11 @@ describe("loadConfig file merging", () => {
         `token = "${FAKE_TOKEN}"`,
         "timeout_s = 5",
         "",
+        "[simkl]",
+        'client_id = "test-client-id"',
+        'base_url = "https://simkl.example"',
+        "timeout_s = 15",
+        "",
         "[notify]",
         "desktop = false",
         'ntfy_url = "https://ntfy.example/topic"',
@@ -104,6 +114,9 @@ describe("loadConfig file merging", () => {
     expect(config.audiobookshelf.url).toBe("http://abs.example:13378");
     expect(config.audiobookshelf.token).toBe(FAKE_TOKEN);
     expect(config.audiobookshelf.timeout_s).toBe(5);
+    expect(config.simkl.client_id).toBe("test-client-id");
+    expect(config.simkl.base_url).toBe("https://simkl.example");
+    expect(config.simkl.timeout_s).toBe(15);
     expect(config.notify.desktop).toBe(false);
     expect(config.notify.ntfy_url).toBe("https://ntfy.example/topic");
   });
@@ -170,15 +183,29 @@ describe("loadConfig errors", () => {
     expect(() => loadConfig({ path, env: {} })).toThrow(/server\.port/);
     expect(captureError(() => loadConfig({ path, env: {} }))).not.toContain(FAKE_TOKEN);
   });
+
+  test("wrong type for simkl keys throws", () => {
+    const badClient = writeConfig("badclient.toml", '[simkl]\nclient_id = 12345\n');
+    expect(() => loadConfig({ path: badClient, env: {} })).toThrow(/simkl\.client_id/);
+
+    const badUrl = writeConfig("badurl.toml", '[simkl]\nbase_url = 12345\n');
+    expect(() => loadConfig({ path: badUrl, env: {} })).toThrow(/simkl\.base_url/);
+
+    const badTimeout = writeConfig("badtimeout.toml", '[simkl]\ntimeout_s = "twenty"\n');
+    expect(() => loadConfig({ path: badTimeout, env: {} })).toThrow(/simkl\.timeout_s/);
+
+    const badTable = writeConfig("badtable.toml", 'simkl = "not-a-table"\n');
+    expect(() => loadConfig({ path: badTable, env: {} })).toThrow(/simkl/);
+  });
 });
 
 describe("redaction", () => {
   test("the token never leaks but stays accessible", () => {
     const path = writeConfig(
       "secret.toml",
-      `[audiobookshelf]\ntoken = "${FAKE_TOKEN}"\n`
+      `[audiobookshelf]\ntoken = "${FAKE_TOKEN}"\n[simkl]\nclient_id = "public-client-id"\n`
     );
-    const config: Config = loadConfig({ path, env: {} });
+    const config = loadConfig({ path, env: {} });
 
     // Accessible through the (non-enumerable) property.
     expect(config.audiobookshelf.token).toBe(FAKE_TOKEN);
@@ -190,10 +217,15 @@ describe("redaction", () => {
     expect(redact(config)).not.toContain(FAKE_TOKEN);
     expect(inspect(config)).not.toContain(FAKE_TOKEN);
 
+    // client_id is public, so it is preserved and not masked.
+    expect(config.simkl.client_id).toBe("public-client-id");
+    expect(JSON.stringify(config)).toContain("public-client-id");
+
     // The redacted shape keeps the non-secret keys.
     expect(JSON.parse(JSON.stringify(config))).toMatchObject({
       timezone: "Europe/Bratislava",
       audiobookshelf: { url: "http://localhost:13378", timeout_s: 20 },
+      simkl: { client_id: "public-client-id", base_url: "https://api.simkl.com", timeout_s: 20 },
     });
   });
 

@@ -23,3 +23,10 @@ timeout_s = 20
 desktop = true
 # Optional ntfy topic URL (e.g. "https://ntfy.sh/my-topic"); leave empty to off.
 ntfy_url = ""
+
+# [simkl]
+# Register a V2 app, type 'TV, devices & command line' at https://simkl.com/settings/developer/, paste its client_id
+# client_id = "YOUR_SIMKL_CLIENT_ID"
+# base_url = "https://api.simkl.com"
+# timeout_s = 20
+

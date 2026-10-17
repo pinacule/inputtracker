@@ -100,7 +100,7 @@ describe("DATA_FORMAT.md matches the database", () => {
 describe("README.md matches the code", () => {
   test("mentions every top-level CLI command from usage()", () => {
     const commands = cliCommands();
-    expect(commands).toEqual(["sync", "add", "export", "import", "backup"]);
+    expect(commands).toEqual(["sync", "auth", "add", "export", "import", "backup"]);
     for (const command of commands) {
       expect(
         README,

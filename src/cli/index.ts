@@ -34,6 +34,18 @@ import {
   type AbsSyncResult,
   type SyncAbsDeps,
 } from "../sources/audiobookshelf/sync.ts";
+import { runSimklAuth } from "../sources/simkl/auth.ts";
+import {
+  createSimklClient,
+  type FetchFn,
+  type SimklClient,
+  type SimklClientDeps,
+} from "../sources/simkl/client.ts";
+import {
+  readSimklToken,
+  writeSimklToken,
+  type SimklToken,
+} from "../sources/simkl/token.ts";
 
 export const EXIT_OK = 0;
 export const EXIT_USAGE = 1;
@@ -47,6 +59,7 @@ export function usage(): string {
     "",
     "Commands:",
     "  sync audiobookshelf                      fetch new Audiobookshelf activity into the DB",
+    "  auth simkl [--status]                    connect or inspect Simkl authorization",
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
     "  import <file> [--format json|csv]        import a native export file into the DB",
@@ -74,6 +87,12 @@ export interface CliDeps {
   newId?: () => string;
   /** Timestamp used for the backup date stamp; defaults to the current time. */
   now?: Date;
+  fetch?: typeof fetch | FetchFn;
+  sleep?: (ms: number) => Promise<void>;
+  nowMs?: () => number;
+  createSimklClient?: (cfg: Config["simkl"], deps: SimklClientDeps) => SimklClient;
+  readSimklToken?: (path: string) => SimklToken | null;
+  writeSimklToken?: (path: string, token: SimklToken) => void;
 }
 
 function errorText(err: unknown): string {
@@ -622,6 +641,69 @@ function runAdd(args: string[], ctx: SyncContext): number {
   }
 }
 
+async function runAuth(args: string[], ctx: SyncContext): Promise<number> {
+  const { deps, out, err } = ctx;
+  const [target, ...rest] = args;
+
+  if (target === undefined || target === "") {
+    err("Missing auth target.");
+    err(usage());
+    return EXIT_USAGE;
+  }
+
+  if (target !== "simkl") {
+    err(`Unknown auth target: ${target}`);
+    err(usage());
+    return EXIT_USAGE;
+  }
+
+  let status = false;
+  for (const arg of rest) {
+    if (arg === "--status") {
+      status = true;
+    } else {
+      err(`Unknown option: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+  }
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  const makeSimklClient = (cfg: Config["simkl"], clientDeps: SimklClientDeps) => {
+    if (deps.createSimklClient) {
+      return deps.createSimklClient(cfg, clientDeps);
+    }
+    return createSimklClient(cfg, {
+      fetch: deps.fetch,
+      sleep: deps.sleep,
+      now: deps.nowMs,
+      ...clientDeps,
+    });
+  };
+
+  return await runSimklAuth(
+    { status },
+    {
+      config,
+      createClient: makeSimklClient,
+      readToken: deps.readSimklToken,
+      writeToken: deps.writeSimklToken,
+      sleep: deps.sleep,
+      now: deps.nowMs,
+      out,
+      err,
+    }
+  );
+}
+
 /**
  * Run the CLI for the given argument list (without the program name).
  * Returns the process exit code; never calls `process.exit`.
@@ -646,6 +728,10 @@ export async function runCli(
 
   if (command === "sync") {
     return await runSync(rest[0], { deps, out, err });
+  }
+
+  if (command === "auth") {
+    return await runAuth(rest, { deps, out, err });
   }
 
   if (command === "add") {
