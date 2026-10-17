@@ -31,6 +31,7 @@ Run in progress.
 | F10 In progress / finished | opencode | deepseek-v4.1-flash-free | 1 | eec42e0 |
 | F14 Nightly backup | opencode | deepseek-v4.1-flash-free | 1 | 3b1bf04 |
 | F15 Sync failure notification | opencode | deepseek-v4.1-flash-free | 1 | 3070e18 |
+| F14b Backup hardening | opencode | deepseek-v4.1-flash-free | 1 | 0124e83 |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
