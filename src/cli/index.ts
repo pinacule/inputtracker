@@ -70,6 +70,16 @@ import {
   type SimklSyncResult,
   type SyncSimklDeps,
 } from "../sources/simkl/sync.ts";
+import {
+  createActivityWatchClient,
+  type ActivityWatchClient,
+} from "../sources/activitywatch/client.ts";
+import {
+  ACTIVITYWATCH_SOURCE,
+  syncActivityWatch,
+  type ActivityWatchSyncResult,
+  type SyncActivityWatchDeps,
+} from "../sources/activitywatch/sync.ts";
 
 export const EXIT_OK = 0;
 export const EXIT_USAGE = 1;
@@ -86,7 +96,7 @@ export function usage(): string {
     "Usage: it <command> [options]",
     "",
     "Commands:",
-    "  sync audiobookshelf|simkl                fetch new source activity into the DB",
+    "  sync audiobookshelf|simkl|activitywatch  fetch new source activity into the DB",
     "  auth simkl [--status]                    connect or inspect Simkl authorization",
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
@@ -132,6 +142,13 @@ export interface CliDeps {
   createSimklClient?: (cfg: Config["simkl"], deps: SimklClientDeps) => SimklClient;
   readSimklToken?: (path: string) => SimklToken | null;
   writeSimklToken?: (path: string, token: SimklToken) => void;
+  createActivityWatchClient?: (
+    cfg: Config["activitywatch"],
+    opts?: { fetch?: typeof fetch | FetchFn }
+  ) => ActivityWatchClient;
+  syncActivityWatch?: (
+    deps: SyncActivityWatchDeps
+  ) => Promise<ActivityWatchSyncResult>;
   /** Override for `it doctor` (tests inject mocked environment deps). */
   runDoctor?: (overrides?: Partial<DoctorDeps>) => Promise<number>;
   /** Environment deps merged into the doctor defaults. */
@@ -176,10 +193,81 @@ async function runSync(
     return EXIT_USAGE;
   }
 
-  if (source !== ABS_SOURCE && source !== "simkl") {
+  if (source !== ABS_SOURCE && source !== "simkl" && source !== ACTIVITYWATCH_SOURCE) {
     err(`Unknown source: ${source}`);
     err(usage());
     return EXIT_USAGE;
+  }
+
+  if (source === ACTIVITYWATCH_SOURCE) {
+    const doLoadConfig = deps.loadConfig ?? loadConfig;
+    const doOpenDb = deps.openDb ?? openDb;
+    const sinkFor = deps.sinkFor ?? ((db: Database) => new LocalDbSink(db));
+    const makeNotifier = deps.buildNotifier ?? buildNotifier;
+    const report = deps.reportSyncResult ?? reportSyncResult;
+
+    let config: Config;
+    try {
+      config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+    } catch (caught) {
+      err(redactMessage(errorText(caught)));
+      return EXIT_FAILURE;
+    }
+
+    let db: Database;
+    try {
+      db = doOpenDb(config.storage.db_path);
+    } catch (caught) {
+      err(redactMessage(errorText(caught), config));
+      return EXIT_FAILURE;
+    }
+
+    let notifier: Notifier;
+    try {
+      notifier = makeNotifier(config);
+    } catch {
+      notifier = { notify: async () => {} };
+    }
+
+    try {
+      const sink = sinkFor(db);
+      const makeClient =
+        deps.createActivityWatchClient ??
+        ((cfg, opts) => createActivityWatchClient(cfg, opts));
+      const client = makeClient(config.activitywatch, { fetch: deps.fetch });
+      const doSync = deps.syncActivityWatch ?? syncActivityWatch;
+      const result = await doSync({ client, sink, db, config, out });
+      out(
+        `activitywatch: ${result.seen} seen, ${result.inserted} new (${result.buckets} ${result.buckets === 1 ? "bucket" : "buckets"})`
+      );
+      await reportSyncSafely(
+        report,
+        db,
+        ACTIVITYWATCH_SOURCE,
+        true,
+        undefined,
+        notifier
+      );
+      return EXIT_OK;
+    } catch (caught) {
+      const message = redactMessage(errorText(caught), config);
+      err(message);
+      await reportSyncSafely(
+        report,
+        db,
+        ACTIVITYWATCH_SOURCE,
+        false,
+        message,
+        notifier
+      );
+      return EXIT_FAILURE;
+    } finally {
+      try {
+        db.close();
+      } catch {
+        // ignore close errors
+      }
+    }
   }
 
   if (source === "simkl") {

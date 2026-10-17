@@ -53,6 +53,13 @@ export interface IngestConfig {
   token: string;
 }
 
+export interface ActivityWatchConfig {
+  url: string;
+  timeout_s: number;
+  device: string;
+  include_music: boolean;
+}
+
 export interface NotifyConfig {
   desktop: boolean;
   ntfy_url: string;
@@ -76,6 +83,7 @@ export interface Config {
    * or empty token disables the ingest endpoint.
    */
   ingest?: IngestConfig;
+  activitywatch?: ActivityWatchConfig;
   notify: NotifyConfig;
   /** Redacted plain object (JSON.stringify uses this automatically). */
   toJSON(): unknown;
@@ -295,6 +303,39 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     configurable: false,
   });
 
+  const awTable = readTable(file, "activitywatch", "activitywatch");
+  const awDevice = readString(awTable, "device", "activitywatch.device", "pc");
+  if (
+    awDevice.length < 1 ||
+    awDevice.length > 32 ||
+    !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(awDevice)
+  ) {
+    throw new Error(
+      `Config key "activitywatch.device" must match ^[a-z0-9]+(-[a-z0-9]+)*$ and be 1–32 chars`
+    );
+  }
+  const activitywatch: ActivityWatchConfig = {
+    url: readString(
+      awTable,
+      "url",
+      "activitywatch.url",
+      "http://127.0.0.1:5600"
+    ),
+    timeout_s: readNumber(
+      awTable,
+      "timeout_s",
+      "activitywatch.timeout_s",
+      20
+    ),
+    device: awDevice,
+    include_music: readBoolean(
+      awTable,
+      "include_music",
+      "activitywatch.include_music",
+      false
+    ),
+  };
+
   const notifyTable = readTable(file, "notify", "notify");
   const notify: NotifyConfig = {
     desktop: readBoolean(notifyTable, "desktop", "notify.desktop", true),
@@ -320,6 +361,7 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     simkl,
     youtube,
     ingest,
+    activitywatch,
     notify,
   } as Config;
 

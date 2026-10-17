@@ -68,23 +68,23 @@ The append-only archive. One row per decoded record.
 Values the code produces today:
 
 - `source`: `audiobookshelf` (sync), `simkl` (sync), `youtube` (a YouTube
-  Takeout import or the phone ingest endpoint), `manual` (the `add` command /
-  web form). An import (the
-  `import` command / web upload) keeps each row's original `source`. Only the
-  `ingest_runs.source` changes: a native export import writes `native-import`,
-  a YouTube Takeout import writes `youtube-takeout` (its event rows are still
-  `source = youtube`), and the phone ingest writes `youtube` with
-  `kind = phone`.
+  Takeout import, the ActivityWatch sync or the phone ingest endpoint), `manual`
+  (the `add` command / web form). An import (the `import` command / web upload)
+  keeps each row's original `source`. Only the `ingest_runs.source` changes: a
+  native export import writes `native-import`, a YouTube Takeout import writes
+  `youtube-takeout`, an ActivityWatch sync writes `activitywatch`, and the phone
+  ingest writes `youtube` with `kind = phone` (their event rows are all
+  `source = youtube`).
 - `source_kind`: from Audiobookshelf — `listening_session`, `media_progress`,
-  `daily_stat`; from Simkl — `watch` (one row per watch); from a YouTube Takeout
-  import — `history_item`; from the phone ingest — `phone_play`; from manual
-  entry — `history_item`. An import keeps
+  `daily_stat`; from Simkl — `watch` (one row per watch); from ActivityWatch —
+  `aw_play`; from the phone ingest — `phone_play`; from a YouTube Takeout
+  import — `history_item`; from manual entry — `history_item`. An import keeps
   whatever `source_kind` was in the file.
 - `media_type`: one of `audiobook`, `podcast_episode`, `movie`, `episode`,
   `video`, `book`, `other`. Audiobookshelf sync only ever produces `audiobook`,
   `podcast_episode` or `other`; Simkl sync produces `movie` or `episode`; a
-  YouTube Takeout import produces `video`; manual entry accepts any of the
-  seven.
+  YouTube Takeout import or ActivityWatch sync produces `video`; manual entry
+  accepts any of the seven.
 
 `external_ids` and `raw` are stored as JSON **text** (not JSONB). A typical
 `external_ids` value for an Audiobookshelf session looks like
@@ -112,6 +112,38 @@ Simkl sync writes one event per watch. `source = simkl`, `source_kind = watch`,
   nothing is overwritten.
 - `raw` is the whole Simkl movie entry for a movie; for an episode it is the
   episode object plus `show: {"title": …, "ids": …}`.
+
+### YouTube ActivityWatch events (`aw_play`)
+
+ActivityWatch sync converts browser web tab history (aw-watcher-web) into
+`youtube` events. `source = youtube`, `source_kind = aw_play`, `media_type = video`,
+`source_id = <11-char videoId>:<started_at>`, where `started_at` is the play's
+first event start time normalized to UTC ISO 8601 with milliseconds.
+
+- A **play** groups consecutive events for the same video id where each event
+  starts at most 10 minutes after the previous one of the run ended
+  (`timestamp + duration`). Non-video events in between do not end the play;
+  an event for a different video id ends it.
+- `ended_at` is the end time of the play's last event (`timestamp + duration`),
+  normalized to UTC ISO 8601 with milliseconds.
+- `duration_seconds` is `watched_seconds`: the sum of durations of events in the
+  play with `audible === true` (or the sum of all durations if no event in the
+  entire bucket response has an `audible` key), rounded to whole seconds. Plays
+  with `watched_seconds < 30` are dropped (ads, previews, paused tabs).
+- `title` is the last non-empty tab title of the play with a leading notification
+  count (e.g. `(3) `) and trailing ` - YouTube` / ` - YouTube Music` removed;
+  `NULL` when empty.
+- `parent_title` is `NULL` (channel is unknown from browser tab titles).
+- `device` is the configured `[activitywatch] device` label (default `"pc"`).
+- `progress` is `NULL`.
+- `external_ids` is `{"youtube_video": "<11-char videoId>"}`.
+- `raw` is a small deterministic object
+  `{"bucket": "<bucket id>", "events": <count>, "audible_seconds": <num>, "total_seconds": <num>}`.
+- Re-running over the same data produces identical record hashes and inserts
+  nothing. When a play is still ongoing at the end of the window, its cursor
+  remains at `started_at`; next run, the growing play is re-emitted with a larger
+  duration, inserting a new row with the same `source_id`, and `events_latest`
+  automatically displays the newer, larger duration.
 
 ### YouTube Takeout events
 

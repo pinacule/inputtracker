@@ -3,7 +3,7 @@
  *
  * Critical rules:
  * - Read `events_latest` only; never aggregate over `events`.
- * - Only consumption kinds count as activity: `source_kind IN ('listening_session','watch','history_item','phone_play')`.
+ * - Only consumption kinds count as activity: `source_kind IN ('listening_session','watch','history_item','aw_play','phone_play')`.
  *   `media_progress` and `daily_stat` never count in calendar/heat map/stats.
  * - Timestamps are stored UTC; bucketed by local day/hour in the configured timezone using `Intl`.
  * - Minutes = `duration_seconds / 60` (null -> 0 minutes, still counts as 1 item).
@@ -22,8 +22,12 @@ export const CONSUMPTION_KINDS = new Set([
   "listening_session",
   "watch",
   "history_item",
+  "aw_play",
   "phone_play",
 ]);
+
+/** SQL list of `CONSUMPTION_KINDS`, so the queries can never drift from the set. */
+const CONSUMPTION_KINDS_SQL = [...CONSUMPTION_KINDS].map((kind) => `'${kind}'`).join(", ");
 
 export interface ConsumptionEvent {
   id: number;
@@ -878,7 +882,7 @@ export function getLatestConsumptionEvents(
           ended_at,
           duration_seconds
         FROM events_latest
-        WHERE source_kind IN ('listening_session', 'watch', 'history_item', 'phone_play')
+        WHERE source_kind IN (${CONSUMPTION_KINDS_SQL})
           AND source = ?
         ORDER BY started_at ASC, id ASC;`
       )
@@ -902,7 +906,7 @@ export function getLatestConsumptionEvents(
         ended_at,
         duration_seconds
       FROM events_latest
-      WHERE source_kind IN ('listening_session', 'watch', 'history_item', 'phone_play')
+      WHERE source_kind IN (${CONSUMPTION_KINDS_SQL})
       ORDER BY started_at ASC, id ASC;`
     )
     .all();
