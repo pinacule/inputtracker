@@ -99,11 +99,15 @@ describe("api.ts URL building and JSON parsing", () => {
 
     await getStats();
     await getStats("manual");
+    await getStats({ from: "2026-10-01", to: "2026-10-31", source: "audiobookshelf" });
     await getInProgress();
 
     expect(calls[0]?.url).toBe("/api/stats");
     expect(calls[1]?.url).toBe("/api/stats?source=manual");
-    expect(calls[2]?.url).toBe("/api/in-progress");
+    expect(calls[2]?.url).toBe(
+      "/api/stats?from=2026-10-01&to=2026-10-31&source=audiobookshelf"
+    );
+    expect(calls[3]?.url).toBe("/api/in-progress");
   });
 
   test("getJson is a thin typed GET wrapper", async () => {

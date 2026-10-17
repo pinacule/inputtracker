@@ -48,6 +48,23 @@ export interface AppDeps {
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const YEAR_RE = /^\d{4}$/;
+const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+function isValidDateStr(str: string): boolean {
+  if (!DATE_RE.test(str)) {
+    return false;
+  }
+  const parts = str.split("-");
+  const y = Number(parts[0]);
+  const m = Number(parts[1]);
+  const d = Number(parts[2]);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return (
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() === m - 1 &&
+    dt.getUTCDate() === d
+  );
+}
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -165,15 +182,31 @@ export function createApp(deps: AppDeps): Hono {
     return c.json(result);
   });
 
-  // GET /api/stats[?source=]
+  // GET /api/stats[?from=YYYY-MM-DD][&to=YYYY-MM-DD][&source=...]
   app.get("/api/stats", (c) => {
-    const err = validateQueryParams(c.req.url, ["source"]);
+    const err = validateQueryParams(c.req.url, ["from", "to", "source"]);
     if (err) {
       return c.json({ error: err }, 400);
     }
 
+    const from = c.req.query("from") || undefined;
+    if (from !== undefined && !isValidDateStr(from)) {
+      return c.json(
+        { error: `Invalid from date format: '${from}' (expected YYYY-MM-DD)` },
+        400
+      );
+    }
+
+    const to = c.req.query("to") || undefined;
+    if (to !== undefined && !isValidDateStr(to)) {
+      return c.json(
+        { error: `Invalid to date format: '${to}' (expected YYYY-MM-DD)` },
+        400
+      );
+    }
+
     const source = c.req.query("source") || undefined;
-    const result = getStats(db, source);
+    const result = getStats(db, { from, to, source, tz });
     return c.json(result);
   });
 
