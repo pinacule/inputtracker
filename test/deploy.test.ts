@@ -9,6 +9,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -405,6 +406,64 @@ describe("scripts/install.sh", () => {
       expect(
         existsSync(join(home, "systemd", "user", "inputtracker.service"))
       ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("works from any checkout path (portable APP_DIR)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "it-deploy-portable-"));
+    try {
+      // A checkout at an unrelated, nested path: not the repository location.
+      const checkout = join(root, "opt", "somewhere-else", "inputtracker");
+      mkdirSync(join(checkout, "scripts"), { recursive: true });
+      cpSync(INSTALL_SH, join(checkout, "scripts", "install.sh"));
+      cpSync(DEPLOY, join(checkout, "deploy"), { recursive: true });
+
+      const home = join(root, "home");
+      mkdirSync(home);
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      const fakeBun = join(bin, "bun");
+      writeFileSync(fakeBun, "#!/bin/sh\nexit 0\n");
+      chmodSync(fakeBun, 0o755);
+      const shim = join(bin, "systemctl");
+      writeFileSync(shim, "#!/bin/sh\nexit 0\n");
+      chmodSync(shim, 0o755);
+
+      const proc = Bun.spawn(
+        [BASH, join(checkout, "scripts", "install.sh"), "--no-start"],
+        {
+          env: cleanEnv({
+            HOME: home,
+            XDG_CONFIG_HOME: home,
+            PATH: `${bin}:${process.env.PATH ?? ""}`,
+          }),
+          stdout: "pipe",
+          stderr: "pipe",
+        }
+      );
+      const [out, err, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      expect(code, `install.sh failed:\n${out}\n${err}`).toBe(0);
+
+      const unitDir = join(home, "systemd", "user");
+      for (const name of UNIT_FILES) {
+        const text = readFileSync(join(unitDir, name), "utf8");
+        expect(text, `${name} still has an unresolved placeholder`).not.toMatch(
+          PLACEHOLDER
+        );
+      }
+      // The units point at the temp checkout, not the repository being tested.
+      for (const name of SERVICE_FILES) {
+        const text = readFileSync(join(unitDir, name), "utf8");
+        expect(directive(text, "WorkingDirectory")).toBe(checkout);
+        expect(text).toContain(checkout);
+        expect(text).not.toContain(REPO);
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

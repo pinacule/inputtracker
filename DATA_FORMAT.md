@@ -124,6 +124,17 @@ record as read.
 `{"youtube_video": "<video id>", "youtube_channel": "<channel id or null>"}`,
 plus `"youtube_music": true` when the record's `header` is `YouTube Music`.
 
+### Manual entry events
+
+Manual entry (the `add` command, the web form or a phone's offline queue)
+writes `source = manual`, `source_kind = history_item`, and by default a random
+UUID as `source_id`. The web form can send an optional `client_id` (a UUID)
+with the entry: the server then uses `client:<client_id in lowercase>` as the
+`source_id`, so re-sending the exact same body — for example a retry after a
+lost response — hits the same `record_hash` and stays a no-op (`inserted: 0`)
+instead of creating a second row. An invalid `client_id` is rejected like any
+other validation error.
+
 ## Append-only rule
 
 Two triggers abort any mutation:
@@ -232,6 +243,37 @@ When that holds (the app calls it `isTimeUncertain()`), the start time is the
 upload/sync time, not when the media was actually heard. The calendar still
 places the item on its sync day, but the hour grid leaves it out and reports it
 separately as `unplaced_count` / `unplaced_minutes`.
+
+## Table `goals` and view `goals_latest`
+
+The append-only store for yearly goals ("30 books in 2026", "200 hours of audiobooks", "100 active days").
+
+Like `events`, `goals` is append-only: `UPDATE` and `DELETE` are blocked by database triggers (`goals_no_update`, `goals_no_delete`). Any modification or archiving is recorded as a **new row** with the same stable `goal_id` and a newly generated revision id `rev_id`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | INTEGER PRIMARY KEY AUTOINCREMENT | Insertion order. The newest revision has the highest `id`. |
+| `record_hash` | TEXT NOT NULL UNIQUE | SHA-256 hex of canonical JSON `goal_id, rev_id, year, metric, source, media_type, target, archived`. Makes retried inserts idempotent (`INSERT OR IGNORE`). |
+| `goal_id` | TEXT NOT NULL | Stable UUID of the goal across all its revisions. |
+| `rev_id` | TEXT NOT NULL | UUID of this specific revision. Retrying the same change reuses it. |
+| `year` | INTEGER NOT NULL | Target calendar year (2000–2100). |
+| `metric` | TEXT NOT NULL | Unit being tracked: `items`, `hours`, `titles`, or `active_days`. |
+| `source` | TEXT | Optional source filter string (e.g. `audiobookshelf`), or `NULL`. |
+| `media_type` | TEXT | Optional media type filter (`audiobook`, `movie`, etc.), or `NULL`. |
+| `target` | REAL NOT NULL | Target value to reach (> 0, <= 1,000,000). |
+| `archived` | INTEGER NOT NULL DEFAULT 0 | `0` for active goals, `1` for archived goals. "Delete" in the UI archives the goal. |
+| `created_at` | TEXT NOT NULL | When this revision was inserted, UTC ISO 8601 with milliseconds. |
+
+### View `goals_latest`
+
+The current state of each goal: the row with `MAX(id)` grouped by `goal_id`. Readers query `goals_latest` to get the most recent revision and check `archived = 0` to skip archived goals:
+
+```sql
+SELECT goal_id, year, metric, source, media_type, target
+FROM goals_latest
+WHERE archived = 0 AND year = 2026
+ORDER BY id DESC;
+```
 
 ## Other tables
 

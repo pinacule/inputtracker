@@ -390,6 +390,11 @@ export function Calendar({ date }: CalendarProps = {}) {
                         {sourceLabel(item.source)}
                       </span>
                     </div>
+                    {item.also_from && item.also_from.length > 0 && (
+                      <div class="dedup-note">
+                        also logged: {item.also_from.map((src) => sourceLabel(src)).join(", ")}
+                      </div>
+                    )}
                   </div>
                 </li>
               ))}

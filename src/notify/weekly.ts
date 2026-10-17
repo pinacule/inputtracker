@@ -2,7 +2,7 @@
  * Optional weekly summary text (off by default: `[notify] weekly_summary`).
  *
  * The text is built strictly from the reuse helpers that read `events_latest`:
- * `getLatestConsumptionEvents` + `aggregateStats` for the 7-day window and
+ * `getDisplayConsumptionEvents` (deduped) + `aggregateStats` for the 7-day window and
  * `computeStreaks` for the current streak — nothing is re-implemented here.
  * The window is the last seven *local* days (config timezone), computed from
  * an injectable clock so tests are deterministic.
@@ -14,7 +14,7 @@
 import type { Database } from "bun:sqlite";
 import {
   formatLocalParts,
-  getLatestConsumptionEvents,
+  getDisplayConsumptionEvents,
   aggregateStats,
   type ConsumptionEvent,
 } from "../server/aggregate.ts";
@@ -102,11 +102,11 @@ export function buildWeeklySummaryText(
   return { title: "InputTracker weekly summary", body: lines.join("\n") };
 }
 
-/** Read `events_latest` once and build the summary text from it. */
+/** Read `events_latest` once (deduped across sources) and build the summary. */
 export function buildWeeklySummary(
   db: Database,
   opts: WeeklySummaryOptions
 ): WeeklySummary {
-  const events = getLatestConsumptionEvents(db);
+  const events = getDisplayConsumptionEvents(db, undefined, opts.tz);
   return buildWeeklySummaryText(events, opts);
 }

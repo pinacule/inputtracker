@@ -108,6 +108,17 @@ function truncateTitle(text: string, maxChars: number): string {
 }
 
 /**
+ * HTTP header values must be Latin-1 (fetch throws otherwise). ntfy decodes
+ * RFC 2047 encoded words, so any non-ASCII value is sent as `=?UTF-8?B?…?=`.
+ */
+function headerValue(value: string): string {
+  if (/^[\x20-\x7e]*$/.test(value)) {
+    return value;
+  }
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+
+/**
  * Strip `url` and `token` from a raw error string; never let a ntfy URL,
  * topic or credential appear in a typed message.
  */
@@ -155,13 +166,13 @@ export class NtfyNotifier implements Notifier {
    */
   async notify(title: string, body: string, kind: NotifyKind = "test"): Promise<void> {
     const headers: Record<string, string> = {
-      Title: truncateTitle(title, TITLE_MAX_CHARS),
+      Title: headerValue(truncateTitle(title, TITLE_MAX_CHARS)),
       Priority: PRIORITY[kind] ?? "default",
       Tags: TAGS[kind] ?? "bell",
       "Content-Type": "text/plain; charset=utf-8",
     };
     if (this.appUrl !== "") {
-      headers.Click = this.appUrl;
+      headers.Click = headerValue(this.appUrl);
     }
     if (this.token !== "") {
       headers.Authorization = `Bearer ${this.token}`;

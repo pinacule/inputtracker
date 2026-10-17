@@ -18,6 +18,8 @@ import {
   type LoadConfigOptions,
 } from "../core/config.ts";
 import { openDb } from "../core/db.ts";
+import { runDoctor, type DoctorDeps } from "./doctor.ts";
+import { runVerifyCopy } from "./verify-copy.ts";
 import type { MediaType } from "../core/events.ts";
 import { LocalDbSink, type Sink } from "../core/sink.ts";
 import {
@@ -91,6 +93,8 @@ export function usage(): string {
     "  backup                                   snapshot the DB + JSON export into backup_dir",
     "  notify test                              test every configured notification channel",
     "  notify weekly                            push the weekly summary (needs notify.weekly_summary)",
+    "  doctor                                   check the environment before/after a move",
+    "  verify-copy <copy.db>                    check a copied DB has every event of the configured DB",
     "",
     "More commands (serve) will be added in later tasks.",
   ].join("\n");
@@ -124,6 +128,10 @@ export interface CliDeps {
   createSimklClient?: (cfg: Config["simkl"], deps: SimklClientDeps) => SimklClient;
   readSimklToken?: (path: string) => SimklToken | null;
   writeSimklToken?: (path: string, token: SimklToken) => void;
+  /** Override for `it doctor` (tests inject mocked environment deps). */
+  runDoctor?: (overrides?: Partial<DoctorDeps>) => Promise<number>;
+  /** Environment deps merged into the doctor defaults. */
+  doctor?: Partial<DoctorDeps>;
 }
 
 function errorText(err: unknown): string {
@@ -1102,6 +1110,20 @@ export async function runCli(
     }
     err("Usage: it notify test|weekly");
     return EXIT_USAGE;
+  }
+
+  if (command === "doctor") {
+    const runner = deps.runDoctor ?? runDoctor;
+    return await runner({ ...deps.doctor, out });
+  }
+
+  if (command === "verify-copy") {
+    return runVerifyCopy(rest, {
+      loadConfig: deps.loadConfig ?? loadConfig,
+      out,
+      err,
+      usage,
+    });
   }
 
   err(`Unknown command: ${command}`);

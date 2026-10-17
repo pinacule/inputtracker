@@ -94,6 +94,20 @@ function makeNotifier(
 }
 
 describe("NtfyNotifier headers", () => {
+  test("non-ASCII title is RFC 2047 encoded so fetch accepts the header", async () => {
+    const { fetch, calls } = okFetch();
+    const ntfy = makeNotifier(fetch);
+
+    await ntfy.notify("Synthetická kniha — 📚", "body", "failure");
+
+    const headers = calls[0]?.init?.headers as Record<string, string>;
+    expect(headers.Title).toMatch(/^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/);
+    const b64 = headers.Title!.slice("=?UTF-8?B?".length, -2);
+    expect(Buffer.from(b64, "base64").toString("utf8")).toBe("Synthetická kniha — 📚");
+    // A real Headers object must accept it (Latin-1 only).
+    expect(() => new Headers(headers)).not.toThrow();
+  });
+
   test("failure: high priority and warning tag", async () => {
     const { fetch, calls } = okFetch();
     const ntfy = makeNotifier(fetch);
@@ -244,9 +258,14 @@ describe("NtfyNotifier retry and failure handling", () => {
     await ntfy.notify(title, "b");
 
     const headers = calls[0]?.init?.headers as Record<string, string>;
-    expect(Array.from(headers.Title)).toHaveLength(250);
-    expect(headers.Title.startsWith("synthetic 歌")).toBe(true);
-    expect(headers.Title.endsWith("…")).toBe(true);
+    // Non-ASCII titles travel RFC 2047 encoded; decode before checking.
+    const sent = Buffer.from(
+      headers.Title!.slice("=?UTF-8?B?".length, -2),
+      "base64"
+    ).toString("utf8");
+    expect(Array.from(sent)).toHaveLength(250);
+    expect(sent.startsWith("synthetic 歌")).toBe(true);
+    expect(sent.endsWith("…")).toBe(true);
   });
 
   test("a short body and title pass through byte-identical", async () => {

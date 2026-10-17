@@ -23,6 +23,7 @@ function readDoc(name: string): string {
 
 const README = readDoc("README.md");
 const DATA_FORMAT = readDoc("DATA_FORMAT.md");
+const MIGRATION = readDoc("MIGRATION.md");
 const INSTALL_SH = readDoc(join("scripts", "install.sh"));
 
 /** Column names of a table, from `PRAGMA table_info`. */
@@ -108,6 +109,8 @@ describe("README.md matches the code", () => {
       "import",
       "backup",
       "notify",
+      "doctor",
+      "verify-copy",
     ]);
     for (const command of commands) {
       expect(
@@ -130,6 +133,7 @@ describe("docs contain no real host, path or secret", () => {
   const files: ReadonlyArray<readonly [string, string]> = [
     ["README.md", README],
     ["DATA_FORMAT.md", DATA_FORMAT],
+    ["MIGRATION.md", MIGRATION],
   ];
 
   test("no absolute /home/ paths", () => {
@@ -146,17 +150,17 @@ describe("docs contain no real host, path or secret", () => {
     }
   });
 
-  test("ts.net hosts are only the <your-machine>.<your-tailnet> placeholder", () => {
-    const allowedPrefix = "<your-machine>.<your-tailnet>";
+  test("ts.net hosts are only angle-bracket placeholders", () => {
+    // A real tailnet host looks like `something.tailnet.ts.net`; only a
+    // `<label>.<your-tailnet>.ts.net` placeholder is allowed (any label, e.g.
+    // `<vm-name>`, so MIGRATION.md can name the PC and the VM separately).
+    const placeholder = /<[a-z0-9-]+>\.<your-tailnet>\.ts\.net/g;
     for (const [name, text] of files) {
-      let index = text.indexOf(".ts.net");
-      while (index !== -1) {
-        expect(
-          text.slice(0, index).endsWith(allowedPrefix),
-          `${name}: a ts.net host must be the placeholder ${allowedPrefix}.ts.net`
-        ).toBe(true);
-        index = text.indexOf(".ts.net", index + 1);
-      }
+      const remaining = text.replace(placeholder, "");
+      expect(
+        remaining,
+        `${name}: every ts.net host must be a <label>.<your-tailnet>.ts.net placeholder`
+      ).not.toContain(".ts.net");
     }
   });
 
@@ -215,5 +219,21 @@ describe("DATA_FORMAT.md documents the phase-2 sources", () => {
     expect(DATA_FORMAT).toContain(
       "ep:<show simkl id>:<season>:<episode>:<started_at>"
     );
+  });
+});
+
+describe("MIGRATION.md documents the move checks", () => {
+  test("mentions the doctor and verify-copy commands", () => {
+    expect(MIGRATION).toContain("it doctor");
+    expect(MIGRATION).toContain("it verify-copy");
+  });
+
+  test("uses the correct sync/backup unit names", () => {
+    expect(MIGRATION).toContain("inputtracker-sync@audiobookshelf.timer");
+    expect(MIGRATION).toContain("inputtracker-sync@simkl.timer");
+    expect(MIGRATION).toContain("inputtracker-backup.timer");
+    // The old doc used a non-existent `--now` flag and a wrong unit glob.
+    expect(MIGRATION).not.toContain("backup --now");
+    expect(MIGRATION).not.toContain("inputtracker-sync-*");
   });
 });

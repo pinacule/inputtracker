@@ -5,6 +5,7 @@ import {
   type YearReview as YearReviewData,
 } from "../api";
 import { sourceIcon } from "../lib/calendar";
+import { GoalsCard } from "../components/GoalsCard";
 import {
   DEFAULT_TIMEZONE,
   formatDateTime,
@@ -416,9 +417,12 @@ export function YearReviewPage({ yearParam }: { yearParam?: string }) {
       {loading && <p class="muted stats-loading">Loading year…</p>}
 
       {data && data.totals.items === 0 && (
-        <section class="card stats-card" aria-label="Empty year">
-          <p class="muted stats-empty">Nothing recorded in {data.year}.</p>
-        </section>
+        <>
+          <section class="card stats-card" aria-label="Empty year">
+            <p class="muted stats-empty">Nothing recorded in {data.year}.</p>
+          </section>
+          <GoalsCard year={data.year} />
+        </>
       )}
 
       {data && data.totals.items > 0 && (
@@ -481,6 +485,9 @@ export function YearReviewPage({ yearParam }: { yearParam?: string }) {
               </div>
             </div>
           </section>
+
+          {/* Goals */}
+          <GoalsCard year={data.year} />
 
           {/* 2. Months */}
           <section class="card stats-card" aria-labelledby="yr-months-heading">
