@@ -1312,13 +1312,12 @@ body {
 }
 
 .stats-bar-val {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
+  line-height: 1.1;
+  min-height: 1em;
   color: var(--muted);
   white-space: nowrap;
   text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
 
 .stats-bar-track {

@@ -5,8 +5,11 @@ import {
   computeBarHeight,
   computeMaxMinutes,
   computeStackedSegments,
+  fillMonthGaps,
+  fillWeekGaps,
   formatHoursMinutes,
   formatMinutes,
+  formatMinutesShort,
   formatPeriodLabel,
   sourceColor,
   STATS_SOURCES,
@@ -46,10 +49,12 @@ export function Stats() {
     };
   }, [source]);
 
-  // Active periods for bar chart
+  // Active periods for bar chart (gaps filled so empty periods are visible)
   const buckets = useMemo(() => {
     if (!data) return [];
-    return period === "week" ? data.by_week : data.by_month;
+    return period === "week"
+      ? fillWeekGaps(data.by_week)
+      : fillMonthGaps(data.by_month);
   }, [data, period]);
 
   const maxMinutes = useMemo(() => {
@@ -178,17 +183,31 @@ export function Stats() {
               {buckets.map((b) => {
                 const periodKey = "week" in b ? (b as WeekStatBucket).week : (b as MonthStatBucket).month;
                 const label = formatPeriodLabel(periodKey, period);
-                const heightPct = computeBarHeight(b.minutes, maxMinutes, 2);
+                const fullValue = formatMinutes(b.minutes);
+                const hasValue = b.minutes > 0;
+                const heightPct = computeBarHeight(
+                  b.minutes,
+                  maxMinutes,
+                  hasValue ? 2 : 0
+                );
                 const segments = computeStackedSegments(b.by_source, b.minutes);
 
                 return (
-                  <div key={periodKey} class="stats-chart-col">
-                    <span class="stats-bar-val" title={`${formatMinutes(b.minutes)} total`}>
-                      {formatMinutes(b.minutes)}
+                  <div
+                    key={periodKey}
+                    class="stats-chart-col"
+                    aria-label={`${periodKey}: ${fullValue}`}
+                  >
+                    <span
+                      class="stats-bar-val"
+                      title={`${fullValue} total`}
+                      aria-hidden="true"
+                    >
+                      {hasValue ? formatMinutesShort(b.minutes) : ""}
                     </span>
                     <div
                       class="stats-bar-track"
-                      title={`${periodKey}: ${formatMinutes(b.minutes)}`}
+                      title={`${periodKey}: ${fullValue}`}
                     >
                       <div
                         class="stats-bar-fill"
