@@ -163,9 +163,22 @@ export interface AddEventResult {
   inserted: number;
 }
 
+export interface ImportSkipCounts {
+  ads: number;
+  no_video: number;
+  other: number;
+  invalid: number;
+}
+
 export interface ImportResult {
+  /** Which importer handled the upload. */
+  kind?: "native" | "youtube-takeout";
   seen: number;
   inserted: number;
+  /** Only for a YouTube Takeout upload: records in the JSON array. */
+  records?: number;
+  /** Only for a YouTube Takeout upload: counts per skip reason. */
+  skipped?: ImportSkipCounts;
   runId: number;
 }
 
@@ -311,10 +324,17 @@ export function addEvent(body: ManualEventInput): Promise<AddEventResult> {
   return postJson<AddEventResult>("/api/events", body);
 }
 
-export function importFile(file: File): Promise<ImportResult> {
+export async function importFile(file: File): Promise<ImportResult> {
   const form = new FormData();
   form.append("file", file);
-  return postForm<ImportResult>("/api/import", form);
+  // Let the browser set `Content-Type` including the multipart boundary.
+  const res = await fetch("/api/import", { method: "POST", body: form });
+  if (res.status === 413) {
+    throw new Error(
+      "File too large for upload. On the server run: bun run it import youtube-takeout <file>"
+    );
+  }
+  return parseResponse<ImportResult>(res);
 }
 
 export function getSyncStatus(): Promise<SyncStatusResult> {

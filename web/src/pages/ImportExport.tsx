@@ -89,7 +89,8 @@ export function ImportExport() {
         </h2>
         <p class="muted">
           Upload a native InputTracker export (<code>.json</code> or{" "}
-          <code>.csv</code>). Duplicates are skipped.
+          <code>.csv</code>). Duplicates are skipped. A YouTube Takeout{" "}
+          <code>watch-history.json</code> (JSON format) is accepted too.
         </p>
 
         <div class="form-field">
@@ -122,8 +123,22 @@ export function ImportExport() {
 
         {importResult && (
           <p class="alert alert-success" role="status">
-            {describeImport(importResult)} — {importResult.seen} seen,{" "}
-            {importResult.inserted} inserted
+            {importResult.kind === "youtube-takeout"
+              ? `YouTube Takeout — ${importResult.seen ?? 0} views, ${
+                  importResult.inserted
+                } new`
+              : `${describeImport(importResult)} — ${importResult.seen} seen, ${
+                  importResult.inserted
+                } inserted`}
+            {importResult.kind === "youtube-takeout" && importResult.skipped && (
+              <>
+                {" "}
+                — skipped {importResult.skipped.ads} ads,{" "}
+                {importResult.skipped.no_video} without video,{" "}
+                {importResult.skipped.other} other, {importResult.skipped.invalid}{" "}
+                invalid
+              </>
+            )}
           </p>
         )}
       </section>

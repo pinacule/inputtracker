@@ -27,6 +27,7 @@ import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
 import { addManual, localToUtcIso, type ManualInput } from "../io/manual.ts";
+import { importYoutubeTakeout } from "../sources/youtube/takeout.ts";
 import { createAbsClient, type AbsClient } from "../sources/audiobookshelf/client.ts";
 import {
   ABS_SOURCE,
@@ -63,6 +64,7 @@ export function usage(): string {
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
     "  import <file> [--format json|csv]        import a native export file into the DB",
+    "    import youtube-takeout <file>          import a YouTube Takeout watch-history JSON file",
     "  backup                                   snapshot the DB + JSON export into backup_dir",
     "",
     "More commands (serve) will be added in later tasks.",
@@ -371,6 +373,10 @@ function parseImportArgs(args: string[]): ImportParseResult {
 function runImport(args: string[], ctx: SyncContext): number {
   const { deps, out, err } = ctx;
 
+  if (args[0] === "youtube-takeout") {
+    return runYoutubeTakeoutImport(args.slice(1), ctx);
+  }
+
   const parsed = parseImportArgs(args);
   if (!parsed.ok) {
     err(parsed.message);
@@ -411,6 +417,72 @@ function runImport(args: string[], ctx: SyncContext): number {
   try {
     const result = importNative(db, text, format);
     out(`imported ${result.inserted} new of ${result.seen} events from ${file}`);
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
+function runYoutubeTakeoutImport(args: string[], ctx: SyncContext): number {
+  const { deps, out, err } = ctx;
+
+  const file = args[0];
+  if (file === undefined || file === "") {
+    err("Missing <file>.");
+    err(usage());
+    return EXIT_USAGE;
+  }
+  if (args.length > 1) {
+    err(`Unexpected argument: ${args[1] as string}`);
+    err(usage());
+    return EXIT_USAGE;
+  }
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+  const doReadFile =
+    deps.readFile ?? ((path: string) => readFileSync(path, "utf8"));
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let text: string;
+  try {
+    text = doReadFile(file);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const result = importYoutubeTakeout(db, text);
+    const { skipped } = result;
+    out(
+      `youtube-takeout: ${result.records} records, ${result.seen} views, ` +
+        `${result.inserted} new, skipped ${skipped.ads} ads, ` +
+        `${skipped.no_video} without video, ${skipped.other} other, ` +
+        `${skipped.invalid} invalid`
+    );
     return EXIT_OK;
   } catch (caught) {
     err(redactMessage(errorText(caught), config));
