@@ -20,6 +20,7 @@ import {
 import { openDb } from "../core/db.ts";
 import type { MediaType } from "../core/events.ts";
 import { LocalDbSink, type Sink } from "../core/sink.ts";
+import { runBackup } from "../io/backup.ts";
 import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
@@ -47,6 +48,7 @@ export function usage(): string {
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
     "  import <file> [--format json|csv]        import a native export file into the DB",
+    "  backup                                   snapshot the DB + JSON export into backup_dir",
     "",
     "More commands (serve) will be added in later tasks.",
   ].join("\n");
@@ -64,6 +66,8 @@ export interface CliDeps {
   err?: (line: string) => void;
   env?: Record<string, string | undefined>;
   newId?: () => string;
+  /** Timestamp used for the backup date stamp; defaults to the current time. */
+  now?: Date;
 }
 
 function errorText(err: unknown): string {
@@ -359,6 +363,56 @@ function runImport(args: string[], ctx: SyncContext): number {
   }
 }
 
+function runBackupCommand(args: string[], ctx: SyncContext): number {
+  const { deps, out, err } = ctx;
+
+  if (args.length > 0) {
+    err(`Unknown option: ${args[0]}`);
+    err(usage());
+    return EXIT_USAGE;
+  }
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const result = runBackup(db, {
+      dir: config.storage.backup_dir,
+      keep: config.storage.backup_keep,
+      now: deps.now,
+    });
+    out(
+      `backup written: ${result.dbPath}, ${result.jsonPath}; pruned ${result.pruned.length} files`
+    );
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
 interface AddArgs {
   type: string;
   title: string;
@@ -562,6 +616,10 @@ export async function runCli(
 
   if (command === "import") {
     return runImport(rest, { deps, out, err });
+  }
+
+  if (command === "backup") {
+    return runBackupCommand(rest, { deps, out, err });
   }
 
   err(`Unknown command: ${command}`);
