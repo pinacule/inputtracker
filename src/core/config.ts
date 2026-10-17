@@ -40,6 +40,11 @@ export interface SimklConfig {
   timeout_s: number;
 }
 
+export interface YoutubeConfig {
+  /** Base URL for video thumbnails (e.g. `https://i.ytimg.com/vi`). */
+  thumb_base_url: string;
+}
+
 export interface NotifyConfig {
   desktop: boolean;
   ntfy_url: string;
@@ -51,6 +56,7 @@ export interface Config {
   storage: StorageConfig;
   audiobookshelf: AudiobookshelfConfig;
   simkl: SimklConfig;
+  youtube: YoutubeConfig;
   notify: NotifyConfig;
   /** Redacted plain object (JSON.stringify uses this automatically). */
   toJSON(): unknown;
@@ -242,13 +248,23 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     timeout_s: readNumber(simklTable, "timeout_s", "simkl.timeout_s", 20),
   };
 
+  const youtubeTable = readTable(file, "youtube", "youtube");
+  const youtube: YoutubeConfig = {
+    thumb_base_url: readString(
+      youtubeTable,
+      "thumb_base_url",
+      "youtube.thumb_base_url",
+      "https://i.ytimg.com/vi"
+    ),
+  };
+
   const notifyTable = readTable(file, "notify", "notify");
   const notify: NotifyConfig = {
     desktop: readBoolean(notifyTable, "desktop", "notify.desktop", true),
     ntfy_url: readString(notifyTable, "ntfy_url", "notify.ntfy_url", ""),
   };
 
-  const config = { timezone, server, storage, audiobookshelf, simkl, notify } as Config;
+  const config = { timezone, server, storage, audiobookshelf, simkl, youtube, notify } as Config;
 
   // Redacted serialization: token is non-enumerable, so it is already omitted.
   Object.defineProperty(config, "toJSON", {

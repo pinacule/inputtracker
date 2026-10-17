@@ -21,11 +21,21 @@ export interface SourceOption {
 export const SOURCES: readonly SourceOption[] = [
   { value: "audiobookshelf", label: "Audiobookshelf", icon: "🎧", color: "#8b5cf6" },
   { value: "simkl", label: "Simkl", icon: "🎬", color: "#f59e0b" },
+  { value: "youtube", label: "YouTube", icon: "▶️", color: "#ef4444" },
   { value: "manual", label: "Manual", icon: "📝", color: "#10b981" },
 ];
 
 /** Fallback colour for a source that is not in `SOURCES`. */
 export const UNKNOWN_SOURCE_COLOR = "#3b82f6";
+
+/**
+ * Human-readable labels for ingest-run sources that are not event sources.
+ * These must never appear in `SOURCES` (and therefore not in the filters).
+ */
+const INGEST_SOURCE_LABELS: Readonly<Record<string, string>> = {
+  "youtube-takeout": "YouTube Takeout",
+  "native-import": "Import",
+};
 
 /** Alternative ids accepted for a source (e.g. the ABS short form). */
 const SOURCE_ALIASES: Readonly<Record<string, string>> = {
@@ -46,11 +56,20 @@ export function sourceEntry(value: string): SourceOption | undefined {
 }
 
 /**
- * Human-readable label for a source id. Unknown sources fall back to the
- * trimmed raw value so nothing is hidden from the user.
+ * Human-readable label for a source id. Ingest-run sources that are not event
+ * sources (e.g. `youtube-takeout`) are labelled from a separate map. Unknown
+ * sources fall back to the trimmed raw value so nothing is hidden from the user.
  */
 export function sourceLabel(value: string): string {
-  return sourceEntry(value)?.label ?? String(value ?? "").trim();
+  const entry = sourceEntry(value);
+  if (entry !== undefined) {
+    return entry.label;
+  }
+  const ingest = INGEST_SOURCE_LABELS[normalizeSource(value)];
+  if (ingest !== undefined) {
+    return ingest;
+  }
+  return String(value ?? "").trim();
 }
 
 /** Chart colour for a source id; unknown sources get the fallback blue. */

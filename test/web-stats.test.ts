@@ -1,14 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import {
+  autoMetricForSource,
   computeBarHeight,
+  computeMaxMetric,
   computeMaxMinutes,
+  computeMetricSegments,
   computeStackedSegments,
   fillMonthGaps,
   fillWeekGaps,
   formatHoursMinutes,
+  formatMetricShort,
+  formatMetricValue,
   formatMinutes,
   formatMinutesShort,
   formatPeriodLabel,
+  formatTopItemMetric,
+  metricValue,
+  showYoutubeMetricNote,
   sourceColor,
   STATS_SOURCES,
 } from "../web/src/lib/stats.ts";
@@ -170,10 +178,22 @@ describe("formatMinutesShort", () => {
 });
 
 describe("fillWeekGaps", () => {
-  test("fills missing weeks with empty zero-minute buckets", () => {
+  test("fills missing weeks with empty zero-minute buckets (count fields too)", () => {
     const filled = fillWeekGaps<WeekBucketLike>([
-      { week: "2026-W33", by_source: { manual: 30 }, minutes: 30 },
-      { week: "2026-W30", by_source: { manual: 60 }, minutes: 60 },
+      {
+        week: "2026-W33",
+        by_source: { manual: 30 },
+        minutes: 30,
+        count: 1,
+        count_by_source: { manual: 1 },
+      },
+      {
+        week: "2026-W30",
+        by_source: { manual: 60 },
+        minutes: 60,
+        count: 2,
+        count_by_source: { manual: 2 },
+      },
     ]);
     expect(filled.map((b) => b.week)).toEqual([
       "2026-W30",
@@ -181,15 +201,27 @@ describe("fillWeekGaps", () => {
       "2026-W32",
       "2026-W33",
     ]);
-    expect(filled[1]).toEqual({ week: "2026-W31", by_source: {}, minutes: 0 });
-    expect(filled[2]).toEqual({ week: "2026-W32", by_source: {}, minutes: 0 });
+    expect(filled[1]).toEqual({
+      week: "2026-W31",
+      by_source: {},
+      minutes: 0,
+      count: 0,
+      count_by_source: {},
+    });
+    expect(filled[2]).toEqual({
+      week: "2026-W32",
+      by_source: {},
+      minutes: 0,
+      count: 0,
+      count_by_source: {},
+    });
   });
 
   test("sorts unsorted input", () => {
     const filled = fillWeekGaps([
-      { week: "2026-W32", by_source: {}, minutes: 0 },
-      { week: "2026-W30", by_source: {}, minutes: 0 },
-      { week: "2026-W31", by_source: {}, minutes: 0 },
+      { week: "2026-W32", by_source: {}, minutes: 0, count: 0, count_by_source: {} },
+      { week: "2026-W30", by_source: {}, minutes: 0, count: 0, count_by_source: {} },
+      { week: "2026-W31", by_source: {}, minutes: 0, count: 0, count_by_source: {} },
     ]);
     expect(filled.map((b) => b.week)).toEqual([
       "2026-W30",
@@ -200,8 +232,8 @@ describe("fillWeekGaps", () => {
 
   test("handles a year boundary across a 53-week ISO year", () => {
     const filled = fillWeekGaps([
-      { week: "2026-W52", by_source: {}, minutes: 0 },
-      { week: "2027-W02", by_source: {}, minutes: 0 },
+      { week: "2026-W52", by_source: {}, minutes: 0, count: 0, count_by_source: {} },
+      { week: "2027-W02", by_source: {}, minutes: 0, count: 0, count_by_source: {} },
     ]);
     expect(filled.map((b) => b.week)).toEqual([
       "2026-W52",
@@ -213,8 +245,8 @@ describe("fillWeekGaps", () => {
 
   test("handles a year boundary across a 52-week ISO year", () => {
     const filled = fillWeekGaps([
-      { week: "2025-W51", by_source: {}, minutes: 0 },
-      { week: "2026-W01", by_source: {}, minutes: 0 },
+      { week: "2025-W51", by_source: {}, minutes: 0, count: 0, count_by_source: {} },
+      { week: "2026-W01", by_source: {}, minutes: 0, count: 0, count_by_source: {} },
     ]);
     expect(filled.map((b) => b.week)).toEqual([
       "2025-W51",
@@ -225,28 +257,54 @@ describe("fillWeekGaps", () => {
 
   test("preserves original bucket values", () => {
     const input: WeekBucketLike[] = [
-      { week: "2026-W30", by_source: { simkl: 120 }, minutes: 120 },
-      { week: "2026-W33", by_source: { manual: 45 }, minutes: 45 },
+      {
+        week: "2026-W30",
+        by_source: { simkl: 120 },
+        minutes: 120,
+        count: 1,
+        count_by_source: { simkl: 1 },
+      },
+      {
+        week: "2026-W33",
+        by_source: { manual: 45 },
+        minutes: 45,
+        count: 3,
+        count_by_source: { manual: 3 },
+      },
     ];
     const filled = fillWeekGaps(input);
     expect(filled[0]).toEqual(input[0]);
     expect(filled[3]).toEqual(input[1]);
     expect(filled[1]?.minutes).toBe(0);
     expect(filled[1]?.by_source).toEqual({});
+    expect(filled[1]?.count).toBe(0);
+    expect(filled[1]?.count_by_source).toEqual({});
   });
 
   test("returns empty for empty input and unchanged single bucket", () => {
     expect(fillWeekGaps([])).toEqual([]);
-    const single = { week: "2026-W10", by_source: { manual: 5 }, minutes: 5 };
+    const single = {
+      week: "2026-W10",
+      by_source: { manual: 5 },
+      minutes: 5,
+      count: 2,
+      count_by_source: { manual: 2 },
+    };
     expect(fillWeekGaps([single])).toEqual([single]);
   });
 });
 
 describe("fillMonthGaps", () => {
-  test("fills missing months across a year boundary", () => {
+  test("fills missing months across a year boundary (count fields too)", () => {
     const filled = fillMonthGaps<MonthBucketLike>([
-      { month: "2026-02", by_source: {}, minutes: 0 },
-      { month: "2025-11", by_source: { manual: 10 }, minutes: 10 },
+      { month: "2026-02", by_source: {}, minutes: 0, count: 0, count_by_source: {} },
+      {
+        month: "2025-11",
+        by_source: { manual: 10 },
+        minutes: 10,
+        count: 4,
+        count_by_source: { manual: 4 },
+      },
     ]);
     expect(filled.map((b) => b.month)).toEqual([
       "2025-11",
@@ -254,18 +312,91 @@ describe("fillMonthGaps", () => {
       "2026-01",
       "2026-02",
     ]);
-    expect(filled[1]).toEqual({ month: "2025-12", by_source: {}, minutes: 0 });
-    expect(filled[2]).toEqual({ month: "2026-01", by_source: {}, minutes: 0 });
+    expect(filled[1]).toEqual({
+      month: "2025-12",
+      by_source: {},
+      minutes: 0,
+      count: 0,
+      count_by_source: {},
+    });
+    expect(filled[2]).toEqual({
+      month: "2026-01",
+      by_source: {},
+      minutes: 0,
+      count: 0,
+      count_by_source: {},
+    });
     expect(filled[0]).toEqual({
       month: "2025-11",
       by_source: { manual: 10 },
       minutes: 10,
+      count: 4,
+      count_by_source: { manual: 4 },
     });
   });
 
   test("returns empty for empty input and unchanged single bucket", () => {
     expect(fillMonthGaps([])).toEqual([]);
-    const single = { month: "2026-07", by_source: { simkl: 9 }, minutes: 9 };
+    const single = {
+      month: "2026-07",
+      by_source: { simkl: 9 },
+      minutes: 9,
+      count: 1,
+      count_by_source: { simkl: 1 },
+    };
     expect(fillMonthGaps([single])).toEqual([single]);
+  });
+});
+
+describe("metric selection helpers", () => {
+  test("autoMetricForSource returns count only for the YouTube filter", () => {
+    expect(autoMetricForSource("youtube")).toBe("count");
+    expect(autoMetricForSource("")).toBe("minutes");
+    expect(autoMetricForSource("audiobookshelf")).toBe("minutes");
+    expect(autoMetricForSource("simkl")).toBe("minutes");
+  });
+
+  test("showYoutubeMetricNote shows only for Minutes + All/YouTube", () => {
+    expect(showYoutubeMetricNote("minutes", "")).toBe(true);
+    expect(showYoutubeMetricNote("minutes", "youtube")).toBe(true);
+    expect(showYoutubeMetricNote("minutes", "simkl")).toBe(false);
+    expect(showYoutubeMetricNote("count", "")).toBe(false);
+    expect(showYoutubeMetricNote("count", "youtube")).toBe(false);
+  });
+
+  test("metricValue and computeMaxMetric pick the chosen metric", () => {
+    const buckets = [
+      { minutes: 0, count: 3 },
+      { minutes: 90, count: 1 },
+    ];
+    expect(metricValue(buckets[0]!, "minutes")).toBe(0);
+    expect(metricValue(buckets[0]!, "count")).toBe(3);
+    expect(computeMaxMetric(buckets, "minutes")).toBe(90);
+    expect(computeMaxMetric(buckets, "count")).toBe(3);
+    expect(computeMaxMetric([], "count")).toBe(0);
+  });
+
+  test("computeMetricSegments computes per-source shares for counts", () => {
+    const segments = computeMetricSegments({ youtube: 3, manual: 1 }, 4);
+    expect(segments).toEqual([
+      { source: "youtube", value: 3, percentage: 75 },
+      { source: "manual", value: 1, percentage: 25 },
+    ]);
+    expect(computeMetricSegments({ youtube: 1 }, 0)).toEqual([]);
+  });
+
+  test("formatMetricValue and formatMetricShort label items and minutes", () => {
+    expect(formatMetricValue(12, "count")).toBe("12 items");
+    expect(formatMetricValue(1, "count")).toBe("1 item");
+    expect(formatMetricValue(0, "count")).toBe("0 items");
+    expect(formatMetricValue(90, "minutes")).toBe("1h 30m");
+    expect(formatMetricShort(12, "count")).toBe("12");
+    expect(formatMetricShort(90, "minutes")).toBe("1.5h");
+  });
+
+  test("formatTopItemMetric shows views when there are only counts", () => {
+    expect(formatTopItemMetric({ minutes: 0, count: 7 })).toBe("7 views");
+    expect(formatTopItemMetric({ minutes: 0, count: 1 })).toBe("1 view");
+    expect(formatTopItemMetric({ minutes: 90, count: 2 })).toBe("1h 30m");
   });
 });

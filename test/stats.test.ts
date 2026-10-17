@@ -22,6 +22,7 @@ function mockConfig(overrides: Partial<Config> = {}): Config {
     storage: { db_path: ":memory:", backup_dir: "/tmp/backups", backup_keep: 14 },
     audiobookshelf: { url: "http://localhost:13378", token: "secret", timeout_s: 20 },
     simkl: { client_id: "", base_url: "https://api.simkl.test", poster_base_url: "https://simkl.in/posters", timeout_s: 20 },
+    youtube: { thumb_base_url: "https://i.ytimg.com/vi" },
     notify: { desktop: false, ntfy_url: "" },
     toJSON: () => ({ ...cfg }),
     toString: () => JSON.stringify(cfg),
@@ -154,11 +155,15 @@ describe("aggregateStats pure aggregation", () => {
       week: "2026-W42",
       by_source: { audiobookshelf: 60, manual: 120 },
       minutes: 180,
+      count: 2,
+      count_by_source: { audiobookshelf: 1, manual: 1 },
     });
     expect(stats.by_week[1]).toEqual({
       week: "2026-W43",
       by_source: { audiobookshelf: 30 },
       minutes: 30,
+      count: 1,
+      count_by_source: { audiobookshelf: 1 },
     });
 
     // by_month
@@ -167,6 +172,8 @@ describe("aggregateStats pure aggregation", () => {
       month: "2026-10",
       by_source: { audiobookshelf: 90, manual: 120 },
       minutes: 210,
+      count: 3,
+      count_by_source: { audiobookshelf: 2, manual: 1 },
     });
 
     // top_items: Movie Beta (120 min, count 1), Book Alpha (90 min, count 2)

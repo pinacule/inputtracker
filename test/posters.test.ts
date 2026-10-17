@@ -79,6 +79,7 @@ function mockConfig(dbPath: string, overrides: Partial<Config> = {}): Config {
       poster_base_url: "https://simkl.in/posters",
       timeout_s: 20,
     },
+    youtube: { thumb_base_url: "https://i.ytimg.com/vi" },
     notify: { desktop: false, ntfy_url: "" },
     toJSON: () => ({}),
     toString: () => "",

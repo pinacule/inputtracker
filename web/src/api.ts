@@ -77,12 +77,20 @@ export interface WeekStatBucket {
   week: string; // "2026-W42" (ISO week, local)
   by_source: Record<string, number>;
   minutes: number;
+  /** Number of items in the bucket. */
+  count: number;
+  /** Number of items per source in the bucket. */
+  count_by_source: Record<string, number>;
 }
 
 export interface MonthStatBucket {
   month: string; // "2026-10"
   by_source: Record<string, number>;
   minutes: number;
+  /** Number of items in the bucket. */
+  count: number;
+  /** Number of items per source in the bucket. */
+  count_by_source: Record<string, number>;
 }
 
 export interface TopItem {

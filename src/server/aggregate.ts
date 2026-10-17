@@ -15,6 +15,7 @@
 
 import type { Database } from "bun:sqlite";
 import { isValidSimklPoster } from "./posters.ts";
+import { isValidYoutubeVideoId } from "./thumbs.ts";
 
 export const CONSUMPTION_KINDS = new Set([
   "listening_session",
@@ -124,12 +125,20 @@ export interface WeekStatBucket {
   week: string; // "2026-W42" (ISO week, local)
   by_source: Record<string, number>;
   minutes: number;
+  /** Number of items in the bucket. */
+  count: number;
+  /** Number of items per source in the bucket. */
+  count_by_source: Record<string, number>;
 }
 
 export interface MonthStatBucket {
   month: string; // "2026-10"
   by_source: Record<string, number>;
   minutes: number;
+  /** Number of items in the bucket. */
+  count: number;
+  /** Number of items per source in the bucket. */
+  count_by_source: Record<string, number>;
 }
 
 export interface TopItem {
@@ -227,6 +236,9 @@ export function parseExternalIds(
  *
  * `/api/poster/simkl/<path>` for Simkl events carrying a `simkl_poster` path
  * (validated against `SIMKL_POSTER_RE`), otherwise null.
+ *
+ * `/api/thumb/youtube/<id>` for YouTube events carrying a `youtube_video` id
+ * (validated against `YOUTUBE_VIDEO_RE`), otherwise null.
  */
 export function coverUrlFor(event: {
   source?: string;
@@ -239,6 +251,14 @@ export function coverUrlFor(event: {
     const poster = ids?.["simkl_poster"];
     if (typeof poster === "string" && isValidSimklPoster(poster)) {
       return `/api/poster/simkl/${poster}`;
+    }
+    return null;
+  }
+  if (event.source === "youtube") {
+    const ids = parseExternalIds(event.external_ids);
+    const video = ids?.["youtube_video"];
+    if (typeof video === "string" && isValidYoutubeVideoId(video)) {
+      return `/api/thumb/youtube/${video}`;
     }
     return null;
   }
@@ -598,11 +618,23 @@ export function aggregateStats(
 
   const byWeekMap = new Map<
     string,
-    { week: string; bySourceSeconds: Record<string, number>; totalSeconds: number }
+    {
+      week: string;
+      bySourceSeconds: Record<string, number>;
+      bySourceCount: Record<string, number>;
+      totalSeconds: number;
+      count: number;
+    }
   >();
   const byMonthMap = new Map<
     string,
-    { month: string; bySourceSeconds: Record<string, number>; totalSeconds: number }
+    {
+      month: string;
+      bySourceSeconds: Record<string, number>;
+      bySourceCount: Record<string, number>;
+      totalSeconds: number;
+      count: number;
+    }
   >();
   const topItemsMap = new Map<
     string,
@@ -649,23 +681,41 @@ export function aggregateStats(
     const week = getIsoWeek(local.date);
     let weekEntry = byWeekMap.get(week);
     if (!weekEntry) {
-      weekEntry = { week, bySourceSeconds: {}, totalSeconds: 0 };
+      weekEntry = {
+        week,
+        bySourceSeconds: {},
+        bySourceCount: {},
+        totalSeconds: 0,
+        count: 0,
+      };
       byWeekMap.set(week, weekEntry);
     }
     weekEntry.bySourceSeconds[event.source] =
       (weekEntry.bySourceSeconds[event.source] ?? 0) + dur;
+    weekEntry.bySourceCount[event.source] =
+      (weekEntry.bySourceCount[event.source] ?? 0) + 1;
     weekEntry.totalSeconds += dur;
+    weekEntry.count += 1;
 
     // by_month
     const month = local.date.slice(0, 7);
     let monthEntry = byMonthMap.get(month);
     if (!monthEntry) {
-      monthEntry = { month, bySourceSeconds: {}, totalSeconds: 0 };
+      monthEntry = {
+        month,
+        bySourceSeconds: {},
+        bySourceCount: {},
+        totalSeconds: 0,
+        count: 0,
+      };
       byMonthMap.set(month, monthEntry);
     }
     monthEntry.bySourceSeconds[event.source] =
       (monthEntry.bySourceSeconds[event.source] ?? 0) + dur;
+    monthEntry.bySourceCount[event.source] =
+      (monthEntry.bySourceCount[event.source] ?? 0) + 1;
     monthEntry.totalSeconds += dur;
+    monthEntry.count += 1;
 
     // top_items
     const effectiveTitle = getSeriesOrTitle(event);
@@ -714,6 +764,8 @@ export function aggregateStats(
         week: w.week,
         by_source,
         minutes: w.totalSeconds / 60,
+        count: w.count,
+        count_by_source: { ...w.bySourceCount },
       };
     });
 
@@ -728,6 +780,8 @@ export function aggregateStats(
         month: m.month,
         by_source,
         minutes: m.totalSeconds / 60,
+        count: m.count,
+        count_by_source: { ...m.bySourceCount },
       };
     });
 
