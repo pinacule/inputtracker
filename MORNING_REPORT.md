@@ -85,3 +85,4 @@ Check on the phone:
 - 2026-10-17 17:41 CEST — overnight loop ENDED after 3 steps
 - 2026-10-17 18:17 CEST — overnight loop STARTED
 - 2026-10-17 18:52 CEST — antigravity gemini-3.8-flash-high LIMIT HIT on S01, retry after 19:07 CEST — no message
+- 2026-10-17 19:21 CEST — antigravity (gemini-3.8-flash-high) RECOVERED
