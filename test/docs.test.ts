@@ -52,7 +52,7 @@ function cliCommands(): string[] {
       break;
     }
     const match = /^ {2}(\S+)/.exec(line);
-    if (match) {
+    if (match && !commands.includes(match[1] as string)) {
       commands.push(match[1] as string);
     }
   }
@@ -100,7 +100,15 @@ describe("DATA_FORMAT.md matches the database", () => {
 describe("README.md matches the code", () => {
   test("mentions every top-level CLI command from usage()", () => {
     const commands = cliCommands();
-    expect(commands).toEqual(["sync", "auth", "add", "export", "import", "backup"]);
+    expect(commands).toEqual([
+      "sync",
+      "auth",
+      "add",
+      "export",
+      "import",
+      "backup",
+      "notify",
+    ]);
     for (const command of commands) {
       expect(
         README,

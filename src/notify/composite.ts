@@ -6,7 +6,7 @@
  * affecting a sync run.
  */
 
-import type { Notifier } from "./types.ts";
+import type { NotifyKind, Notifier } from "./types.ts";
 
 export class CompositeNotifier implements Notifier {
   private readonly notifiers: readonly Notifier[];
@@ -15,11 +15,11 @@ export class CompositeNotifier implements Notifier {
     this.notifiers = notifiers;
   }
 
-  async notify(title: string, body: string): Promise<void> {
+  async notify(title: string, body: string, kind?: NotifyKind): Promise<void> {
     await Promise.all(
       this.notifiers.map(async (notifier) => {
         try {
-          await notifier.notify(title, body);
+          await notifier.notify(title, body, kind);
         } catch {
           // One channel failing must not affect the others or the caller.
         }

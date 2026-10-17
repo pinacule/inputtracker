@@ -33,18 +33,22 @@ const UNIT_FILES = [
   "inputtracker-sync@simkl.timer",
   "inputtracker-backup.service",
   "inputtracker-backup.timer",
+  "inputtracker-weekly.service",
+  "inputtracker-weekly.timer",
 ] as const;
 
 const SERVICE_FILES = [
   "inputtracker.service",
   "inputtracker-sync@.service",
   "inputtracker-backup.service",
+  "inputtracker-weekly.service",
 ] as const;
 
 const TIMER_FILES = [
   "inputtracker-sync@audiobookshelf.timer",
   "inputtracker-sync@simkl.timer",
   "inputtracker-backup.timer",
+  "inputtracker-weekly.timer",
 ] as const;
 
 function readDeploy(name: string): string {
@@ -218,6 +222,20 @@ describe("deploy files: required directives", () => {
     expect(directive(timer, "OnCalendar")).toBe("*-*-* 03:30:00");
     expect(directive(timer, "Persistent")).toBe("true");
     expect(directive(timer, "Unit")).toBe("inputtracker-backup.service");
+  });
+
+  test("weekly summary service is a oneshot `it notify weekly`", () => {
+    const service = readDeploy("inputtracker-weekly.service");
+    expect(directive(service, "Type")).toBe("oneshot");
+    expect(directive(service, "WorkingDirectory")).toBe("@APP_DIR@");
+    expect(directive(service, "ExecStart")).toBe(
+      "@BUN@ run src/cli/index.ts notify weekly"
+    );
+
+    const timer = readDeploy("inputtracker-weekly.timer");
+    expect(directive(timer, "OnCalendar")).toBe("Sun *-*-* 19:00:00");
+    expect(directive(timer, "Persistent")).toBe("true");
+    expect(directive(timer, "Unit")).toBe("inputtracker-weekly.service");
   });
 
   test("units do not hard-code the config path", () => {
@@ -465,7 +483,7 @@ describe("systemd-analyze verification", () => {
         "systemctl --user daemon-reload",
         "bun install --frozen-lockfile",
         "bun run build:web",
-        "systemctl --user enable --now inputtracker.service inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-backup.timer",
+        "systemctl --user enable --now inputtracker.service inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-backup.timer inputtracker-weekly.timer",
         "systemctl --user restart inputtracker.service",
       ]);
 

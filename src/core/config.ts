@@ -48,6 +48,12 @@ export interface YoutubeConfig {
 export interface NotifyConfig {
   desktop: boolean;
   ntfy_url: string;
+  /** Optional ntfy access token (`Authorization: Bearer …`); never logged. */
+  ntfy_token: string;
+  /** Web app URL sent as the ntfy `Click` header when set. */
+  app_url: string;
+  /** Weekly summary push, off by default. */
+  weekly_summary: boolean;
 }
 
 export interface Config {
@@ -262,7 +268,18 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   const notify: NotifyConfig = {
     desktop: readBoolean(notifyTable, "desktop", "notify.desktop", true),
     ntfy_url: readString(notifyTable, "ntfy_url", "notify.ntfy_url", ""),
+    ntfy_token: readString(notifyTable, "ntfy_token", "notify.ntfy_token", ""),
+    app_url: readString(notifyTable, "app_url", "notify.app_url", ""),
+    weekly_summary: readBoolean(
+      notifyTable,
+      "weekly_summary",
+      "notify.weekly_summary",
+      false
+    ),
   };
+  // `ntfy_token` is handled by the key-name rule in `redactValue` (any key
+  // matching /token/ is masked) and by `secretsFrom` for free-text masking, so
+  // `config.toJSON()`/`toString()`/`redact(config)` can never reveal it.
 
   const config = { timezone, server, storage, audiobookshelf, simkl, youtube, notify } as Config;
 
@@ -309,9 +326,11 @@ function secretsFrom(value: unknown): string[] {
 
   if (isConfigLike(value)) {
     add((value as Config).audiobookshelf?.token);
+    add((value as Config).notify?.ntfy_token);
   }
   if (activeConfig) {
     add(activeConfig.audiobookshelf.token);
+    add(activeConfig.notify?.ntfy_token);
   }
 
   return secrets;
@@ -357,11 +376,19 @@ export function redact(value: unknown): string {
   return json === undefined ? String(value) : json;
 }
 
-/** Replace every occurrence of the configured token in free text. */
+/** Replace every configured token (ABS API key, ntfy token) in free text. */
 export function redactString(text: string, config: Config): string {
-  const token = config?.audiobookshelf?.token;
-  if (typeof token !== "string" || token === "") {
-    return text;
+  const secrets: string[] = [];
+  const abs = config?.audiobookshelf?.token;
+  if (typeof abs === "string" && abs !== "") {
+    secrets.push(abs);
   }
-  return maskString(text, [token]);
+  // Optional in hand-built (partial) configs, hence the guards.
+  const notify = (config as { notify?: { ntfy_token?: string } } | null | undefined)
+    ?.notify;
+  const ntfy = notify?.ntfy_token;
+  if (typeof ntfy === "string" && ntfy !== "") {
+    secrets.push(ntfy);
+  }
+  return maskString(text, secrets);
 }

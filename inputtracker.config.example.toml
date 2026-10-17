@@ -23,6 +23,17 @@ timeout_s = 20
 desktop = true
 # Optional ntfy topic URL (e.g. "https://ntfy.sh/my-topic"); leave empty to off.
 ntfy_url = ""
+# Optional ntfy access token ("Bearer ..." auth for protected ntfy servers).
+# ntfy_token = "YOUR_NTFY_TOKEN"
+# Optional web app URL (e.g. its Tailscale address); pushes become tappable via
+# the ntfy "Click" header. Not sent when empty.
+# app_url = "http://100.x.y.z:8787"
+# Weekly summary push (once a week, "it notify weekly"): off by default. When
+# enabled, the titles of what you consumed are sent to the ntfy server.
+# weekly_summary = false
+# Note: ntfy.sh topics are public by name. Pick a long random topic name (or
+# host your own ntfy server / use a token), because anyone who knows the topic
+# string can see the pushes.
 
 # [simkl]
 # Register a V2 app, type 'TV, devices & command line' at https://simkl.com/settings/developer/, paste its client_id

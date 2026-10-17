@@ -20,8 +20,19 @@ import {
 import { openDb } from "../core/db.ts";
 import type { MediaType } from "../core/events.ts";
 import { LocalDbSink, type Sink } from "../core/sink.ts";
-import { buildNotifier, reportSyncResult, type Notifier } from "../notify/index.ts";
-import { runBackup } from "../io/backup.ts";
+import {
+  buildChannels,
+  buildNotifier,
+  buildWeeklySummary,
+  reportSyncResult,
+  type NotifyChannel,
+  type Notifier,
+} from "../notify/index.ts";
+import {
+  runBackup as defaultRunBackup,
+  type BackupOptions,
+  type BackupResult,
+} from "../io/backup.ts";
 import { prefetchCovers } from "../server/covers.ts";
 import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
@@ -60,6 +71,10 @@ export const EXIT_OK = 0;
 export const EXIT_USAGE = 1;
 export const EXIT_FAILURE = 2;
 
+/** Message sent by `it notify test` to every configured channel. */
+const TEST_NOTICE_TITLE = "InputTracker test notification";
+const TEST_NOTICE_BODY = "InputTracker test notification";
+
 export function usage(): string {
   return [
     "inputtracker — personal input tracking",
@@ -74,6 +89,8 @@ export function usage(): string {
     "  import <file> [--format json|csv]        import a native export file into the DB",
     "    import youtube-takeout <file>          import a YouTube Takeout watch-history JSON file",
     "  backup                                   snapshot the DB + JSON export into backup_dir",
+    "  notify test                              test every configured notification channel",
+    "  notify weekly                            push the weekly summary (needs notify.weekly_summary)",
     "",
     "More commands (serve) will be added in later tasks.",
   ].join("\n");
@@ -89,7 +106,10 @@ export interface CliDeps {
   /** Cover cache fill after a successful sync; defaults to the real `prefetchCovers`. */
   prefetchCovers?: typeof prefetchCovers;
   buildNotifier?: (cfg: Config) => Notifier;
+  buildChannels?: (cfg: Config) => NotifyChannel[];
   reportSyncResult?: typeof reportSyncResult;
+  /** Backup executor override (tests); defaults to `runBackup`. */
+  runBackup?: (db: Database, options: BackupOptions) => BackupResult;
   writeFile?: (path: string, data: string) => void;
   readFile?: (path: string) => string;
   out?: (line: string) => void;
@@ -593,7 +613,10 @@ function runYoutubeTakeoutImport(args: string[], ctx: SyncContext): number {
   }
 }
 
-function runBackupCommand(args: string[], ctx: SyncContext): number {
+async function runBackupCommand(
+  args: string[],
+  ctx: SyncContext
+): Promise<number> {
   const { deps, out, err } = ctx;
 
   if (args.length > 0) {
@@ -604,6 +627,9 @@ function runBackupCommand(args: string[], ctx: SyncContext): number {
 
   const doLoadConfig = deps.loadConfig ?? loadConfig;
   const doOpenDb = deps.openDb ?? openDb;
+  const doBackup = deps.runBackup ?? defaultRunBackup;
+  const makeNotifier = deps.buildNotifier ?? buildNotifier;
+  const report = deps.reportSyncResult ?? reportSyncResult;
 
   let config: Config;
   try {
@@ -621,8 +647,16 @@ function runBackupCommand(args: string[], ctx: SyncContext): number {
     return EXIT_FAILURE;
   }
 
+  // The notifier is best-effort: a broken channel must not affect the backup.
+  let notifier: Notifier;
   try {
-    const result = runBackup(db, {
+    notifier = makeNotifier(config);
+  } catch {
+    notifier = { notify: async () => {} };
+  }
+
+  try {
+    const result = doBackup(db, {
       dir: config.storage.backup_dir,
       keep: config.storage.backup_keep,
       now: deps.now,
@@ -630,9 +664,13 @@ function runBackupCommand(args: string[], ctx: SyncContext): number {
     out(
       `backup written: ${result.dbPath}, ${result.jsonPath}; pruned ${result.pruned.length} files`
     );
+    // Value alerts reuse the once-per-outage state logic of the sync alerts.
+    await reportSyncSafely(report, db, "backup", true, undefined, notifier);
     return EXIT_OK;
   } catch (caught) {
-    err(redactMessage(errorText(caught), config));
+    const message = redactMessage(errorText(caught), config);
+    err(message);
+    await reportSyncSafely(report, db, "backup", false, message, notifier);
     return EXIT_FAILURE;
   } finally {
     try {
@@ -874,6 +912,141 @@ async function runAuth(args: string[], ctx: SyncContext): Promise<number> {
 }
 
 /**
+ * Send the test notification through every configured channel and report each
+ * channel by name only — never a URL, a topic or a token. Exit codes: 0 when
+ * at least one channel succeeded, 2 when none did (but some were configured),
+ * 1 when no channel is configured at all.
+ */
+async function runNotifyTest(ctx: SyncContext): Promise<number> {
+  const { deps, out, err } = ctx;
+  const makeChannels =
+    deps.buildChannels ??
+    ((cfg: Config) => buildChannels(cfg, { sleep: deps.sleep }));
+
+  let config: Config;
+  try {
+    config = (deps.loadConfig ?? loadConfig)(
+      deps.env ? { env: deps.env } : undefined
+    );
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let channels: NotifyChannel[];
+  try {
+    channels = makeChannels(config);
+  } catch {
+    channels = [];
+  }
+
+  if (channels.length === 0) {
+    out("No notification channel is configured.");
+    out("Set notify.ntfy_url (or enable notify.desktop) and retry.");
+    return EXIT_USAGE;
+  }
+
+  const title = TEST_NOTICE_TITLE;
+  const body = TEST_NOTICE_BODY;
+  const results: string[] = [];
+  let anyOk = false;
+  for (const channel of channels) {
+    let ok = false;
+    try {
+      await channel.notifier.notify(title, body, "test");
+      ok = true;
+      anyOk = true;
+    } catch {
+      // The channel name is enough; the error text may name a URL-shaped value.
+      ok = false;
+    }
+    results.push(`${channel.name}: ${ok ? "ok" : "failed"}`);
+  }
+  for (const line of results) {
+    out(line);
+  }
+  return anyOk ? EXIT_OK : EXIT_FAILURE;
+}
+
+/**
+ * Push the weekly summary through every configured channel. Disabled by
+ * default (`notify.weekly_summary`), in which case nothing is sent.
+ * Exit codes mirror the test command: 0 ok, 2 all channels failed, 1 when no
+ * channel is configured.
+ */
+async function runNotifyWeekly(ctx: SyncContext): Promise<number> {
+  const { deps, out, err } = ctx;
+  const makeChannels =
+    deps.buildChannels ??
+    ((cfg: Config) => buildChannels(cfg, { sleep: deps.sleep }));
+
+  let config: Config;
+  try {
+    config = (deps.loadConfig ?? loadConfig)(
+      deps.env ? { env: deps.env } : undefined
+    );
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  if (!config.notify?.weekly_summary) {
+    out("weekly summary disabled");
+    return EXIT_OK;
+  }
+
+  let channels: NotifyChannel[];
+  try {
+    channels = makeChannels(config);
+  } catch {
+    channels = [];
+  }
+  if (channels.length === 0) {
+    out("No notification channel is configured.");
+    out("Set notify.ntfy_url (or enable notify.desktop) and retry.");
+    return EXIT_USAGE;
+  }
+
+  let summary: { title: string; body: string };
+  try {
+    const db = (deps.openDb ?? openDb)(config.storage.db_path);
+    try {
+      summary = buildWeeklySummary(db, {
+        tz: config.timezone,
+        now: deps.now,
+      });
+    } finally {
+      try {
+        db.close();
+      } catch {
+        // ignore close errors
+      }
+    }
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  const results: string[] = [];
+  let anyOk = false;
+  for (const channel of channels) {
+    let ok = false;
+    try {
+      await channel.notifier.notify(summary.title, summary.body, "summary");
+      ok = true;
+      anyOk = true;
+    } catch {
+      ok = false;
+    }
+    results.push(`${channel.name}: ${ok ? "sent" : "failed"}`);
+  }
+  for (const line of results) {
+    out(line);
+  }
+  return anyOk ? EXIT_OK : EXIT_FAILURE;
+}
+
+/**
  * Run the CLI for the given argument list (without the program name).
  * Returns the process exit code; never calls `process.exit`.
  */
@@ -916,7 +1089,19 @@ export async function runCli(
   }
 
   if (command === "backup") {
-    return runBackupCommand(rest, { deps, out, err });
+    return await runBackupCommand(rest, { deps, out, err });
+  }
+
+  if (command === "notify") {
+    const sub = rest[0];
+    if (sub === "test") {
+      return await runNotifyTest({ deps, out, err });
+    }
+    if (sub === "weekly") {
+      return await runNotifyWeekly({ deps, out, err });
+    }
+    err("Usage: it notify test|weekly");
+    return EXIT_USAGE;
   }
 
   err(`Unknown command: ${command}`);
