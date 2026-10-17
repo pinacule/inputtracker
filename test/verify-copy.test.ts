@@ -21,13 +21,16 @@ import { join } from "node:path";
 import { runCli } from "../src/cli/index.ts";
 import { runVerifyCopy } from "../src/cli/verify-copy.ts";
 import type { Config } from "../src/core/config.ts";
-import { openDb } from "../src/core/db.ts";
+import { migrations, openDb } from "../src/core/db.ts";
 import {
   insertEvents,
   recordHash,
   startRun,
   type NewEvent,
 } from "../src/core/events.ts";
+
+/** Highest schema version the code knows; tests must not hard-code it. */
+const LATEST_SCHEMA = Math.max(...migrations.map((m) => m.version));
 
 let root: string;
 
@@ -161,7 +164,7 @@ describe("it verify-copy", () => {
     const text = captured.lines.join("\n");
 
     expect(code).toBe(0);
-    expect(text).toContain("schema: reference v1, copy v99");
+    expect(text).toContain(`schema: reference v${LATEST_SCHEMA}, copy v99`);
     expect(text).toContain("WARN schema version differs");
   });
 

@@ -9,6 +9,7 @@ import {
   type MonthStatBucket,
 } from "../api";
 import { sourceIcon } from "../lib/calendar";
+import { GoalsCard } from "../components/GoalsCard";
 import { formatLocalDay } from "../lib/format-date";
 import {
   describeCurrentStreak,
@@ -79,6 +80,13 @@ export function Stats() {
       setMetric("count");
     }
   };
+
+  const currentYear = useMemo(() => {
+    if (insights?.streaks.today) {
+      return Number(insights.streaks.today.slice(0, 4));
+    }
+    return new Date().getFullYear();
+  }, [insights?.streaks.today]);
 
   useEffect(() => {
     let cancelled = false;
@@ -424,6 +432,9 @@ export function Stats() {
           </>
         )}
       </section>
+
+      {/* Goals Section */}
+      <GoalsCard year={currentYear} />
 
       {/* Top Items Section */}
       <section class="card stats-card" aria-labelledby="stats-top-heading">

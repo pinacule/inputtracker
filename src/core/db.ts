@@ -97,6 +97,59 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: "goals",
+    up: (db: Database) => {
+      db.run(`
+        CREATE TABLE IF NOT EXISTS goals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          record_hash TEXT NOT NULL UNIQUE,
+          goal_id TEXT NOT NULL,
+          rev_id TEXT NOT NULL,
+          year INTEGER NOT NULL,
+          metric TEXT NOT NULL CHECK (metric IN ('items','hours','titles','active_days')),
+          source TEXT,
+          media_type TEXT,
+          target REAL NOT NULL CHECK (target > 0),
+          archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0,1)),
+          created_at TEXT NOT NULL
+        );
+      `);
+
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_goals_goal_id
+        ON goals (goal_id);
+      `);
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS goals_no_update
+        BEFORE UPDATE ON goals
+        BEGIN
+          SELECT RAISE(ABORT, 'goals is append-only');
+        END;
+      `);
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS goals_no_delete
+        BEFORE DELETE ON goals
+        BEGIN
+          SELECT RAISE(ABORT, 'goals is append-only');
+        END;
+      `);
+
+      db.run(`
+        CREATE VIEW IF NOT EXISTS goals_latest AS
+        SELECT *
+        FROM goals
+        WHERE id IN (
+          SELECT MAX(id)
+          FROM goals
+          GROUP BY goal_id
+        );
+      `);
+    },
+  },
 ];
 
 export function migrate(db: Database): void {

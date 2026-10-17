@@ -44,3 +44,17 @@ export interface SchemaMigrationRow {
   version: number;
   applied_at: string;
 }
+
+export interface GoalRow {
+  id: number;
+  record_hash: string;
+  goal_id: string;
+  rev_id: string;
+  year: number;
+  metric: string;
+  source: string | null;
+  media_type: string | null;
+  target: number;
+  archived: number;
+  created_at: string;
+}

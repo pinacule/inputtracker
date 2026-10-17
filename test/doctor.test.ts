@@ -27,8 +27,11 @@ import {
   type DoctorRunResult,
 } from "../src/cli/doctor.ts";
 import { loadConfig, type Config } from "../src/core/config.ts";
-import { openDb } from "../src/core/db.ts";
+import { migrations, openDb } from "../src/core/db.ts";
 import { simklTokenPath } from "../src/sources/simkl/token.ts";
+
+/** Highest schema version the code knows; tests must not hard-code it. */
+const LATEST_SCHEMA = Math.max(...migrations.map((m) => m.version));
 
 let root: string;
 
@@ -137,7 +140,7 @@ describe("it doctor", () => {
     }
     expect(text).toContain("OK   arch: x86_64");
     expect(text).toContain("OK   bun: 1.2.3");
-    expect(text).toContain("schema v1 (latest)");
+    expect(text).toContain(`schema v${LATEST_SCHEMA} (latest)`);
     expect(text).not.toContain("FAIL");
     expect(text).not.toContain("WARN");
   });
