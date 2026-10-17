@@ -1,0 +1,131 @@
+{
+  "total": 2,
+  "numPages": 1,
+  "page": 0,
+  "itemsPerPage": 10,
+  "sessions": [
+    {
+      "id": "session-fake-book-1",
+      "userId": "user-fake-1",
+      "libraryId": "lib-fake-1",
+      "libraryItemId": "item-fake-book-1",
+      "bookId": "book-fake-1",
+      "episodeId": null,
+      "mediaType": "book",
+      "mediaMetadata": {
+        "title": "The Synthetic Tale",
+        "subtitle": "A Fake Journey",
+        "authors": [
+          {
+            "id": "author-fake-1",
+            "name": "Fake Author"
+          }
+        ],
+        "narrators": ["Narrator Fake"],
+        "series": [],
+        "genres": ["Fiction"],
+        "publishedYear": "2024",
+        "publishedDate": "2024-01-01",
+        "publisher": "Synthetic Press",
+        "description": "A purely synthetic test audiobook.",
+        "isbn": null,
+        "asin": null,
+        "language": "en",
+        "explicit": false,
+        "abridged": false
+      },
+      "chapters": [],
+      "displayTitle": "The Synthetic Tale",
+      "displayAuthor": "Fake Author",
+      "coverPath": "/fake/covers/book-1.jpg",
+      "duration": 3600,
+      "playMethod": 0,
+      "mediaPlayer": "html5",
+      "deviceInfo": {
+        "id": "device-fake-1",
+        "userId": "user-fake-1",
+        "deviceId": "dev-uuid-1",
+        "ipAddress": "203.0.113.7",
+        "browserName": "Firefox",
+        "browserVersion": "120.0",
+        "osName": "Linux",
+        "osVersion": "6.5",
+        "clientVersion": "1.0.0",
+        "manufacturer": "Framework",
+        "model": "Laptop",
+        "sdkVersion": null,
+        "clientName": "ABS Web",
+        "deviceName": "Linux Laptop"
+      },
+      "serverVersion": "2.7.0",
+      "date": "2026-10-17",
+      "dayOfWeek": "Saturday",
+      "timeListening": 1200,
+      "startTime": 600,
+      "currentTime": 1800,
+      "startedAt": 1760688900000,
+      "updatedAt": 1760690100000
+    },
+    {
+      "id": "session-fake-podcast-1",
+      "userId": "user-fake-1",
+      "libraryId": "lib-fake-2",
+      "libraryItemId": "item-fake-podcast-1",
+      "bookId": "podcast-fake-1",
+      "episodeId": "ep-fake-1",
+      "mediaType": "podcast",
+      "mediaMetadata": {
+        "title": "Synthetic Tech Cast",
+        "subtitle": "Episode 1",
+        "authors": [
+          {
+            "id": "host-fake-1",
+            "name": "Fake Host"
+          }
+        ],
+        "narrators": [],
+        "series": [],
+        "genres": ["Technology"],
+        "publishedYear": "2025",
+        "publishedDate": "2025-05-01",
+        "publisher": "Synthetic Audio",
+        "description": "Episode 1 discussing pure functions.",
+        "isbn": null,
+        "asin": null,
+        "language": "en",
+        "explicit": false,
+        "abridged": false
+      },
+      "chapters": [],
+      "displayTitle": "Episode 1: Pure Functions",
+      "displayAuthor": "Synthetic Tech Cast",
+      "coverPath": null,
+      "duration": 1800,
+      "playMethod": 0,
+      "mediaPlayer": "html5",
+      "deviceInfo": {
+        "id": "device-fake-2",
+        "userId": "user-fake-1",
+        "deviceId": "dev-uuid-2",
+        "ipAddress": "203.0.113.7",
+        "browserName": null,
+        "browserVersion": null,
+        "osName": "Android",
+        "osVersion": "14",
+        "clientVersion": "0.9.72",
+        "manufacturer": "Google",
+        "model": "Pixel",
+        "sdkVersion": "34",
+        "clientName": "ABS Mobile"
+      },
+      "serverVersion": "2.7.0",
+      "date": "2026-10-17",
+      "dayOfWeek": "Saturday",
+      "timeListening": 900,
+      "startTime": 0,
+      "currentTime": 900,
+      "startedAt": 1760692000000,
+      "updatedAt": 1760692900000
+    }
+  ]
+}
