@@ -3,7 +3,7 @@
 Updated by the manager after every task. If the run stopped early, this is the state at that point.
 
 ## Summary
-Run in progress. Now: T19 smoke test (antigravity).
+Run in progress. T19 smoke test merged (30 checks green, also on main after T21/T22; manager confirmed a fake-ABS 500 makes it fail). Now: T20 docs (opencode).
 
 ## Done
 | Task | Worker | Model | Attempts | Commit |
@@ -34,6 +34,7 @@ Run in progress. Now: T19 smoke test (antigravity).
 | F14b Backup hardening | opencode | deepseek-v4.1-flash-free | 1 | 0124e83 |
 | T16b Date format polish | opencode | deepseek-v4.1-flash-free | 1 | ae84fd7 |
 | T18b Bun path in units | opencode | deepseek-v4.1-flash-free | 1 | 6d20a7b |
+| T19 Smoke test (`bun run smoke`, 30 checks) | antigravity | gemini-3.8-flash-high | 1 | a98a955 |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
