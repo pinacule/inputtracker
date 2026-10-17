@@ -9,7 +9,7 @@ green on main (419 tests), `bun run smoke` merged with T19.
 
 **Phase 2 (Simkl + YouTube Takeout, approved 2026-10-17) started 18:17.** Order: P01 stats chart
 polish → S01 Simkl auth → S02 Simkl sync → S03 Simkl UI → Y01 Takeout import → Y03 YouTube UI →
-T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). S01 Simkl config/client/auth DONE 18:58 (d6636d7, 480 tests green, attempt 2 after review feedback). Running now: Y01 YouTube Takeout import (opencode). S02 Simkl sync waits for antigravity (limited until 19:07).
+T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). S01 Simkl config/client/auth DONE 18:58 (d6636d7, 480 tests green, attempt 2 after review feedback). Y01 YouTube Takeout import: opencode finished 19:03, but it is **WAITING-MANUAL** (see "Decisions needed"); Y03, T24 and T25 depend on it. Running now: S02 Simkl sync (antigravity, from 19:07).
 
 Check on the phone:
 1. Open the app via your Tailscale URL and install it ("Install app"), if not done yet.
@@ -67,6 +67,8 @@ Check on the phone:
 ## BLOCKED
 
 ## Decisions needed
+- **2026-10-17 19:06, Y01 needs you (WAITING-MANUAL).** opencode (deepseek-v4.1-flash-free) finished Y01 at 19:03 and says `bun run check` passed (505 tests). The manager read the diff and found no problems in the code (parser, CLI, `POST /api/import`, 512 MB upload limit, Import page). One merge blocker, caused by the manager's own prompt: the fixture is named `test/fixtures/youtube/watch-history.json`. `scripts/check-secrets.sh` refuses any tracked path containing `watch-history` (a guard against committing real Takeout data), so the worker added `test/fixtures/youtube/.gitignore` (`!watch-history.json`) to get around the root `.gitignore` rule. The push would still fail the secret check. The manager tried to rename the fixture as a mechanical merge fix, and the permission classifier denied it. It also denied running `bun run check` in the Y01 worktree. Following the rules, the manager did not retry. Fix (about 2 minutes): in `.worktrees/Y01` rename the fixture to `test/fixtures/youtube/synthetic-takeout.json`, delete `test/fixtures/youtube/.gitignore`, change the fixture path in `test/youtube-takeout.test.ts:19` and `test/server.test.ts:713`, run `bun run check`, then `scripts/merge-task.sh Y01 "YouTube Takeout import"` and set Y01 to DONE (opencode deepseek-v4.1-flash-free, attempts 1, <sha>). The worktree and the worker logs are kept as they are.
+- 2026-10-17 19:06 (info): S02 stays on antigravity, its routed worker (sync-state logic), because its limit ends at 19:07, before the worker starts.
 - 2026-10-17 18:59 (info, no action needed): next in order was S02 (Simkl sync, routed to antigravity for its sync-state logic), but antigravity is limited until 19:07. Instead of moving S02 to opencode, the manager ran Y01 (opencode-routed, no dependencies) first; S02 goes to antigravity afterwards.
 - 2026-10-17 18:35 (info, no action needed): manager added `secrets/` and `simkl-token*.json` to `.gitignore` and to the forbidden-files check in `scripts/check-secrets.sh` before S01 (Simkl token file lives in `<data dir>/secrets/`).
 - 2026-10-17 17:22: a worktree `.worktrees/T21` (branch `task/T21`, from main 6d20a7b) appeared that the manager did not create. T21 is not in TASKS.md. Left untouched; please check whether it is yours. **Resolved:** it is Claude's (interactive session), see T21 in TASKS.md; Claude merges it itself.
