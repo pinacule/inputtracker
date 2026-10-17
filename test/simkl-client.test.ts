@@ -39,6 +39,7 @@ describe("Simkl API client", () => {
   const baseConfig: SimklConfig = {
     client_id: FAKE_CLIENT_ID,
     base_url: FAKE_BASE_URL,
+    poster_base_url: "https://simkl.in/posters",
     timeout_s: 5,
   };
 

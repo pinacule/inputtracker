@@ -28,5 +28,6 @@ ntfy_url = ""
 # Register a V2 app, type 'TV, devices & command line' at https://simkl.com/settings/developer/, paste its client_id
 # client_id = "YOUR_SIMKL_CLIENT_ID"
 # base_url = "https://api.simkl.com"
+# poster_base_url = "https://simkl.in/posters"
 # timeout_s = 20
 

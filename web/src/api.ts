@@ -203,6 +203,11 @@ export interface SyncNowResult {
   inserted: number;
 }
 
+/** Result of `POST /api/sync/simkl`. */
+export interface SimklSyncResult extends SyncNowResult {
+  mode: string;
+}
+
 export interface HealthResult {
   ok: boolean;
 }
@@ -343,4 +348,8 @@ export function getSyncStatus(): Promise<SyncStatusResult> {
 
 export function syncNow(): Promise<SyncNowResult> {
   return postJson<SyncNowResult>("/api/sync/audiobookshelf", {});
+}
+
+export function syncSimklNow(): Promise<SimklSyncResult> {
+  return postJson<SimklSyncResult>("/api/sync/simkl", {});
 }

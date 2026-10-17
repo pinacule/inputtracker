@@ -14,6 +14,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { isValidSimklPoster } from "./posters.ts";
 
 export const CONSUMPTION_KINDS = new Set([
   "listening_session",
@@ -223,6 +224,9 @@ export function parseExternalIds(
  * external id (real field `libraryItemId`), otherwise null. `media_progress`
  * rows have no external ids: their `source_id` is the library item id. The id is
  * re-validated so a malformed value can never be turned into a URL/path.
+ *
+ * `/api/poster/simkl/<path>` for Simkl events carrying a `simkl_poster` path
+ * (validated against `SIMKL_POSTER_RE`), otherwise null.
  */
 export function coverUrlFor(event: {
   source?: string;
@@ -230,6 +234,14 @@ export function coverUrlFor(event: {
   source_id?: string;
   external_ids?: unknown;
 }): string | null {
+  if (event.source === "simkl") {
+    const ids = parseExternalIds(event.external_ids);
+    const poster = ids?.["simkl_poster"];
+    if (typeof poster === "string" && isValidSimklPoster(poster)) {
+      return `/api/poster/simkl/${poster}`;
+    }
+    return null;
+  }
   if (event.source !== "audiobookshelf") {
     return null;
   }

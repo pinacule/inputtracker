@@ -35,6 +35,8 @@ export interface AudiobookshelfConfig {
 export interface SimklConfig {
   client_id: string;
   base_url: string;
+  /** Base URL for poster images (e.g. `https://simkl.in/posters`). */
+  poster_base_url: string;
   timeout_s: number;
 }
 
@@ -231,6 +233,12 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   const simkl: SimklConfig = {
     client_id: readString(simklTable, "client_id", "simkl.client_id", ""),
     base_url: readString(simklTable, "base_url", "simkl.base_url", "https://api.simkl.com"),
+    poster_base_url: readString(
+      simklTable,
+      "poster_base_url",
+      "simkl.poster_base_url",
+      "https://simkl.in/posters"
+    ),
     timeout_s: readNumber(simklTable, "timeout_s", "simkl.timeout_s", 20),
   };
 

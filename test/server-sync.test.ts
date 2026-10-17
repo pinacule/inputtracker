@@ -24,6 +24,7 @@ function mockConfig(overrides: Partial<Config> = {}): Config {
     simkl: {
       client_id: "simkl-test-client-id",
       base_url: "https://api.simkl.com",
+      poster_base_url: "https://simkl.in/posters",
       timeout_s: 20,
     },
     notify: { desktop: false, ntfy_url: "" },
@@ -308,6 +309,7 @@ describe("POST /api/sync/simkl", () => {
       simkl: {
         client_id: "  ",
         base_url: "",
+        poster_base_url: "",
         timeout_s: 20,
       },
     });

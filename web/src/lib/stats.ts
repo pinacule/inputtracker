@@ -3,6 +3,11 @@
  * No DOM dependencies; safe to run under Bun or in the browser.
  */
 
+import { SOURCES, sourceColor } from "./sources";
+
+// Keep the historical export point (`sourceColor` from `stats.ts`) working.
+export { sourceColor };
+
 export interface SourceOption {
   readonly value: string;
   readonly label: string;
@@ -10,9 +15,7 @@ export interface SourceOption {
 
 export const STATS_SOURCES: readonly SourceOption[] = [
   { value: "", label: "All sources" },
-  { value: "audiobookshelf", label: "Audiobookshelf" },
-  { value: "manual", label: "Manual" },
-  { value: "simkl", label: "Simkl" },
+  ...SOURCES.map((source) => ({ value: source.value, label: source.label })),
 ];
 
 const MONTH_NAMES = [
@@ -296,19 +299,3 @@ export function formatPeriodLabel(
   return period;
 }
 
-/**
- * Returns a consistent hex color for each source in the charts.
- */
-export function sourceColor(source: string): string {
-  switch (source.toLowerCase().trim()) {
-    case "audiobookshelf":
-    case "abs":
-      return "#8b5cf6"; // Violet
-    case "manual":
-      return "#10b981"; // Emerald
-    case "simkl":
-      return "#f59e0b"; // Amber
-    default:
-      return "#3b82f6"; // Blue
-  }
-}

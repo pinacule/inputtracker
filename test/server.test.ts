@@ -24,7 +24,7 @@ function mockConfig(overrides: Partial<Config> = {}): Config {
     server: { bind: "127.0.0.1", port: 8787 },
     storage: { db_path: ":memory:", backup_dir: "/tmp/backups", backup_keep: 14 },
     audiobookshelf: { url: "http://localhost:13378", token: "secret", timeout_s: 20 },
-    simkl: { client_id: "", base_url: "https://api.simkl.test", timeout_s: 20 },
+    simkl: { client_id: "", base_url: "https://api.simkl.test", poster_base_url: "https://simkl.in/posters", timeout_s: 20 },
     notify: { desktop: false, ntfy_url: "" },
     toJSON: () => ({ ...cfg }),
     toString: () => JSON.stringify(cfg),

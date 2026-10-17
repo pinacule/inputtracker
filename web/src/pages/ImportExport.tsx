@@ -3,12 +3,15 @@ import {
   getSyncStatus,
   importFile,
   syncNow,
+  syncSimklNow,
   type ImportResult,
+  type SimklSyncResult,
   type SyncNowResult,
   type SyncRun,
 } from "../api";
 import { DEFAULT_TIMEZONE, formatDateTime } from "../lib/format-date";
 import { describeImport } from "../lib/forms";
+import { sourceLabel } from "../lib/sources";
 
 export function ImportExport() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -20,6 +23,10 @@ export function ImportExport() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncNowResult | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  const [syncingSimkl, setSyncingSimkl] = useState(false);
+  const [simklResult, setSimklResult] = useState<SimklSyncResult | null>(null);
+  const [simklError, setSimklError] = useState<string | null>(null);
 
   const [runs, setRuns] = useState<SyncRun[] | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -76,6 +83,22 @@ export function ImportExport() {
       setSyncError(err instanceof Error ? err.message : String(err));
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleSyncSimkl = async () => {
+    setSyncingSimkl(true);
+    setSimklError(null);
+    setSimklResult(null);
+
+    try {
+      const result = await syncSimklNow();
+      setSimklResult(result);
+      await loadStatus();
+    } catch (err) {
+      setSimklError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncingSimkl(false);
     }
   };
 
@@ -162,16 +185,29 @@ export function ImportExport() {
         <h2 id="sync-heading" class="card-title">
           Sync
         </h2>
-        <p class="muted">Pull recent activity from Audiobookshelf.</p>
+        <p class="muted">
+          Pull recent activity from Audiobookshelf and Simkl.
+        </p>
 
-        <button
-          type="button"
-          class="btn btn-primary"
-          onClick={handleSync}
-          disabled={syncing}
-        >
-          {syncing ? "Syncing…" : "Sync now"}
-        </button>
+        <div class="link-row">
+          <button
+            type="button"
+            class="btn btn-primary"
+            onClick={handleSync}
+            disabled={syncing}
+          >
+            {syncing ? "Syncing…" : "Sync now"}
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-primary"
+            onClick={handleSyncSimkl}
+            disabled={syncingSimkl}
+          >
+            {syncingSimkl ? "Syncing…" : "Sync Simkl now"}
+          </button>
+        </div>
 
         {syncError && (
           <p class="alert alert-error" role="alert">
@@ -182,6 +218,18 @@ export function ImportExport() {
         {syncResult && (
           <p class="alert alert-success" role="status">
             {describeImport(syncResult)}
+          </p>
+        )}
+
+        {simklError && (
+          <p class="alert alert-error" role="alert">
+            {simklError}
+          </p>
+        )}
+
+        {simklResult && (
+          <p class="alert alert-success" role="status">
+            {describeImport(simklResult)} ({simklResult.mode})
           </p>
         )}
 
@@ -202,7 +250,9 @@ export function ImportExport() {
             <ul class="status-list">
               {runs.map((run) => (
                 <li key={run.source} class="status-item">
-                  <span class="status-source">{run.source}</span>
+                  <span class="status-source">
+                    {sourceLabel(run.source)}
+                  </span>
                   <span class="status-time">
                     {formatDateTime(run.started_at, DEFAULT_TIMEZONE)}
                   </span>

@@ -5,6 +5,7 @@ import {
   type ProgressLists,
 } from "../api";
 import { sourceIcon } from "../lib/calendar";
+import { sourceLabel } from "../lib/sources";
 import { DEFAULT_TIMEZONE, formatDateTime } from "../lib/format-date";
 
 /** All dates are stored UTC and shown in the configured local timezone. */
@@ -90,7 +91,9 @@ function ProgressRow({ item }: { item: ProgressItem }) {
           </div>
         )}
         <div class="progress-item-meta">
-          <span class="progress-item-source">{item.source}</span>
+          <span class="progress-item-source">
+            {sourceLabel(item.source)}
+          </span>
           <span class="progress-item-bullet">·</span>
           <span class="progress-item-date">{dateLabel}</span>
         </div>
