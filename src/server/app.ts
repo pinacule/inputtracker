@@ -417,6 +417,13 @@ export function createApp(deps: AppDeps): Hono {
     if (existsSync(target)) {
       const stat = statSync(target);
       if (stat.isFile()) {
+        // Service-worker scripts must never be served stale, otherwise the
+        // browser can keep running an old caching strategy.
+        if (rel === "sw.js") {
+          return new Response(Bun.file(target), {
+            headers: { "Cache-Control": "no-cache" },
+          });
+        }
         return new Response(Bun.file(target));
       }
       if (stat.isDirectory()) {
