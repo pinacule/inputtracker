@@ -45,13 +45,49 @@ Every key, its default and what it means:
 | `simkl.poster_base_url` | `https://simkl.in/posters` | Base URL for Simkl poster images. |
 | `simkl.timeout_s` | `20` | Per-request timeout, in seconds. |
 | `youtube.thumb_base_url` | `https://i.ytimg.com/vi` | Base URL for YouTube video thumbnails. |
+| `ingest.token` | empty | Shared bearer token for `POST /api/ingest/youtube-plays` (phone); empty disables ingest, a non-empty value must be at least 32 characters. Never logged. |
+| `activitywatch.url` | `http://127.0.0.1:5600` | ActivityWatch server URL. |
+| `activitywatch.timeout_s` | `20` | Per-request timeout, in seconds. |
+| `activitywatch.device` | `pc` | Device label for YouTube plays. |
+| `activitywatch.include_music` | `false` | Whether `music.youtube.com` counts. |
 | `notify.desktop` | `true` | Desktop notification on sync failure (via `notify-send`; silently ignored when missing). |
-| `notify.ntfy_url` | empty | Optional ntfy topic URL for sync failure alerts. |
+| `notify.ntfy_url` | empty | Optional ntfy topic URL for failure alerts, recovery notices and the weekly summary. |
+| `notify.ntfy_token` | empty | Optional ntfy access token (`Authorization: Bearer …`); never logged. |
+| `notify.app_url` | empty | Web app URL sent as the ntfy `Click` header (e.g. its Tailscale address). |
+| `notify.weekly_summary` | `false` | Enable the weekly summary push (title of what you consumed only reaches the ntfy server when this is on). |
 
 The Audiobookshelf token stays server-side. It is read from the config and is
 never sent to the browser: cover images and every Audiobookshelf call are
 proxied by the server, so the browser never sees the token or the
-Audiobookshelf URL either.
+Audiobookshelf URL either. The `ingest` token is treated the same way: phones
+send it in the `Authorization` header, and the server only compares it.
+
+## Phone notifications (ntfy)
+
+Sync failures, backup failures (one alert per outage plus one recovery), and
+the optional weekly summary go to [ntfy](https://ntfy.sh) so they reach your
+phone:
+
+1. Install the ntfy app on the phone.
+2. Pick a **long random topic name** — ntfy.sh topics are public by name, so
+   anyone who learns the string can see your pushes — and subscribe to it.
+3. Set `[notify] ntfy_url` (e.g. `"https://ntfy.sh/<your-random-topic>"`) in
+   `inputtracker.config.toml`; optionally `ntfy_token` for an access-token
+   protected server and `app_url` (e.g. the Tailscale URL of the web app) to
+   make the pushes tappable.
+4. Check the setup:
+
+   ```sh
+   bun run it notify test
+   ```
+
+   It sends one test notification through every configured channel and prints
+   which ones succeeded (never the URL or token).
+
+The weekly summary is off by default; enable `[notify] weekly_summary = true`
+and install (`scripts/install.sh`) the `inputtracker-weekly.timer`, which runs
+`it notify weekly` Sundays at 19:00 local time. Note that enabling the summary
+also puts the titles of what you watched on the ntfy server.
 
 ## Run in development
 
@@ -102,6 +138,7 @@ Units and timers it installs:
 | `inputtracker-sync@.service` | oneshot `it sync %i` | launched by its timer |
 | `inputtracker-sync@audiobookshelf.timer` | Audiobookshelf sync | hourly, persistent, up to 120 s jitter |
 | `inputtracker-sync@simkl.timer` | Simkl sync | hourly at :30, persistent, up to 120 s jitter |
+| `inputtracker-sync@activitywatch.timer` | ActivityWatch sync (YouTube) | every 10 minutes (`*:0/10`), persistent, up to 30 s jitter |
 | `inputtracker-backup.service` | oneshot `it backup` | launched by its timer |
 | `inputtracker-backup.timer` | database snapshot + JSON export | daily at 03:30, persistent |
 
@@ -123,7 +160,7 @@ Run commands with `bun run it <command>`.
 
 | Command | Options | Example |
 |---|---|---|
-| `sync <source>` | source is `audiobookshelf` or `simkl` | `bun run it sync audiobookshelf` |
+| `sync <source>` | source is `audiobookshelf`, `simkl`, or `activitywatch` | `bun run it sync activitywatch` |
 | `auth simkl` | `[--status]` | `bun run it auth simkl` |
 | `add` | `--type <t> --title <title> --start <local> [--end <local>] [--duration-min <n>] [--parent <title>] [--season <n>] [--episode <n>] [--progress <0..1>] [--device <name>]` | `bun run it add --type audiobook --title "The Synthetic Tale" --start "2026-10-17 21:30" --duration-min 45` |
 | `export` | `--format json\|csv --out <file>` | `bun run it export --format json --out archive.json` |
@@ -135,6 +172,8 @@ Details:
 
 - `sync audiobookshelf` fetches sessions, media progress and daily stats from
   Audiobookshelf and inserts the new rows. It only ever issues GET requests.
+- `sync activitywatch` queries local ActivityWatch for browser YouTube activity
+  and inserts new plays. It only ever issues GET requests.
 - `auth simkl` connects Simkl via device flow (prints a link + code);
   `--status` shows whether it is connected, without network.
 - `add` records a consumed item by hand. `--type`, `--title` and `--start` are
@@ -213,6 +252,21 @@ Skipped records are counted per reason: `ads` (Google Ads), `no_video` (removed 
 videos, and anything without a usable video id), `other` (records whose `products` do not
 include `YouTube`) and `invalid` (a record with no parseable time).
 
+## YouTube from ActivityWatch
+
+ActivityWatch runs on your PC with its browser extension (`aw-watcher-web`) in
+Chrome and Firefox. It records active tab URLs, titles, duration, and whether
+audio was playing. InputTracker queries ActivityWatch to turn browser YouTube
+activity into `youtube` events:
+
+- Needs ActivityWatch running locally (default `http://127.0.0.1:5600`) and the
+  `aw-watcher-web` browser extension installed.
+- Incognito tabs are ignored completely.
+- The channel is unknown from tab titles, so it is left empty.
+- Runs every 10 minutes via the `inputtracker-sync@activitywatch.timer` systemd timer.
+- Only issues read-only `GET` requests to the local ActivityWatch API.
+- When the server moves to a cloud VM, this sync will need to run on the PC (where the browser runs).
+
 ## Phone install (PWA)
 
 Reach the server over a private network. With Tailscale, serve the server port on
@@ -238,6 +292,23 @@ What needs the server:
 - syncing with Audiobookshelf, importing a file, and adding manual entries (all
   of these are writes, and export/import/sync responses are never cached);
 - any data you have not loaded at least once while online.
+
+## Ingest from the phone
+
+The second-brain Android app reads what the YouTube app plays and POSTs each
+batch to InputTracker. Set it up:
+
+1. Generate a token: `bun run it ingest token`.
+2. Put that value under `[ingest] token` in `inputtracker.config.toml`
+   (leave it empty to keep ingest off; a shorter value is a config error).
+3. Run `scripts/install.sh` to restart the server with the new config.
+4. In the phone app, enter the server URL and the same token.
+
+The endpoint is `POST /api/ingest/youtube-plays`; the request/response contract,
+the size limit and the idempotency rules are in
+[`docs/ingest-api.md`](docs/ingest-api.md). `bun run it ingest status` shows
+whether ingest is enabled. The token never appears in logs, the web app or
+error responses.
 
 ## Backups, export and import
 

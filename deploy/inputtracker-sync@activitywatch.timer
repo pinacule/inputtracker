@@ -1,0 +1,11 @@
+[Unit]
+Description=10-minute InputTracker ActivityWatch sync
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+RandomizedDelaySec=30
+Unit=inputtracker-sync@activitywatch.service
+
+[Install]
+WantedBy=timers.target

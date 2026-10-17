@@ -62,7 +62,21 @@ describe("loadConfig defaults", () => {
     expect(config.youtube).toEqual({
       thumb_base_url: "https://i.ytimg.com/vi",
     });
-    expect(config.notify).toEqual({ desktop: true, ntfy_url: "" });
+    expect(config.activitywatch).toEqual({
+      url: "http://127.0.0.1:5600",
+      timeout_s: 20,
+      device: "pc",
+      include_music: false,
+    });
+    // ntfy_token "" is part of the (public-by-value) defaults; redact() masks
+    // any `*token*` key, so no serialized form of the config reveals it.
+    expect(config.notify).toEqual({
+      desktop: true,
+      ntfy_url: "",
+      app_url: "",
+      weekly_summary: false,
+      ntfy_token: "",
+    } as Config["notify"]);
   });
 
   test("missing file falls back to the home directory when XDG_DATA_HOME is unset", () => {
@@ -104,6 +118,12 @@ describe("loadConfig file merging", () => {
         "[youtube]",
         'thumb_base_url = "https://thumbs.example"',
         "",
+        "[activitywatch]",
+        'url = "http://aw.example:5600"',
+        "timeout_s = 10",
+        'device = "laptop-1"',
+        "include_music = true",
+        "",
         "[notify]",
         "desktop = false",
         'ntfy_url = "https://ntfy.example/topic"',
@@ -127,6 +147,12 @@ describe("loadConfig file merging", () => {
     expect(config.simkl.poster_base_url).toBe("https://posters.example");
     expect(config.simkl.timeout_s).toBe(15);
     expect(config.youtube.thumb_base_url).toBe("https://thumbs.example");
+    expect(config.activitywatch).toEqual({
+      url: "http://aw.example:5600",
+      timeout_s: 10,
+      device: "laptop-1",
+      include_music: true,
+    });
     expect(config.notify.desktop).toBe(false);
     expect(config.notify.ntfy_url).toBe("https://ntfy.example/topic");
   });
@@ -223,6 +249,57 @@ describe("loadConfig errors", () => {
     const badTable = writeConfig("badytable.toml", 'youtube = "not-a-table"\n');
     expect(() => loadConfig({ path: badTable, env: {} })).toThrow(/youtube/);
   });
+
+  test("wrong type or invalid value for activitywatch keys throws", () => {
+    const badUrl = writeConfig("badawurl.toml", "[activitywatch]\nurl = 12345\n");
+    expect(() => loadConfig({ path: badUrl, env: {} })).toThrow(/activitywatch\.url/);
+
+    const badTimeout = writeConfig(
+      "badawtimeout.toml",
+      '[activitywatch]\ntimeout_s = "twenty"\n'
+    );
+    expect(() => loadConfig({ path: badTimeout, env: {} })).toThrow(
+      /activitywatch\.timeout_s/
+    );
+
+    const badMusic = writeConfig(
+      "badawmusic.toml",
+      '[activitywatch]\ninclude_music = "yes"\n'
+    );
+    expect(() => loadConfig({ path: badMusic, env: {} })).toThrow(
+      /activitywatch\.include_music/
+    );
+
+    const badDeviceEmpty = writeConfig(
+      "badawdevempty.toml",
+      '[activitywatch]\ndevice = ""\n'
+    );
+    expect(() => loadConfig({ path: badDeviceEmpty, env: {} })).toThrow(
+      /activitywatch\.device/
+    );
+
+    const badDeviceChars = writeConfig(
+      "badawdevchars.toml",
+      '[activitywatch]\ndevice = "PC_User!"\n'
+    );
+    expect(() => loadConfig({ path: badDeviceChars, env: {} })).toThrow(
+      /activitywatch\.device/
+    );
+
+    const badDeviceLong = writeConfig(
+      "badawdevlong.toml",
+      `[activitywatch]\ndevice = "${"a".repeat(33)}"\n`
+    );
+    expect(() => loadConfig({ path: badDeviceLong, env: {} })).toThrow(
+      /activitywatch\.device/
+    );
+
+    const badTable = writeConfig(
+      "badawtable.toml",
+      'activitywatch = "not-a-table"\n'
+    );
+    expect(() => loadConfig({ path: badTable, env: {} })).toThrow(/activitywatch/);
+  });
 });
 
 describe("redaction", () => {
@@ -277,5 +354,61 @@ describe("redaction", () => {
     expect(redact({ token: FAKE_TOKEN })).not.toContain(FAKE_TOKEN);
     expect(redact({ error: `failed with ${FAKE_TOKEN}` })).not.toContain(FAKE_TOKEN);
     expect(redact(`auth=${FAKE_TOKEN}`)).not.toContain(FAKE_TOKEN);
+  });
+});
+
+const FAKE_INGEST_TOKEN = "INGEST-FAKE-TOKEN-0123456789abcdefgh"; // 37 chars
+
+describe("ingest config", () => {
+  test("missing [ingest] yields an empty token (ingest disabled)", () => {
+    const config = loadConfig({ path: missingPath(), env: {} });
+    expect(config.ingest?.token).toBe("");
+    // Serialized output shows `ingest` as an empty object (no token key).
+    expect((JSON.parse(JSON.stringify(config)) as { ingest: object }).ingest).toEqual({});
+  });
+
+  test("the token is readable but never leaks through serialization", () => {
+    const path = writeConfig(
+      "ingest.toml",
+      `[ingest]\ntoken = "${FAKE_INGEST_TOKEN}"\n`
+    );
+    const config = loadConfig({ path, env: {} });
+
+    // Accessible for the endpoint, non-enumerable for every serializer.
+    expect(config.ingest?.token).toBe(FAKE_INGEST_TOKEN);
+    expect(String(config)).not.toContain(FAKE_INGEST_TOKEN);
+    expect(`${config}`).not.toContain(FAKE_INGEST_TOKEN);
+    expect(JSON.stringify(config)).not.toContain(FAKE_INGEST_TOKEN);
+    expect(inspect(config)).not.toContain(FAKE_INGEST_TOKEN);
+    expect(redact(config)).not.toContain(FAKE_INGEST_TOKEN);
+    expect(redactString(`Bearer ${FAKE_INGEST_TOKEN}`, config)).toBe("Bearer ***");
+    // Free-text masking without the config object (the route never logs anyway).
+    expect(redact(`token=${FAKE_INGEST_TOKEN}`)).not.toContain(FAKE_INGEST_TOKEN);
+  });
+
+  test("a non-empty token shorter than 32 characters is a config error", () => {
+    const path = writeConfig(
+      "short.toml",
+      '[ingest]\ntoken = "too-short-token"\n'
+    );
+    expect(() => loadConfig({ path, env: {} })).toThrow(/ingest\.token/);
+    // The error never quotes the token value itself.
+    expect(captureError(() => loadConfig({ path, env: {} }))).not.toContain(
+      "too-short-token"
+    );
+  });
+
+  test("a 32-character token is accepted", () => {
+    const token = "a".repeat(32);
+    const path = writeConfig("ok32.toml", `[ingest]\ntoken = "${token}"\n`);
+    const config = loadConfig({ path, env: {} });
+    expect(config.ingest?.token).toBe(token);
+  });
+
+  test("wrong types for ingest keys throw", () => {
+    const bad = writeConfig("badingest.toml", "[ingest]\ntoken = 12345\n");
+    expect(() => loadConfig({ path: bad, env: {} })).toThrow(/ingest\.token/);
+    const badTable = writeConfig("badingesttable.toml", 'ingest = "nope"\n');
+    expect(() => loadConfig({ path: badTable, env: {} })).toThrow(/ingest/);
   });
 });

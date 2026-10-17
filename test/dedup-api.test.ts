@@ -23,7 +23,7 @@ function mockConfig(overrides: Partial<Config> = {}): Config {
       timeout_s: 20,
     },
     youtube: { thumb_base_url: "https://i.ytimg.com/vi" },
-    notify: { desktop: false, ntfy_url: "" },
+    notify: { desktop: false, ntfy_url: "", ntfy_token: "", app_url: "", weekly_summary: false },
     toJSON: () => ({ ...cfg }),
     toString: () => JSON.stringify(cfg),
     ...overrides,

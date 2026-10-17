@@ -69,7 +69,7 @@ function makeConfig(opts: MakeConfigOptions): Config {
       timeout_s: 20,
     },
     youtube: { thumb_base_url: "https://i.ytimg.com/vi" },
-    notify: { desktop: true, ntfy_url: "" },
+    notify: { desktop: true, ntfy_url: "", ntfy_token: "", app_url: "", weekly_summary: false },
     toJSON: () => ({}),
     toString: () => "{}",
   };

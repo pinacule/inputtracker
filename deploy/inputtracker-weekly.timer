@@ -1,0 +1,10 @@
+[Unit]
+Description=Sunday evening InputTracker weekly summary
+
+[Timer]
+OnCalendar=Sun *-*-* 19:00:00
+Persistent=true
+Unit=inputtracker-weekly.service
+
+[Install]
+WantedBy=timers.target

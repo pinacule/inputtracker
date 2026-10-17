@@ -45,9 +45,30 @@ export interface YoutubeConfig {
   thumb_base_url: string;
 }
 
+export interface IngestConfig {
+  /**
+   * Shared bearer token for `POST /api/ingest/youtube-plays`. Empty disables
+   * ingest; a non-empty token must be at least 32 characters. Never logged.
+   */
+  token: string;
+}
+
+export interface ActivityWatchConfig {
+  url: string;
+  timeout_s: number;
+  device: string;
+  include_music: boolean;
+}
+
 export interface NotifyConfig {
   desktop: boolean;
   ntfy_url: string;
+  /** Optional ntfy access token (`Authorization: Bearer …`); never logged. */
+  ntfy_token: string;
+  /** Web app URL sent as the ntfy `Click` header when set. */
+  app_url: string;
+  /** Weekly summary push, off by default. */
+  weekly_summary: boolean;
 }
 
 export interface Config {
@@ -57,6 +78,12 @@ export interface Config {
   audiobookshelf: AudiobookshelfConfig;
   simkl: SimklConfig;
   youtube: YoutubeConfig;
+  /**
+   * Optional: hand-built (test/partial) configs may omit `ingest`; a missing
+   * or empty token disables the ingest endpoint.
+   */
+  ingest?: IngestConfig;
+  activitywatch?: ActivityWatchConfig;
   notify: NotifyConfig;
   /** Redacted plain object (JSON.stringify uses this automatically). */
   toJSON(): unknown;
@@ -258,13 +285,85 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     ),
   };
 
+  // The ingest token is a secret exactly like the ABS token: non-enumerable
+  // (invisible to JSON.stringify/util.inspect/Object.keys) and masked by the
+  // `token` key-name rule and `secretsFrom`.
+  const ingestTable = readTable(file, "ingest", "ingest");
+  const ingestToken = readString(ingestTable, "token", "ingest.token", "");
+  if (ingestToken !== "" && ingestToken.length < 32) {
+    throw new Error(
+      `Config key "ingest.token" must be at least 32 characters (got ${ingestToken.length})`
+    );
+  }
+  const ingest = {} as IngestConfig;
+  Object.defineProperty(ingest, "token", {
+    value: ingestToken,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+
+  const awTable = readTable(file, "activitywatch", "activitywatch");
+  const awDevice = readString(awTable, "device", "activitywatch.device", "pc");
+  if (
+    awDevice.length < 1 ||
+    awDevice.length > 32 ||
+    !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(awDevice)
+  ) {
+    throw new Error(
+      `Config key "activitywatch.device" must match ^[a-z0-9]+(-[a-z0-9]+)*$ and be 1–32 chars`
+    );
+  }
+  const activitywatch: ActivityWatchConfig = {
+    url: readString(
+      awTable,
+      "url",
+      "activitywatch.url",
+      "http://127.0.0.1:5600"
+    ),
+    timeout_s: readNumber(
+      awTable,
+      "timeout_s",
+      "activitywatch.timeout_s",
+      20
+    ),
+    device: awDevice,
+    include_music: readBoolean(
+      awTable,
+      "include_music",
+      "activitywatch.include_music",
+      false
+    ),
+  };
+
   const notifyTable = readTable(file, "notify", "notify");
   const notify: NotifyConfig = {
     desktop: readBoolean(notifyTable, "desktop", "notify.desktop", true),
     ntfy_url: readString(notifyTable, "ntfy_url", "notify.ntfy_url", ""),
+    ntfy_token: readString(notifyTable, "ntfy_token", "notify.ntfy_token", ""),
+    app_url: readString(notifyTable, "app_url", "notify.app_url", ""),
+    weekly_summary: readBoolean(
+      notifyTable,
+      "weekly_summary",
+      "notify.weekly_summary",
+      false
+    ),
   };
+  // `ntfy_token` is handled by the key-name rule in `redactValue` (any key
+  // matching /token/ is masked) and by `secretsFrom` for free-text masking, so
+  // `config.toJSON()`/`toString()`/`redact(config)` can never reveal it.
 
-  const config = { timezone, server, storage, audiobookshelf, simkl, youtube, notify } as Config;
+  const config = {
+    timezone,
+    server,
+    storage,
+    audiobookshelf,
+    simkl,
+    youtube,
+    ingest,
+    activitywatch,
+    notify,
+  } as Config;
 
   // Redacted serialization: token is non-enumerable, so it is already omitted.
   Object.defineProperty(config, "toJSON", {
@@ -278,6 +377,14 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
 
   activeConfig = config;
   return config;
+}
+
+/** True when a non-empty ingest token is configured (ingest accepts requests). */
+export function isIngestEnabled(
+  config: { ingest?: { token?: string } } | null | undefined
+): boolean {
+  const token = config?.ingest?.token;
+  return typeof token === "string" && token !== "";
 }
 
 // --- redaction ---
@@ -309,9 +416,17 @@ function secretsFrom(value: unknown): string[] {
 
   if (isConfigLike(value)) {
     add((value as Config).audiobookshelf?.token);
+    add((value as Config).notify?.ntfy_token);
+    if ((value as Config).ingest) {
+      add((value as Config).ingest?.token);
+    }
   }
   if (activeConfig) {
     add(activeConfig.audiobookshelf.token);
+    add(activeConfig.notify?.ntfy_token);
+    if (activeConfig.ingest) {
+      add(activeConfig.ingest.token);
+    }
   }
 
   return secrets;
@@ -357,11 +472,26 @@ export function redact(value: unknown): string {
   return json === undefined ? String(value) : json;
 }
 
-/** Replace every occurrence of the configured token in free text. */
+/** Replace every configured token (ABS API key, ntfy token) in free text. */
 export function redactString(text: string, config: Config): string {
-  const token = config?.audiobookshelf?.token;
-  if (typeof token !== "string" || token === "") {
-    return text;
+  const secrets: string[] = [];
+  const abs = config?.audiobookshelf?.token;
+  if (typeof abs === "string" && abs !== "") {
+    secrets.push(abs);
   }
-  return maskString(text, [token]);
+  // Optional in hand-built (partial) configs, hence the guards.
+  const notify = (config as { notify?: { ntfy_token?: string } } | null | undefined)
+    ?.notify;
+  const ntfy = notify?.ntfy_token;
+  if (typeof ntfy === "string" && ntfy !== "") {
+    secrets.push(ntfy);
+  }
+  // Optional in hand-built (partial) configs, hence the guard.
+  const ingestToken = (
+    config as { ingest?: { token?: string } } | null | undefined
+  )?.ingest?.token;
+  if (typeof ingestToken === "string" && ingestToken !== "") {
+    secrets.push(ingestToken);
+  }
+  return maskString(text, secrets);
 }

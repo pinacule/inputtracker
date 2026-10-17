@@ -66,13 +66,18 @@ UNITS=(
   "inputtracker-sync@.service"
   "inputtracker-sync@audiobookshelf.timer"
   "inputtracker-sync@simkl.timer"
+  "inputtracker-sync@activitywatch.timer"
   "inputtracker-backup.service"
   "inputtracker-backup.timer"
+  "inputtracker-weekly.service"
+  "inputtracker-weekly.timer"
 )
 TIMERS=(
   "inputtracker-sync@audiobookshelf.timer"
   "inputtracker-sync@simkl.timer"
+  "inputtracker-sync@activitywatch.timer"
   "inputtracker-backup.timer"
+  "inputtracker-weekly.timer"
 )
 LINGER_HINT="loginctl enable-linger ${USER:-$(id -un)}"
 

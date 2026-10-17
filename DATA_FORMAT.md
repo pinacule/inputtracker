@@ -68,20 +68,23 @@ The append-only archive. One row per decoded record.
 Values the code produces today:
 
 - `source`: `audiobookshelf` (sync), `simkl` (sync), `youtube` (a YouTube
-  Takeout import), `manual` (the `add` command / web form). An import (the
-  `import` command / web upload) keeps each row's original `source`. Only the
-  `ingest_runs.source` changes: a native export import writes `native-import`,
-  a YouTube Takeout import writes `youtube-takeout` (its event rows are still
+  Takeout import, the ActivityWatch sync or the phone ingest endpoint), `manual`
+  (the `add` command / web form). An import (the `import` command / web upload)
+  keeps each row's original `source`. Only the `ingest_runs.source` changes: a
+  native export import writes `native-import`, a YouTube Takeout import writes
+  `youtube-takeout`, an ActivityWatch sync writes `activitywatch`, and the phone
+  ingest writes `youtube` with `kind = phone` (their event rows are all
   `source = youtube`).
 - `source_kind`: from Audiobookshelf — `listening_session`, `media_progress`,
-  `daily_stat`; from Simkl — `watch` (one row per watch); from a YouTube Takeout
+  `daily_stat`; from Simkl — `watch` (one row per watch); from ActivityWatch —
+  `aw_play`; from the phone ingest — `phone_play`; from a YouTube Takeout
   import — `history_item`; from manual entry — `history_item`. An import keeps
   whatever `source_kind` was in the file.
 - `media_type`: one of `audiobook`, `podcast_episode`, `movie`, `episode`,
   `video`, `book`, `other`. Audiobookshelf sync only ever produces `audiobook`,
   `podcast_episode` or `other`; Simkl sync produces `movie` or `episode`; a
-  YouTube Takeout import produces `video`; manual entry accepts any of the
-  seven.
+  YouTube Takeout import or ActivityWatch sync produces `video`; manual entry
+  accepts any of the seven.
 
 `external_ids` and `raw` are stored as JSON **text** (not JSONB). A typical
 `external_ids` value for an Audiobookshelf session looks like
@@ -110,6 +113,38 @@ Simkl sync writes one event per watch. `source = simkl`, `source_kind = watch`,
 - `raw` is the whole Simkl movie entry for a movie; for an episode it is the
   episode object plus `show: {"title": …, "ids": …}`.
 
+### YouTube ActivityWatch events (`aw_play`)
+
+ActivityWatch sync converts browser web tab history (aw-watcher-web) into
+`youtube` events. `source = youtube`, `source_kind = aw_play`, `media_type = video`,
+`source_id = <11-char videoId>:<started_at>`, where `started_at` is the play's
+first event start time normalized to UTC ISO 8601 with milliseconds.
+
+- A **play** groups consecutive events for the same video id where each event
+  starts at most 10 minutes after the previous one of the run ended
+  (`timestamp + duration`). Non-video events in between do not end the play;
+  an event for a different video id ends it.
+- `ended_at` is the end time of the play's last event (`timestamp + duration`),
+  normalized to UTC ISO 8601 with milliseconds.
+- `duration_seconds` is `watched_seconds`: the sum of durations of events in the
+  play with `audible === true` (or the sum of all durations if no event in the
+  entire bucket response has an `audible` key), rounded to whole seconds. Plays
+  with `watched_seconds < 30` are dropped (ads, previews, paused tabs).
+- `title` is the last non-empty tab title of the play with a leading notification
+  count (e.g. `(3) `) and trailing ` - YouTube` / ` - YouTube Music` removed;
+  `NULL` when empty.
+- `parent_title` is `NULL` (channel is unknown from browser tab titles).
+- `device` is the configured `[activitywatch] device` label (default `"pc"`).
+- `progress` is `NULL`.
+- `external_ids` is `{"youtube_video": "<11-char videoId>"}`.
+- `raw` is a small deterministic object
+  `{"bucket": "<bucket id>", "events": <count>, "audible_seconds": <num>, "total_seconds": <num>}`.
+- Re-running over the same data produces identical record hashes and inserts
+  nothing. When a play is still ongoing at the end of the window, its cursor
+  remains at `started_at`; next run, the growing play is re-emitted with a larger
+  duration, inserting a new row with the same `source_id`, and `events_latest`
+  automatically displays the newer, larger duration.
+
 ### YouTube Takeout events
 
 A Takeout import writes one event per view. `source = youtube`,
@@ -123,6 +158,25 @@ record as read.
 `external_ids` is
 `{"youtube_video": "<video id>", "youtube_channel": "<channel id or null>"}`,
 plus `"youtube_music": true` when the record's `header` is `YouTube Music`.
+
+### YouTube phone-play events
+
+The phone ingest endpoint (`POST /api/ingest/youtube-plays`, see
+`docs/ingest-api.md`) writes one event per play:
+`source = youtube`, `source_kind = phone_play`, `media_type = video`, and
+`source_id = <play_id from the phone, lower-cased>`. `title` is the video
+title; `parent_title` is the channel name or `NULL`; `started_at`/`ended_at`
+are the play timestamps normalized to UTC ISO 8601 with milliseconds;
+`duration_seconds` is the watched seconds; `progress` is the last position
+divided by the media duration, clamped to `0..1` (or `NULL`); `device` is the
+device name the phone sent (e.g. `phone`).
+
+`external_ids` is `{"youtube_video": "<video id>", "android_package":
+"<application id>"}`, with `youtube_video` omitted when the play has no video
+id. `raw` is the validated play object in a fixed key order, so re-sending the
+same play produces the same `record_hash` and inserts nothing. A play for the
+same `play_id` with more watched seconds is a **new row** (the append-only
+rule), and `events_latest` then shows the newer one.
 
 ### Manual entry events
 
@@ -179,7 +233,7 @@ read `events_latest` only.
 
 Only these `source_kind`s count as consumption activity:
 
-- `listening_session`, `watch`, `history_item`.
+- `listening_session`, `watch`, `history_item`, `phone_play`.
 
 `media_progress` (in-progress/finished state) and `daily_stat` (daily seconds
 totals) are **not** activity and must not be summed into the calendar, heat map
@@ -197,7 +251,7 @@ SELECT
   COUNT(*) AS items,
   SUM(COALESCE(duration_seconds, 0)) / 60.0 AS minutes
 FROM events_latest
-WHERE source_kind IN ('listening_session', 'watch', 'history_item')
+WHERE source_kind IN ('listening_session', 'watch', 'history_item', 'phone_play')
 GROUP BY local_day
 ORDER BY local_day;
 ```
@@ -216,7 +270,7 @@ Last 20 consumed items:
 ```sql
 SELECT id, source, title, media_type, started_at, duration_seconds
 FROM events_latest
-WHERE source_kind IN ('listening_session', 'watch', 'history_item')
+WHERE source_kind IN ('listening_session', 'watch', 'history_item', 'phone_play')
 ORDER BY started_at DESC
 LIMIT 20;
 ```
@@ -319,7 +373,8 @@ WHERE (source = ? AND title = ?) OR (source = ? AND title = ?);
   (TEXT NOT NULL), `finished_at` (TEXT), `status` (TEXT NOT NULL, one of
   `running`, `ok`, `failed`), `rows_seen` (INTEGER), `rows_inserted` (INTEGER),
   `error` (TEXT). `source` is one of `audiobookshelf`, `simkl` (both with
-  `kind = sync`), `youtube-takeout`, `native-import` or `manual`.
+  `kind = sync`), `youtube` (the phone ingest, `kind = phone`),
+  `youtube-takeout`, `native-import` or `manual`.
 - `sync_state` — per-source bookkeeping. Columns: `source` (TEXT PRIMARY KEY),
   `cursor` (TEXT), `updated_at` (TEXT NOT NULL). Holds the Audiobookshelf sync
   cursor (max session `updatedAt`) and, under `source = "notify:<source>"`, a

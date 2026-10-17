@@ -76,6 +76,14 @@ function shortMessage(message: string | undefined): string {
 }
 
 /**
+ * Subject used in the alert titles: sync sources read "sync <source>", the
+ * backup reads simply "backup", so "sync backup failed" never appears.
+ */
+function alertSubject(source: string): string {
+  return source === "backup" ? "backup" : `sync ${source}`;
+}
+
+/**
  * Record one sync result and notify on the first failure and on recovery only.
  * `errorMessage` should already be redacted by the caller.
  */
@@ -88,13 +96,18 @@ export async function reportSyncResult(
   options: ReportSyncResultOptions = {}
 ): Promise<void> {
   const now = options.now ?? (() => new Date());
+  const subject = alertSubject(source);
   const outstanding = hasNotifiedFailure(db, source);
 
   if (!ok) {
     if (outstanding) {
       return;
     }
-    await notifier.notify(`sync ${source} failed`, shortMessage(errorMessage));
+    await notifier.notify(
+      `${subject} failed`,
+      shortMessage(errorMessage),
+      "failure"
+    );
     setNotifiedFailure(db, source, true, now);
     return;
   }
@@ -102,6 +115,10 @@ export async function reportSyncResult(
   if (!outstanding) {
     return;
   }
-  await notifier.notify(`sync ${source} recovered`, `sync ${source} is working again`);
+  await notifier.notify(
+    `${subject} recovered`,
+    `${subject} is working again`,
+    "recovery"
+  );
   setNotifiedFailure(db, source, false, now);
 }

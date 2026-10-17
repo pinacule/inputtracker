@@ -33,7 +33,13 @@ function makeMockConfig(dir: string, clientId = FAKE_CLIENT_ID, timezone = "Euro
       timeout_s: 5,
     },
     youtube: { thumb_base_url: "https://i.ytimg.com/vi" },
-    notify: { desktop: false, ntfy_url: "" },
+    notify: {
+      desktop: false,
+      ntfy_url: "",
+      ntfy_token: "",
+      app_url: "",
+      weekly_summary: false,
+    },
     toJSON: () => ({ ...cfg }),
     toString: () => JSON.stringify(cfg),
   };
