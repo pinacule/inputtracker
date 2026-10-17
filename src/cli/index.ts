@@ -9,6 +9,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { writeFileSync } from "node:fs";
 import {
   loadConfig,
   redact,
@@ -18,6 +19,8 @@ import {
 } from "../core/config.ts";
 import { openDb } from "../core/db.ts";
 import { LocalDbSink, type Sink } from "../core/sink.ts";
+import { countEvents, exportJson } from "../io/export-json.ts";
+import { exportCsv } from "../io/export-csv.ts";
 import { createAbsClient, type AbsClient } from "../sources/audiobookshelf/client.ts";
 import {
   ABS_SOURCE,
@@ -37,9 +40,10 @@ export function usage(): string {
     "Usage: it <command> [options]",
     "",
     "Commands:",
-    "  sync audiobookshelf    fetch new Audiobookshelf activity into the DB",
+    "  sync audiobookshelf                      fetch new Audiobookshelf activity into the DB",
+    "  export --format json|csv --out <file>    export the full events archive to a file",
     "",
-    "More commands (import, export, add, serve) will be added in later tasks.",
+    "More commands (import, add, serve) will be added in later tasks.",
   ].join("\n");
 }
 
@@ -49,6 +53,7 @@ export interface CliDeps {
   createAbsClient?: (cfg: Config) => AbsClient;
   sinkFor?: (db: Database) => Sink;
   syncAudiobookshelf?: (deps: SyncAbsDeps) => Promise<AbsSyncResult>;
+  writeFile?: (path: string, data: string) => void;
   out?: (line: string) => void;
   err?: (line: string) => void;
   env?: Record<string, string | undefined>;
@@ -126,6 +131,112 @@ async function runSync(
   }
 }
 
+interface ExportArgs {
+  format: "json" | "csv";
+  out: string;
+}
+
+type ExportParseResult =
+  | { ok: true; value: ExportArgs }
+  | { ok: false; message: string };
+
+function parseExportArgs(args: string[]): ExportParseResult {
+  let format: string | undefined;
+  let out: string | undefined;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+
+    if (arg === "--format" || arg.startsWith("--format=")) {
+      const value = arg === "--format" ? args[i + 1] : arg.slice("--format=".length);
+      if (arg === "--format") {
+        i += 1;
+      }
+      if (value === undefined || value === "") {
+        return { ok: false, message: "Missing value for --format." };
+      }
+      format = value;
+    } else if (arg === "--out" || arg.startsWith("--out=")) {
+      const value = arg === "--out" ? args[i + 1] : arg.slice("--out=".length);
+      if (arg === "--out") {
+        i += 1;
+      }
+      if (value === undefined || value === "") {
+        return { ok: false, message: "Missing value for --out." };
+      }
+      out = value;
+    } else {
+      return { ok: false, message: `Unknown option: ${arg}` };
+    }
+  }
+
+  if (format === undefined) {
+    return { ok: false, message: "Missing --format." };
+  }
+  if (format !== "json" && format !== "csv") {
+    return {
+      ok: false,
+      message: `Invalid --format: ${format} (expected json or csv).`,
+    };
+  }
+  if (out === undefined) {
+    return { ok: false, message: "Missing --out." };
+  }
+
+  return { ok: true, value: { format, out } };
+}
+
+function runExport(args: string[], ctx: SyncContext): number {
+  const { deps, out, err } = ctx;
+
+  const parsed = parseExportArgs(args);
+  if (!parsed.ok) {
+    err(parsed.message);
+    err(usage());
+    return EXIT_USAGE;
+  }
+  const { format, out: outPath } = parsed.value;
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+  const doWriteFile =
+    deps.writeFile ??
+    ((path: string, data: string) => writeFileSync(path, data, "utf8"));
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const text = format === "json" ? exportJson(db) : exportCsv(db);
+    const count = countEvents(db);
+    doWriteFile(outPath, text);
+    out(`exported ${count} events to ${outPath}`);
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
 /**
  * Run the CLI for the given argument list (without the program name).
  * Returns the process exit code; never calls `process.exit`.
@@ -150,6 +261,10 @@ export async function runCli(
 
   if (command === "sync") {
     return await runSync(rest[0], { deps, out, err });
+  }
+
+  if (command === "export") {
+    return runExport(rest, { deps, out, err });
   }
 
   err(`Unknown command: ${command}`);
