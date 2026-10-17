@@ -1,0 +1,22 @@
+{
+  "totalTime": 2100,
+  "today": 1200,
+  "days": {
+    "2026-10-16": 900,
+    "2026-10-17": 1200
+  },
+  "dayOfWeek": {
+    "Friday": 900,
+    "Saturday": 1200
+  },
+  "items": {
+    "item-fake-book-2": {
+      "id": "item-fake-book-2",
+      "mediaMetadata": {
+        "title": "Synthetic Book From Stats"
+      },
+      "timeListening": 7200
+    }
+  },
+  "recentSessions": []
+}
