@@ -35,7 +35,7 @@ import {
   CONSUMPTION_KINDS,
   coverUrlFor,
   formatLocalParts,
-  getLatestConsumptionEvents,
+  getDisplayConsumptionEvents,
   getSeriesOrTitle,
   type ConsumptionEvent,
 } from "./aggregate.ts";
@@ -536,9 +536,9 @@ export interface GetSearchOptions extends SearchOptions {
   tz: string;
 }
 
-/** Reads consumption events through `getLatestConsumptionEvents` and searches them. */
+/** Reads consumption events through `getDisplayConsumptionEvents` and searches them. */
 export function search(db: Database, opts: GetSearchOptions): SearchResult {
-  const events = getLatestConsumptionEvents(db, opts.source);
+  const events = getDisplayConsumptionEvents(db, opts.source, opts.tz);
   return searchEvents(events, opts.tz, {
     q: opts.q,
     source: opts.source,
@@ -568,9 +568,10 @@ export function getTitleHistory(
         ? "youtube"
         : opts.key.slice(0, sep)
       : undefined;
-  const events = getLatestConsumptionEvents(
+  const events = getDisplayConsumptionEvents(
     db,
-    source !== undefined && source !== "" ? source : undefined
+    source !== undefined && source !== "" ? source : undefined,
+    opts.tz
   );
   return titleHistory(events, opts.tz, opts.key);
 }

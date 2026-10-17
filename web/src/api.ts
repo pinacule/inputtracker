@@ -26,6 +26,7 @@ export interface CalendarItem {
   cover_url: string | null;
   /** Synced later from an offline device: the day is the sync day, the time is unknown. */
   time_uncertain?: boolean;
+  also_from?: string[];
 }
 
 export interface CalendarDay {

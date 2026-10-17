@@ -18,6 +18,8 @@ import {
   type LoadConfigOptions,
 } from "../core/config.ts";
 import { openDb } from "../core/db.ts";
+import { runDoctor, type DoctorDeps } from "./doctor.ts";
+import { runVerifyCopy } from "./verify-copy.ts";
 import type { MediaType } from "../core/events.ts";
 import { LocalDbSink, type Sink } from "../core/sink.ts";
 import { buildNotifier, reportSyncResult, type Notifier } from "../notify/index.ts";
@@ -74,6 +76,8 @@ export function usage(): string {
     "  import <file> [--format json|csv]        import a native export file into the DB",
     "    import youtube-takeout <file>          import a YouTube Takeout watch-history JSON file",
     "  backup                                   snapshot the DB + JSON export into backup_dir",
+    "  doctor                                   check the environment before/after a move",
+    "  verify-copy <copy.db>                    check a copied DB has every event of the configured DB",
     "",
     "More commands (serve) will be added in later tasks.",
   ].join("\n");
@@ -104,6 +108,10 @@ export interface CliDeps {
   createSimklClient?: (cfg: Config["simkl"], deps: SimklClientDeps) => SimklClient;
   readSimklToken?: (path: string) => SimklToken | null;
   writeSimklToken?: (path: string, token: SimklToken) => void;
+  /** Override for `it doctor` (tests inject mocked environment deps). */
+  runDoctor?: (overrides?: Partial<DoctorDeps>) => Promise<number>;
+  /** Environment deps merged into the doctor defaults. */
+  doctor?: Partial<DoctorDeps>;
 }
 
 function errorText(err: unknown): string {
@@ -917,6 +925,20 @@ export async function runCli(
 
   if (command === "backup") {
     return runBackupCommand(rest, { deps, out, err });
+  }
+
+  if (command === "doctor") {
+    const runner = deps.runDoctor ?? runDoctor;
+    return await runner({ ...deps.doctor, out });
+  }
+
+  if (command === "verify-copy") {
+    return runVerifyCopy(rest, {
+      loadConfig: deps.loadConfig ?? loadConfig,
+      out,
+      err,
+      usage,
+    });
   }
 
   err(`Unknown command: ${command}`);

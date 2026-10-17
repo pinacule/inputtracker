@@ -497,6 +497,14 @@ body {
   opacity: 0.6;
 }
 
+.dedup-note {
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.25;
+  margin-top: 0.15rem;
+  overflow-wrap: break-word;
+}
+
 /* ==========================================================================
    Heatmap View
    ========================================================================== */
