@@ -78,7 +78,7 @@ reviews and merges with `scripts/merge-task.sh`. Read-only features only (no sch
 
 | ID | Task | Worker | Depends | Acceptance | Status |
 |---|---|---|---|---|---|
-| Z01 | **Streaks (F2) + On this day (F6)**: `src/server/insights.ts` (pure functions), `GET /api/insights`, shown on the Stats page | ZCode desktop (GLM-5.3-Flash) | — | Unit tests for day boundaries in Europe/Bratislava, DST, leap day, source filter; `bun run check` passes | RUNNING (zcode, hand-fed) |
+| Z01 | **Streaks (F2) + On this day (F6)**: `src/server/insights.ts` (pure functions), `GET /api/insights`, shown on the Stats page | ZCode desktop (GLM-5.3-Flash) | — | Unit tests for day boundaries in Europe/Bratislava, DST, leap day, source filter; `bun run check` passes | DONE (4951c1a) |
 
 ## After phase 2 (later, not now)
 
