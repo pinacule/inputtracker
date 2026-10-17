@@ -11,6 +11,7 @@ Run in progress.
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
+- T01: worker result passed review, but the manager accidentally removed the worktree before committing (manager error). T01 re-run from scratch, attempt 1 not counted against the worker.
 
 ## BLOCKED
 
