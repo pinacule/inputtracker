@@ -7,16 +7,8 @@ import {
   type SyncNowResult,
   type SyncRun,
 } from "../api";
+import { DEFAULT_TIMEZONE, formatDateTime } from "../lib/format-date";
 import { describeImport } from "../lib/forms";
-
-/** Format a UTC ISO timestamp in the browser's local time, tolerant of bad input. */
-function formatLocalTimestamp(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  return date.toLocaleString();
-}
 
 export function ImportExport() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -197,7 +189,7 @@ export function ImportExport() {
                 <li key={run.source} class="status-item">
                   <span class="status-source">{run.source}</span>
                   <span class="status-time">
-                    {formatLocalTimestamp(run.started_at)}
+                    {formatDateTime(run.started_at, DEFAULT_TIMEZONE)}
                   </span>
                   <span class="status-counts">
                     {describeImport({
