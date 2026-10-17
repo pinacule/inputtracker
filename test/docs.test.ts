@@ -168,3 +168,44 @@ describe("docs contain no real host, path or secret", () => {
     }
   });
 });
+
+describe("README.md documents the phase-2 sources", () => {
+  test("mentions the Simkl app type and auth commands", () => {
+    expect(README).toContain("it auth simkl");
+    expect(README).toContain("auth simkl");
+    expect(README).toContain("TV, devices & command line");
+    expect(README).toContain("simkl-token.json");
+  });
+
+  test("mentions the YouTube Takeout import and the JSON export format", () => {
+    expect(README).toContain("import youtube-takeout");
+    expect(README).toContain("watch-history.json");
+
+    // The Takeout steps must say to export History as JSON (HTML is unsupported).
+    const start = README.indexOf("YouTube watch history");
+    const end = README.indexOf("Phone install");
+    expect(start, "README.md must describe the Takeout steps").toBeGreaterThan(0);
+    expect(end, "the Takeout steps must come before the phone section").toBeGreaterThan(
+      start
+    );
+    const steps = README.slice(start, end);
+    expect(steps).toContain("JSON");
+  });
+});
+
+describe("DATA_FORMAT.md documents the phase-2 sources", () => {
+  test("names the Simkl and YouTube sources and their key fields", () => {
+    expect(DATA_FORMAT).toContain("simkl");
+    expect(DATA_FORMAT).toContain("youtube");
+    expect(DATA_FORMAT).toContain("history_item");
+    expect(DATA_FORMAT).toContain("simkl_poster");
+    expect(DATA_FORMAT).toContain("youtube_video");
+  });
+
+  test("documents the Simkl source_id formats", () => {
+    expect(DATA_FORMAT).toContain("movie:<simkl id>:<started_at>");
+    expect(DATA_FORMAT).toContain(
+      "ep:<show simkl id>:<season>:<episode>:<started_at>"
+    );
+  });
+});

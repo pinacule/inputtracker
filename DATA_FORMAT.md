@@ -2,8 +2,10 @@
 
 How InputTracker stores its data, for other programs that want to read the
 SQLite database or an export. The code is the source of truth:
-`src/core/db.ts` (schema), `src/core/events.ts` (hashing/normalization) and
-`src/io/export-*.ts` / `src/io/import-native.ts` (exports and import).
+`src/core/db.ts` (schema), `src/core/events.ts` (hashing/normalization),
+`src/io/export-*.ts` / `src/io/import-native.ts` (exports and import),
+`src/sources/simkl/map.ts` (Simkl events) and `src/sources/youtube/takeout.ts`
+(YouTube Takeout events).
 
 ## Where the data lives
 
@@ -29,6 +31,13 @@ also has `-wal` and `-shm` sidecar files. A read-only connection can read the
 WAL; if you copy the database for offline use, either copy all three files
 together or run a checkpoint / use `VACUUM INTO` first. Foreign keys are ON, and
 `busy_timeout` is 5000 ms.
+
+Next to the database (in the same directory) the app keeps files that are **not**
+part of the data format and are not in any export or backup:
+`secrets/simkl-token.json` holds the Simkl OAuth tokens (the `secrets` directory
+is mode 0700, the file mode 0600) and is a secret — never commit or share it.
+`it export` writes `events` rows only, and `it backup` copies the database
+itself (`VACUUM INTO`) plus that export, so neither includes the token file.
 
 ## Table `events`
 
@@ -58,19 +67,62 @@ The append-only archive. One row per decoded record.
 
 Values the code produces today:
 
-- `source`: `audiobookshelf` (sync), `manual` (the `add` command / web form).
-  An import (the `import` command / web upload) keeps each row's original
-  `source`; only its `ingest_runs.source` is `native-import`.
+- `source`: `audiobookshelf` (sync), `simkl` (sync), `youtube` (a YouTube
+  Takeout import), `manual` (the `add` command / web form). An import (the
+  `import` command / web upload) keeps each row's original `source`. Only the
+  `ingest_runs.source` changes: a native export import writes `native-import`,
+  a YouTube Takeout import writes `youtube-takeout` (its event rows are still
+  `source = youtube`).
 - `source_kind`: from Audiobookshelf — `listening_session`, `media_progress`,
-  `daily_stat`; from manual entry — `history_item`. An import keeps whatever
-  `source_kind` was in the file.
+  `daily_stat`; from Simkl — `watch` (one row per watch); from a YouTube Takeout
+  import — `history_item`; from manual entry — `history_item`. An import keeps
+  whatever `source_kind` was in the file.
 - `media_type`: one of `audiobook`, `podcast_episode`, `movie`, `episode`,
   `video`, `book`, `other`. Audiobookshelf sync only ever produces `audiobook`,
-  `podcast_episode` or `other`; manual entry accepts any of the seven.
+  `podcast_episode` or `other`; Simkl sync produces `movie` or `episode`; a
+  YouTube Takeout import produces `video`; manual entry accepts any of the
+  seven.
 
 `external_ids` and `raw` are stored as JSON **text** (not JSONB). A typical
 `external_ids` value for an Audiobookshelf session looks like
 `{"abs_item":"item-fake-book-1"}` (plus `abs_episode` for podcast episodes).
+
+### Simkl events
+
+Simkl sync writes one event per watch. `source = simkl`, `source_kind = watch`,
+`started_at` is the watch time normalized to UTC ISO 8601 with milliseconds;
+`ended_at`, `progress` and `device` are `NULL`.
+
+- Movie: `media_type = movie`, `source_id = movie:<simkl id>:<started_at>`. An
+  anime entry whose `anime_type` is `movie` is stored the same way.
+- Episode: `media_type = episode`,
+  `source_id = ep:<show simkl id>:<season>:<episode>:<started_at>`, with the
+  `season` and `episode` columns set to those numbers.
+- `title` is the movie or show title; `parent_title` is `NULL`.
+- `duration_seconds` is the item's `runtime` in minutes × 60, rounded, or `NULL`
+  when the runtime is missing, zero or not a number.
+- `external_ids` is the item's `ids` object (`simkl`, `imdb`, `tmdb`, `tvdb`,
+  `mal`, `slug`, … as present, non-null values only) plus `simkl_poster` = the
+  poster path when the item has one. Example:
+  `{"simkl":12345,"imdb":"tt0000000","simkl_poster":"74/74415673dcdc9cdd"}`.
+- A rewatch is a separate event: the watch time is part of `source_id`, so
+  nothing is overwritten.
+- `raw` is the whole Simkl movie entry for a movie; for an episode it is the
+  episode object plus `show: {"title": …, "ids": …}`.
+
+### YouTube Takeout events
+
+A Takeout import writes one event per view. `source = youtube`,
+`source_kind = history_item`, `media_type = video`, and
+`source_id = <11-char videoId>:<started_at>`, where `started_at` is the record's
+`time` normalized to UTC ISO 8601 with milliseconds. `title` is the record title
+with a leading `Watched ` removed; `parent_title` is the channel name or `NULL`;
+`ended_at`, `duration_seconds`, `progress` and `device` are `NULL`; `raw` is the
+record as read.
+
+`external_ids` is
+`{"youtube_video": "<video id>", "youtube_channel": "<channel id or null>"}`,
+plus `"youtube_music": true` when the record's `header` is `YouTube Music`.
 
 ## Append-only rule
 
@@ -187,7 +239,8 @@ separately as `unplaced_count` / `unplaced_minutes`.
   `id` (INTEGER PK), `source` (TEXT NOT NULL), `kind` (TEXT), `started_at`
   (TEXT NOT NULL), `finished_at` (TEXT), `status` (TEXT NOT NULL, one of
   `running`, `ok`, `failed`), `rows_seen` (INTEGER), `rows_inserted` (INTEGER),
-  `error` (TEXT).
+  `error` (TEXT). `source` is one of `audiobookshelf`, `simkl` (both with
+  `kind = sync`), `youtube-takeout`, `native-import` or `manual`.
 - `sync_state` — per-source bookkeeping. Columns: `source` (TEXT PRIMARY KEY),
   `cursor` (TEXT), `updated_at` (TEXT NOT NULL). Holds the Audiobookshelf sync
   cursor (max session `updatedAt`) and, under `source = "notify:<source>"`, a
