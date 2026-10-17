@@ -40,6 +40,22 @@ for arg in "$@"; do
   esac
 done
 
+# Resolve the Bun executable to an absolute path. systemd *user* units do not
+# inherit the login shell's PATH (notably ~/.bun/bin), so the units must point
+# at Bun directly instead of relying on `/usr/bin/env bun`.
+BUN=""
+if command -v bun >/dev/null 2>&1; then
+  BUN="$(command -v bun)"
+elif [ -n "${HOME:-}" ] && [ -x "${HOME}/.bun/bin/bun" ]; then
+  BUN="${HOME}/.bun/bin/bun"
+fi
+if [ -z "${BUN}" ]; then
+  echo "install.sh: bun not found." >&2
+  echo "  Looked for 'bun' on PATH and for an executable \${HOME}/.bun/bin/bun." >&2
+  echo "  Install Bun (https://bun.sh) or put it on PATH, then retry." >&2
+  exit 1
+fi
+
 # Template -> rendered unit file, in a stable order.
 UNITS=(
   "inputtracker.service"
@@ -59,6 +75,7 @@ if [ "${DRY_RUN}" -eq 1 ]; then
   echo "  Repository:   ${APP_DIR}"
   echo "  Unit source:  ${UNIT_SRC}"
   echo "  Unit target:  ${UNIT_DST}"
+  echo "  Bun:          ${BUN}"
   echo "  Would render: ${UNITS[*]}"
   echo "  Would run:    systemctl --user daemon-reload"
   if [ "${NO_START}" -eq 0 ]; then
@@ -83,7 +100,9 @@ for unit in "${UNITS[@]}"; do
   tmp="${dst}.tmp.$$"
   content="$(<"${src}")"
   # Bash replacement (not sed) so '&' and '|' in the path are safe.
-  printf '%s\n' "${content//@APP_DIR@/${APP_DIR}}" > "${tmp}"
+  content="${content//@APP_DIR@/${APP_DIR}}"
+  content="${content//@BUN@/${BUN}}"
+  printf '%s\n' "${content}" > "${tmp}"
   if [ -f "${dst}" ] && cmp -s "${tmp}" "${dst}"; then
     rm -f "${tmp}"
   else
