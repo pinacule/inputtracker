@@ -129,10 +129,30 @@ export interface InProgressItem {
   cover_url: string | null;
 }
 
-/** Parse an `external_ids` value (JSON string from SQLite, or an object). */
-export function parseExternalIds(
-  value: unknown
-): Record<string, unknown> | null {
+/** One item in the in-progress or finished progress list. */
+export interface ProgressItem {
+  id: number;
+  source: string;
+  title: string | null;
+  parent_title: string | null;
+  /** Fraction 0..1, or null when the source gave no progress value. */
+  progress: number | null;
+  is_finished: boolean;
+  /** UTC ISO of the latest progress update (= `events_latest.started_at`). */
+  last_update: string;
+  /** UTC ISO when the item was finished, or null when unknown. */
+  finished_at: string | null;
+  /** `/api/cover/<abs_item>` for ABS items, else null. */
+  cover_url: string | null;
+}
+
+export interface ProgressLists {
+  in_progress: ProgressItem[];
+  finished: ProgressItem[];
+}
+
+/** Parse a JSON-object column (`raw` or `external_ids`) from SQLite. */
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
   if (value === null || value === undefined) {
     return null;
   }
@@ -158,6 +178,13 @@ export function parseExternalIds(
     return value as Record<string, unknown>;
   }
   return null;
+}
+
+/** Parse an `external_ids` value (JSON string from SQLite, or an object). */
+export function parseExternalIds(
+  value: unknown
+): Record<string, unknown> | null {
+  return parseJsonObject(value);
 }
 
 /**
@@ -861,4 +888,106 @@ export function getInProgress(
     )
     .all()
     .map(toInProgressItem);
+}
+
+// --- In-progress / finished progress lists (F10) --------------------------
+
+/** Raw `events_latest` row for the progress lists (before classification). */
+interface ProgressRow {
+  id: number;
+  source: string;
+  title: string | null;
+  parent_title: string | null;
+  progress: number | null;
+  started_at: string;
+  ended_at: string | null;
+  external_ids: unknown;
+  raw: unknown;
+}
+
+const PROGRESS_LIST_COLUMNS = `
+  id,
+  source,
+  title,
+  parent_title,
+  progress,
+  started_at,
+  ended_at,
+  external_ids,
+  raw`;
+
+/**
+ * An item counts as finished when it has an end timestamp, reached 100%
+ * progress, or Audiobookshelf stored `isFinished: true` in the raw payload.
+ */
+function isFinishedProgressRow(row: ProgressRow): boolean {
+  if (row.ended_at !== null && row.ended_at !== undefined) {
+    return true;
+  }
+  if (
+    row.progress !== null &&
+    row.progress !== undefined &&
+    row.progress >= 1
+  ) {
+    return true;
+  }
+  const raw = parseJsonObject(row.raw);
+  return raw !== null && raw["isFinished"] === true;
+}
+
+function toProgressItem(row: ProgressRow): ProgressItem {
+  return {
+    id: row.id,
+    source: row.source,
+    title: row.title ?? null,
+    parent_title: row.parent_title ?? null,
+    progress: row.progress ?? null,
+    is_finished: isFinishedProgressRow(row),
+    last_update: row.started_at,
+    finished_at: row.ended_at ?? null,
+    cover_url: coverUrlFor(row),
+  };
+}
+
+/**
+ * Reads the latest `media_progress` row per item from `events_latest` and
+ * splits it into in-progress and finished lists, each sorted by last update
+ * descending. In progress = `progress > 0` and not finished; everything
+ * finished (end timestamp, `progress >= 1`, or raw `isFinished`) goes to
+ * `finished`. `progress` 0 / null items that are not finished appear nowhere.
+ */
+export function getProgressLists(db: Database, source?: string): ProgressLists {
+  const rows =
+    source !== undefined && source !== ""
+      ? db
+          .query<ProgressRow, [string]>(
+            `SELECT ${PROGRESS_LIST_COLUMNS}
+             FROM events_latest
+             WHERE source_kind = 'media_progress'
+               AND source = ?
+             ORDER BY started_at DESC, id DESC;`
+          )
+          .all(source)
+      : db
+          .query<ProgressRow, []>(
+            `SELECT ${PROGRESS_LIST_COLUMNS}
+             FROM events_latest
+             WHERE source_kind = 'media_progress'
+             ORDER BY started_at DESC, id DESC;`
+          )
+          .all();
+
+  const in_progress: ProgressItem[] = [];
+  const finished: ProgressItem[] = [];
+
+  for (const row of rows) {
+    const item = toProgressItem(row);
+    if (item.is_finished) {
+      finished.push(item);
+    } else if (item.progress !== null && item.progress > 0) {
+      in_progress.push(item);
+    }
+  }
+
+  return { in_progress, finished };
 }

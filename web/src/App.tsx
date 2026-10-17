@@ -4,12 +4,14 @@ import { Add } from "./pages/Add";
 import { Calendar } from "./pages/Calendar";
 import { Heatmap } from "./pages/Heatmap";
 import { ImportExport } from "./pages/ImportExport";
+import { Progress } from "./pages/Progress";
 import { Stats } from "./pages/Stats";
 
-type Route = "calendar" | "heatmap" | "stats" | "importexport" | "add";
+type Route = "calendar" | "progress" | "heatmap" | "stats" | "importexport" | "add";
 
 const ROUTES: ReadonlyArray<{ id: Route; label: string }> = [
   { id: "calendar", label: "Calendar" },
+  { id: "progress", label: "Progress" },
   { id: "heatmap", label: "Heatmap" },
   { id: "stats", label: "Stats" },
   { id: "importexport", label: "Import/Export" },
@@ -62,6 +64,7 @@ export function App() {
       <OfflineBanner />
       <main class="content">
         {route === "calendar" && <Calendar date={date} />}
+        {route === "progress" && <Progress />}
         {route === "heatmap" && <Heatmap />}
         {route === "stats" && <Stats />}
         {route === "importexport" && <ImportExport />}

@@ -115,6 +115,28 @@ export interface InProgressItem {
   cover_url: string | null;
 }
 
+/** One item in the in-progress or finished progress list. */
+export interface ProgressItem {
+  id: number;
+  source: string;
+  title: string | null;
+  parent_title: string | null;
+  /** Fraction 0..1, or null when the source gave no progress value. */
+  progress: number | null;
+  is_finished: boolean;
+  /** UTC ISO of the latest progress update. */
+  last_update: string;
+  /** UTC ISO when the item was finished, or null when unknown. */
+  finished_at: string | null;
+  /** `/api/cover/<abs_item>` for ABS items, else null. */
+  cover_url: string | null;
+}
+
+export interface ProgressLists {
+  in_progress: ProgressItem[];
+  finished: ProgressItem[];
+}
+
 /** Body accepted by `POST /api/events` (manual entry). */
 export interface ManualEventInput {
   media_type: string;
@@ -274,6 +296,10 @@ export function getStats(
 
 export function getInProgress(): Promise<InProgressItem[]> {
   return getJson<InProgressItem[]>("/api/in-progress");
+}
+
+export function getProgress(source?: string): Promise<ProgressLists> {
+  return getJson<ProgressLists>(withQuery("/api/progress", { source }));
 }
 
 export function addEvent(body: ManualEventInput): Promise<AddEventResult> {
