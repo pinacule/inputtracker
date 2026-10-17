@@ -1785,3 +1785,113 @@ body {
   color: var(--muted);
   line-height: 1.4;
 }
+
+/* ==========================================================================
+   Year in review (yr- prefix)
+   ========================================================================== */
+
+/* "Year in review →" link in the Stats header */
+.yr-stats-link {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.yr-stats-link:hover {
+  text-decoration: underline;
+}
+
+.yr-stats-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Year picker group (previous / next buttons around the year) */
+.yr-year-btn {
+  padding: 0.35rem 0.6rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.yr-year-value {
+  min-width: 5.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Change vs the previous year ("+12 %", "new") under a metric value */
+.yr-change {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* Month bars: 12 columns must fit a 375 px screen without horizontal scroll,
+   so the shared stats bar columns shrink instead of scrolling. */
+.yr-months .stats-chart {
+  gap: 0.25rem;
+  min-height: 160px;
+}
+
+.yr-months .stats-chart-col {
+  min-width: 0;
+  flex: 1 1 0;
+  max-width: none;
+}
+
+.yr-months .stats-bar-track {
+  height: 120px;
+}
+
+.yr-months .stats-bar-val {
+  font-size: 0.55rem;
+}
+
+/* Weekday horizontal bars */
+.yr-weekday-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.yr-weekday-row {
+  display: grid;
+  grid-template-columns: 2.75rem 1fr 3.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+
+.yr-weekday-label {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.yr-weekday-track {
+  display: block;
+  height: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.yr-weekday-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.yr-weekday-val {
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

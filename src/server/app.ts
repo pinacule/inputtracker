@@ -51,6 +51,7 @@ import {
   getStats,
 } from "./aggregate.ts";
 import { getInsights } from "./insights.ts";
+import { getYearReview } from "./year-review.ts";
 import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
 import { getYoutubeThumb, isValidYoutubeVideoId } from "./thumbs.ts";
@@ -267,6 +268,39 @@ export function createApp(deps: AppDeps): Hono {
     const source = c.req.query("source") || undefined;
     const today = date ?? formatLocalParts(new Date().toISOString(), tz).date;
     const result = getInsights(db, { tz, today, source });
+    return c.json(result);
+  });
+
+  // GET /api/year-review?year=YYYY[&source=...][&date=YYYY-MM-DD] — one year
+  // of consumption summarised. `year` defaults to the current local year;
+  // `date` overrides "today" (mainly for tests); `source` filters everything,
+  // including `available_years`.
+  app.get("/api/year-review", (c) => {
+    const err = validateQueryParams(c.req.url, ["year", "source", "date"]);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const date = c.req.query("date") || undefined;
+    if (date !== undefined && !isValidDateStr(date)) {
+      return c.json(
+        { error: `Invalid date format: '${date}' (expected YYYY-MM-DD)` },
+        400
+      );
+    }
+
+    const today = date ?? formatLocalParts(new Date().toISOString(), tz).date;
+    const yearRaw = c.req.query("year");
+    if (yearRaw !== undefined && !YEAR_RE.test(yearRaw)) {
+      return c.json(
+        { error: `Invalid year format: '${yearRaw}' (expected YYYY)` },
+        400
+      );
+    }
+    const year = yearRaw !== undefined ? Number(yearRaw) : Number(today.slice(0, 4));
+
+    const source = c.req.query("source") || undefined;
+    const result = getYearReview(db, { tz, year, today, source });
     return c.json(result);
   });
 

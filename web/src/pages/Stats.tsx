@@ -148,6 +148,9 @@ export function Stats() {
         <div class="stats-header-titles">
           <h1>Stats</h1>
           <p class="muted">Consumption trends, breakdown, and top items.</p>
+          <a class="yr-stats-link" href="#/year">
+            Year in review →
+          </a>
         </div>
 
         <div class="stats-controls">
