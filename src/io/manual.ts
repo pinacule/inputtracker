@@ -27,6 +27,9 @@ export const MANUAL_SOURCE = "manual";
 /** `events.source_kind` for rows written by manual entry. */
 export const MANUAL_SOURCE_KIND = "history_item";
 
+/** Accepted shape of an optional `client_id` (case-insensitive UUID). */
+const CLIENT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface ManualInput {
   media_type: MediaType;
   title: string;
@@ -41,6 +44,13 @@ export interface ManualInput {
   progress?: number | null;
   device?: string | null;
   external_ids?: Record<string, unknown> | null;
+  /**
+   * Optional idempotency key from a client (e.g. the offline queue on a
+   * phone). When present it becomes the row's `source_id` as
+   * `client:<uuid in lowercase>`, so re-sending the exact same body — a retry
+   * after a lost response — is a no-op instead of a second row.
+   */
+  client_id?: string | null;
 }
 
 export interface ManualOptions {
@@ -320,7 +330,10 @@ function optionalNumber(
  * `Error` (joined by `"; "`).
  *
  * `started_at`/`ended_at` are interpreted as local wall-clock times in `tz`
- * unless they already carry an explicit offset or `Z`.
+ * unless they already carry an explicit offset or `Z`. An optional `client_id`
+ * (a UUID) replaces the generated `source_id` with `client:<uuid in lowercase>`
+ * so the same body can be sent again safely; an invalid one is a problem like
+ * any other.
  */
 export function validateManual(
   input: ManualInput,
@@ -416,6 +429,17 @@ export function validateManual(
     }
   }
 
+  // Optional client idempotency key: `source_id` becomes `client:<uuid>` so a
+  // resent body hits the same `record_hash` and the insert is ignored.
+  let clientSourceId: string | null = null;
+  if (input?.client_id !== undefined && input.client_id !== null) {
+    if (typeof input.client_id !== "string" || !CLIENT_ID_RE.test(input.client_id)) {
+      problems.push("client_id must be a UUID");
+    } else {
+      clientSourceId = `client:${input.client_id.toLowerCase()}`;
+    }
+  }
+
   if (problems.length > 0 || mediaType === null || title === null || startedAt === null) {
     throw new Error(problems.join("; "));
   }
@@ -425,7 +449,7 @@ export function validateManual(
   return {
     source: MANUAL_SOURCE,
     source_kind: MANUAL_SOURCE_KIND,
-    source_id: newId(),
+    source_id: clientSourceId ?? newId(),
     external_ids: externalIds,
     media_type: mediaType,
     title,

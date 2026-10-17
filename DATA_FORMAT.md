@@ -124,6 +124,17 @@ record as read.
 `{"youtube_video": "<video id>", "youtube_channel": "<channel id or null>"}`,
 plus `"youtube_music": true` when the record's `header` is `YouTube Music`.
 
+### Manual entry events
+
+Manual entry (the `add` command, the web form or a phone's offline queue)
+writes `source = manual`, `source_kind = history_item`, and by default a random
+UUID as `source_id`. The web form can send an optional `client_id` (a UUID)
+with the entry: the server then uses `client:<client_id in lowercase>` as the
+`source_id`, so re-sending the exact same body — for example a retry after a
+lost response — hits the same `record_hash` and stays a no-op (`inserted: 0`)
+instead of creating a second row. An invalid `client_id` is rejected like any
+other validation error.
+
 ## Append-only rule
 
 Two triggers abort any mutation:
