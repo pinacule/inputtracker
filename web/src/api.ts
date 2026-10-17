@@ -109,6 +109,27 @@ export interface ImportResult {
   runId: number;
 }
 
+/** One Audiobookshelf sync run, as returned by `GET /api/sync/status`. */
+export interface SyncRun {
+  source: string;
+  started_at: string;
+  finished_at: string | null;
+  rows_seen: number;
+  rows_inserted: number;
+  error: string | null;
+}
+
+export interface SyncStatusResult {
+  runs: SyncRun[];
+}
+
+/** Result of `POST /api/sync/audiobookshelf`. */
+export interface SyncNowResult {
+  runId: number;
+  seen: number;
+  inserted: number;
+}
+
 export interface HealthResult {
   ok: boolean;
 }
@@ -218,4 +239,12 @@ export function importFile(file: File): Promise<ImportResult> {
   const form = new FormData();
   form.append("file", file);
   return postForm<ImportResult>("/api/import", form);
+}
+
+export function getSyncStatus(): Promise<SyncStatusResult> {
+  return getJson<SyncStatusResult>("/api/sync/status");
+}
+
+export function syncNow(): Promise<SyncNowResult> {
+  return postJson<SyncNowResult>("/api/sync/audiobookshelf", {});
 }

@@ -1,8 +1,219 @@
+import { useEffect, useRef, useState } from "preact/hooks";
+import {
+  getSyncStatus,
+  importFile,
+  syncNow,
+  type ImportResult,
+  type SyncNowResult,
+  type SyncRun,
+} from "../api";
+import { describeImport } from "../lib/forms";
+
+/** Format a UTC ISO timestamp in the browser's local time, tolerant of bad input. */
+function formatLocalTimestamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return date.toLocaleString();
+}
+
 export function ImportExport() {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [uploading, setUploading] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncNowResult | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const [runs, setRuns] = useState<SyncRun[] | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  const loadStatus = async () => {
+    try {
+      const res = await getSyncStatus();
+      setRuns(res.runs ?? []);
+      setStatusError(null);
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  useEffect(() => {
+    void loadStatus();
+  }, []);
+
+  const handleUpload = async () => {
+    const file = fileRef.current?.files?.[0] ?? null;
+    if (file === null) {
+      setImportError("Choose a .json or .csv file first.");
+      return;
+    }
+
+    setUploading(true);
+    setImportError(null);
+    setImportResult(null);
+
+    try {
+      const result = await importFile(file);
+      setImportResult(result);
+      if (fileRef.current) {
+        fileRef.current.value = "";
+      }
+      await loadStatus();
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncError(null);
+    setSyncResult(null);
+
+    try {
+      const result = await syncNow();
+      setSyncResult(result);
+      await loadStatus();
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
-    <section class="page">
+    <section class="page stack">
       <h1>Import / Export</h1>
-      <p class="muted">Import an archive and export your data here.</p>
+
+      <section class="card" aria-labelledby="import-heading">
+        <h2 id="import-heading" class="card-title">
+          Import
+        </h2>
+        <p class="muted">
+          Upload a native InputTracker export (<code>.json</code> or{" "}
+          <code>.csv</code>). Duplicates are skipped.
+        </p>
+
+        <div class="form-field">
+          <label class="form-label" for="import-file">
+            Export file
+          </label>
+          <input
+            id="import-file"
+            ref={fileRef}
+            class="form-input"
+            type="file"
+            accept=".json,.csv"
+          />
+        </div>
+
+        <button
+          type="button"
+          class="btn btn-primary"
+          onClick={handleUpload}
+          disabled={uploading}
+        >
+          {uploading ? "Uploading…" : "Upload"}
+        </button>
+
+        {importError && (
+          <p class="alert alert-error" role="alert">
+            {importError}
+          </p>
+        )}
+
+        {importResult && (
+          <p class="alert alert-success" role="status">
+            {describeImport(importResult)} — {importResult.seen} seen,{" "}
+            {importResult.inserted} inserted
+          </p>
+        )}
+      </section>
+
+      <section class="card" aria-labelledby="export-heading">
+        <h2 id="export-heading" class="card-title">
+          Export
+        </h2>
+        <p class="muted">Download your full archive.</p>
+        <div class="link-row">
+          <a class="btn btn-secondary" href="/api/export.json" download>
+            Export JSON
+          </a>
+          <a class="btn btn-secondary" href="/api/export.csv" download>
+            Export CSV
+          </a>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="sync-heading">
+        <h2 id="sync-heading" class="card-title">
+          Sync
+        </h2>
+        <p class="muted">Pull recent activity from Audiobookshelf.</p>
+
+        <button
+          type="button"
+          class="btn btn-primary"
+          onClick={handleSync}
+          disabled={syncing}
+        >
+          {syncing ? "Syncing…" : "Sync now"}
+        </button>
+
+        {syncError && (
+          <p class="alert alert-error" role="alert">
+            {syncError}
+          </p>
+        )}
+
+        {syncResult && (
+          <p class="alert alert-success" role="status">
+            {describeImport(syncResult)}
+          </p>
+        )}
+
+        <div class="status-block">
+          <h3 class="status-heading">Last run per source</h3>
+
+          {statusError && (
+            <p class="alert alert-error" role="alert">
+              {statusError}
+            </p>
+          )}
+
+          {statusError === null && runs !== null && runs.length === 0 && (
+            <p class="muted">No sync runs yet.</p>
+          )}
+
+          {runs !== null && runs.length > 0 && (
+            <ul class="status-list">
+              {runs.map((run) => (
+                <li key={run.source} class="status-item">
+                  <span class="status-source">{run.source}</span>
+                  <span class="status-time">
+                    {formatLocalTimestamp(run.started_at)}
+                  </span>
+                  <span class="status-counts">
+                    {describeImport({
+                      seen: run.rows_seen,
+                      inserted: run.rows_inserted,
+                    })}
+                  </span>
+                  {run.error !== null && run.error !== "" && (
+                    <span class="status-error">{run.error}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
     </section>
   );
 }
