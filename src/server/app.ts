@@ -15,6 +15,7 @@ import { exportCsv } from "../io/export-csv.ts";
 import { exportJson } from "../io/export-json.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
 import { addManual, type ManualInput } from "../io/manual.ts";
+import { VALID_MEDIA_TYPES } from "../core/events.ts";
 import { createAbsClient } from "../sources/audiobookshelf/client.ts";
 import {
   importYoutubeTakeout,
@@ -52,6 +53,7 @@ import {
 } from "./aggregate.ts";
 import { getInsights } from "./insights.ts";
 import { getYearReview } from "./year-review.ts";
+import { getTitleHistory, search } from "./search.ts";
 import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
 import { getYoutubeThumb, isValidYoutubeVideoId } from "./thumbs.ts";
@@ -301,6 +303,91 @@ export function createApp(deps: AppDeps): Hono {
 
     const source = c.req.query("source") || undefined;
     const result = getYearReview(db, { tz, year, today, source });
+    return c.json(result);
+  });
+
+  // GET /api/search?q=&source=&media_type=&limit=&offset= — read-only search
+  // over titles, series, authors and YouTube channels. `q` is required (too
+  // short queries return an empty result, not an error); limit defaults to 30.
+  app.get("/api/search", (c) => {
+    const err = validateQueryParams(c.req.url, [
+      "q",
+      "source",
+      "media_type",
+      "limit",
+      "offset",
+    ]);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const q = c.req.query("q");
+    if (q === undefined || q === "") {
+      return c.json({ error: "Missing required query parameter: q" }, 400);
+    }
+    if (q.length > 200) {
+      return c.json(
+        { error: `Invalid q: too long (${q.length} characters, max 200)` },
+        400
+      );
+    }
+
+    const source = c.req.query("source") || undefined;
+    const mediaType = c.req.query("media_type") || undefined;
+    if (mediaType !== undefined && !VALID_MEDIA_TYPES.has(mediaType)) {
+      return c.json({ error: `Invalid media_type: '${mediaType}'` }, 400);
+    }
+
+    const limitRaw = c.req.query("limit");
+    let limit = 30;
+    if (limitRaw !== undefined) {
+      if (!/^\d+$/.test(limitRaw) || Number(limitRaw) < 1 || Number(limitRaw) > 100) {
+        return c.json(
+          { error: `Invalid limit: '${limitRaw}' (expected integer 1..100)` },
+          400
+        );
+      }
+      limit = Number(limitRaw);
+    }
+
+    const offsetRaw = c.req.query("offset");
+    let offset = 0;
+    if (offsetRaw !== undefined) {
+      if (!/^\d+$/.test(offsetRaw)) {
+        return c.json(
+          { error: `Invalid offset: '${offsetRaw}' (expected a non-negative integer)` },
+          400
+        );
+      }
+      offset = Number(offsetRaw);
+    }
+
+    const result = search(db, { tz, q, source, media_type: mediaType, limit, offset });
+    return c.json(result);
+  });
+
+  // GET /api/title-history?key= — full history of one search hit, read-only.
+  app.get("/api/title-history", (c) => {
+    const err = validateQueryParams(c.req.url, ["key"]);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const key = c.req.query("key");
+    if (key === undefined || key === "") {
+      return c.json({ error: "Missing required query parameter: key" }, 400);
+    }
+    if (key.length > 500) {
+      return c.json(
+        { error: `Invalid key: too long (${key.length} characters, max 500)` },
+        400
+      );
+    }
+
+    const result = getTitleHistory(db, { tz, key });
+    if (result === null) {
+      return c.json({ error: "No title matches the given key" }, 404);
+    }
     return c.json(result);
   });
 

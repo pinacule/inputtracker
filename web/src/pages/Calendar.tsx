@@ -189,6 +189,9 @@ export function Calendar({ date }: CalendarProps = {}) {
       <header class="calendar-header">
         <div class="calendar-title-group">
           <h1 class="calendar-title">{formatMonthTitle(month)}</h1>
+          <a class="search-header-link" href="#/search">
+            🔍 Search
+          </a>
           {loading && (
             <span class="calendar-loading-badge" role="status">
               Loading…

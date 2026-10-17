@@ -5,10 +5,19 @@ import { Calendar } from "./pages/Calendar";
 import { Heatmap } from "./pages/Heatmap";
 import { ImportExport } from "./pages/ImportExport";
 import { Progress } from "./pages/Progress";
+import { Search } from "./pages/Search";
 import { Stats } from "./pages/Stats";
 import { YearReviewPage } from "./pages/YearReview";
 
-type Route = "calendar" | "progress" | "heatmap" | "stats" | "importexport" | "add" | "year";
+type Route =
+  | "calendar"
+  | "progress"
+  | "heatmap"
+  | "stats"
+  | "importexport"
+  | "add"
+  | "year"
+  | "search";
 
 const ROUTES: ReadonlyArray<{ id: Route; label: string }> = [
   { id: "calendar", label: "Calendar" },
@@ -19,10 +28,11 @@ const ROUTES: ReadonlyArray<{ id: Route; label: string }> = [
   { id: "add", label: "Add" },
 ];
 
-/** All routable pages. `year` has no bottom-nav tab: the bar is already full on a phone. */
+/** All routable pages. `year` and `search` have no bottom-nav tab: the bar is already full on a phone. */
 const PAGES: ReadonlyArray<{ id: Route; label: string }> = [
   ...ROUTES,
   { id: "year", label: "Year in review" },
+  { id: "search", label: "Search" },
 ];
 
 const DEFAULT_ROUTE: Route = "calendar";
@@ -31,9 +41,11 @@ interface ParsedRoute {
   route: Route;
   date?: string;
   year?: string;
+  q?: string;
+  hitKey?: string;
 }
 
-/** Read the route and optional query params out of the hash (e.g. `#/calendar?date=2026-10-17` or `#/year?year=2025`). */
+/** Read the route and optional query params out of the hash (e.g. `#/calendar?date=2026-10-17`, `#/search?q=harry`). */
 function parseHash(hash: string): ParsedRoute {
   const stripped = hash.replace(/^#\/?/, "");
   const [pathPart, queryPart] = stripped.split("?");
@@ -43,6 +55,8 @@ function parseHash(hash: string): ParsedRoute {
 
   let date: string | undefined;
   let year: string | undefined;
+  let q: string | undefined;
+  let hitKey: string | undefined;
   if (queryPart) {
     const params = new URLSearchParams(queryPart);
     const d = params.get("date");
@@ -53,13 +67,22 @@ function parseHash(hash: string): ParsedRoute {
     if (y && /^\d{4}$/.test(y)) {
       year = y;
     }
+    // Free-text query / opaque hit key, capped like the server accepts them.
+    const qRaw = params.get("q");
+    if (qRaw && qRaw.length <= 200) {
+      q = qRaw;
+    }
+    const keyRaw = params.get("key");
+    if (keyRaw && keyRaw.length <= 500) {
+      hitKey = keyRaw;
+    }
   }
 
-  return { route, date, year };
+  return { route, date, year, q, hitKey };
 }
 
 export function App() {
-  const [{ route, date, year }, setLocation] = useState<ParsedRoute>(() =>
+  const [{ route, date, year, q, hitKey }, setLocation] = useState<ParsedRoute>(() =>
     parseHash(window.location.hash)
   );
 
@@ -83,6 +106,7 @@ export function App() {
         {route === "importexport" && <ImportExport />}
         {route === "add" && <Add />}
         {route === "year" && <YearReviewPage yearParam={year} />}
+        {route === "search" && <Search qParam={q} hitKeyParam={hitKey} />}
       </main>
       <nav class="tabbar" aria-label="Primary">
         {ROUTES.map((item) => (
