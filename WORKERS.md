@@ -131,12 +131,12 @@ Plan: start on `opencode/deepseek-v4.1-flash-free`, fall back to `opencode/glm-5
 then `opencode/nemotron-3-ultra-free`, then the other free ones.
 Every run's model is logged in `MORNING_REPORT.md`.
 
-### Headless command (tested without jail; jail not yet tested)
+### Headless command (tested inside the jail, 2026-10-17)
 
 Same bubblewrap jail as Antigravity, with opencode's state dirs writable and `--standalone`
 so tools run inside the jail instead of in the background service (which lives outside it).
-First overnight step (M01) verifies this; if opencode fails inside bwrap, it runs unjailed
-with the project `opencode.json` permission denies as the fallback, and that's logged.
+Tested: created a file in the worktree and finished with `step_finish`, exit 0.
+In practice the scripts do this: `scripts/run-worker.sh <task> <worker> <model> <prompt-file> [session]`.
 
 ```bash
 WT=~/Projects/inputtracker/.worktrees/T05

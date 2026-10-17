@@ -8,8 +8,8 @@ Design reference: PLAN.md. Fixtures are synthetic only.
 
 | ID | Task | Status |
 |---|---|---|
-| M01 | `scripts/run-worker.sh` (wrapper: timeout, stall watch, result classification), `scripts/probe-worker.sh`, `scripts/check-secrets.sh` + `.githooks/pre-push` | TODO |
-| M02 | `AGENTS.md` worker rules, `opencode.json` permission denies, `inputtracker.config.example.toml` | TODO |
+| M01 | `scripts/run-worker.sh` (wrapper: timeout, stall watch, result classification), `scripts/jail.sh`, `scripts/probe-worker.sh`, `scripts/check-secrets.sh` + `.githooks/pre-push`, `scripts/overnight.sh` + `scripts/manager/step.md` | DONE 2026-10-17 (both workers tested through wrapper + jail) |
+| M02 | `AGENTS.md` worker rules, `inputtracker.config.example.toml` (no `opencode.json` needed: bwrap jail works for opencode with `--standalone`) | DONE 2026-10-17 |
 | M04 | Capture field names (no values) of `GET /api/me` mediaProgress and `GET /api/me/listening-stats` into `docs/abs-fields.md` | DONE 2026-10-17 |
 | — | Session field names captured into `docs/abs-fields.md`; ABS key verified (HTTP 200) | DONE 2026-10-17 |
 

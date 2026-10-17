@@ -1,0 +1,22 @@
+# Copy to inputtracker.config.toml (gitignored) and fill in. Never commit the real file.
+
+timezone = "Europe/Bratislava"
+
+[server]
+bind = "127.0.0.1"
+port = 8787
+
+[storage]
+# Defaults: ~/.local/share/inputtracker/inputtracker.db and ~/.local/share/inputtracker/backups/
+# db_path = "/home/you/.local/share/inputtracker/inputtracker.db"
+# backup_dir = "/home/you/.local/share/inputtracker/backups"
+backup_keep = 14
+
+[audiobookshelf]
+url = "http://localhost:13378"   # on a VM: the PC's Tailscale address
+token = "YOUR_ABS_API_KEY"
+timeout_s = 20
+
+[notify]
+desktop = true
+ntfy_url = ""   # later

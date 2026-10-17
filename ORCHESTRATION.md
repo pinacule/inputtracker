@@ -80,27 +80,26 @@ State per worker in `.orchestrator/state.json` (gitignored): `available | limite
 
 ## Overnight loop
 
-Runs in tmux so it survives the terminal closing:
+Runs in tmux session **`inputtracker-overnight`**, wrapped in `systemd-inhibit` so the PC doesn't sleep:
 
 ```bash
-tmux new -s inputtracker -c ~/Projects/inputtracker
-claude   # then: "Run the overnight loop per ORCHESTRATION.md"
+tmux new-session -d -s inputtracker-overnight -c ~/Projects/inputtracker \
+  'systemd-inhibit --what=idle:sleep --why="InputTracker overnight build" scripts/overnight.sh'
+tmux attach -t inputtracker-overnight      # watch;  Ctrl-b d to detach
+touch .orchestrator/STOP                   # stop after the current step
 ```
 
-Loop (one task in flight per worker, so up to 2 in parallel on independent files):
+`scripts/overnight.sh` (bash supervisor) alternates:
+1. **Manager step**: `claude -p "<scripts/manager/step.md + live status>" --permission-mode auto
+   --model sonnet`. Fresh context each step (cheaper; all state lives in TASKS.md,
+   MORNING_REPORT.md and `.orchestrator/current.json`). The step reviews/merges/pushes the last
+   worker result or prepares the next task, and writes `current.json` (`next: run|wait|finished`).
+2. **Worker run**: `scripts/run-worker.sh` in the jail → `ok|limit|error|stuck` → back to 1.
 
-```
-while TASKS.md has TODO tasks with met dependencies:
-    for each available worker without a running task:
-        pick next eligible task for it (routing rules) -> prepare -> start in background
-    wait for a worker to finish (background task notification, not polling)
-    classify -> review -> merge+push | feedback | reassign | BLOCKED
-    if both workers limited: sleep until earliest reset, probe
-write final MORNING_REPORT.md, push, stop
-```
-
-Merges are serialized (one at a time); a second worktree whose branch conflicts after a merge
-is rebased by the manager or re-run by the worker on the new `main`.
+Limits are handled in bash (state in `.orchestrator/state.json`): worker limits per Limits above;
+a Claude usage limit makes the supervisor parse the reset time (fallback 30 min), sleep, and
+resume — it never stops on a limit. Every hit/recovery is appended to MORNING_REPORT.md.
+Serial: one task at a time (simpler, and merges never race). Log: `.orchestrator/overnight.log`.
 
 ## Secrets and data safety (before every push)
 
