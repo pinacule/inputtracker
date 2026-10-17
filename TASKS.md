@@ -69,6 +69,26 @@ Tokens never in logs, output, errors or git. YouTube Takeout: local file only, n
 | T25 | **Docs for phase 2**: README (register a V2 Simkl app as "TV, devices & command line", put `client_id` in config, run `it auth simkl`, re-run `scripts/install.sh`; Takeout export steps with JSON format; import), DATA_FORMAT (`simkl`/`youtube` sources, source_id formats, external_ids keys) | OC | T24 | Manager checks against the code | DONE (opencode deepseek-v4.1-flash-free, attempts 1, 9e8bd3f) |
 | Y02 | yt-dlp `:ythistory` poller with browser cookies | — | — | — | DEFERRED (user decision 2026-10-17: not now) |
 
+## Phase 3 — Cloud prep, cross-source dedup, goals, ratings + notes (approved by the user 2026-10-17)
+
+The server moves to an Oracle Cloud ARM64 VM later (PLAN.md "Future hosting", MIGRATION.md);
+Audiobookshelf stays on the PC and is reached over Tailscale. Say "the server", never assume the PC.
+Nothing in this phase touches a remote host, the real DB or the user's config: test in temp dirs.
+Schema changes are **new tables only** (never ALTER/UPDATE/DELETE on `events`), each as the next
+`migrations` version in `src/core/db.ts`, append-only with UPDATE/DELETE-abort triggers like `events`,
+inserts `INSERT OR IGNORE` on a `record_hash`, reads through a `*_latest` view.
+ZCode (hand-fed table below) may merge Z04 (offline add queue: `Add.tsx`, `App.tsx`, `api.ts`,
+`manual.ts`, `main.tsx`) to main at any time; a merge conflict follows the normal policy.
+
+| ID | Task | Worker (why) | Depends | Acceptance | Status |
+|---|---|---|---|---|---|
+| V01 | **Cloud VM prep**: (1) `it doctor`: read-only check of the environment — arch (x86_64/aarch64), Bun version, config loads (print non-secret fields only, via `redact()`), DB path/backup dir writable, schema version, port free, systemd user + linger, `tailscale` present; exit 1 on problems. (2) `it verify-copy <other.db>`: opens the other DB **read-only**, compares the sets of `events.record_hash` (and `ingest_runs` count, schema version); prints counts and at most 5 missing hashes, exit 1 when the copy lacks rows. (3) `scripts/install.sh` portable: works from any checkout path, `bun install --frozen-lockfile`, no PC-specific paths, prints the linger hint. (4) Rewrite MIGRATION.md as tested steps: stop PC timers, `it backup`, copy snapshot + `secrets/` + config via `scp` over Tailscale, install on the VM, change `audiobookshelf.url` to the PC's tailnet name, `it doctor`, `it verify-copy`, move `tailscale serve`, disable PC units. | OC (CLI + docs) | — | Tests for `doctor` (temp config/dirs, mocked checks) and `verify-copy` (two temp DBs: equal, missing rows, extra rows); no secrets printed (test asserts the token never appears in output); `bun run check` | TODO |
+| D01 | **Cross-source dedup (F13), display only**: one pure function applied in the single place displays read consumption events (around `getLatestConsumptionEvents`), so Calendar, Heat map, Stats, Insights, Year in review, Search and Progress all show one item when the same watch comes from two sources. Rule: `media_type` movie, or episode with equal season+episode; equal `normalizeForSearch(getSeriesOrTitle)`; same local date (config tz). Keep the non-manual event (Simkl ids/poster), take `duration_seconds` from it or else from the other; record `also_from: string[]` on the kept item and show a small "also: Manual" note in the calendar item. Stored rows, exports and backups are untouched. | AG (cross-cutting) | — | Pure tests: movie and episode pairs merged, different day / different episode / different title not merged, three-way, YouTube and ABS untouched, idempotent; API tests show one calendar item and stats counted once; `bun run check` | TODO |
+| G01 | **Goals (F8)**: table `goals` (migration v2): `goal_id` (uuid), `year`, `metric` (`items`/`hours`/`titles`/`active_days`), optional `source`, optional `media_type`, `target` (>0), `archived` (0/1), `created_at` UTC, `record_hash`; view `goals_latest` (latest row per `goal_id`); a change or archive is a new row. `GET /api/goals?year=` returns goals with progress (computed from consumption events like Year in review, local year in tz) incl. expected-by-today pace; `POST /api/goals` creates/changes/archives (validated, optional `client_id` for idempotent retries). Web: Goals card on Stats and on Year in review (progress bar, "on track" / "behind by N"), small add/edit/archive form; 375 px, dark mode. | OC | — | Migration test on a temp DB with existing events (events untouched, triggers abort UPDATE/DELETE on `goals`), progress maths incl. pace and leap years, API validation 400s, idempotent POST; `bun run check` | TODO |
+| R01 | **Ratings + notes (F3)**: table `annotations` (migration v3): target = `source` + `title` (the `getSeriesOrTitle` group, same as Search keys), `rating` (integer 1–10 or null, shown as 5 stars with halves), `note` (text ≤ 5000 or null), `created_at` UTC, `record_hash`; view `annotations_latest` (latest per target); clearing = new row with nulls. `GET /api/annotations?source=&title=` and `POST /api/annotations` (validated, optional `client_id`). Web: stars + note editor in the Search detail view header and on Progress items; ratings shown in Year in review top titles. | AG | G01 | Migration v3 on a temp DB with v2 data, triggers abort UPDATE/DELETE, latest-wins and clear, unicode notes, length limits, API 400s; `bun run check` | TODO |
+| X01 | **Goals + annotations in export/import**: JSON export gains `goals` and `annotations` arrays (all rows, not only latest); native import inserts them with `INSERT OR IGNORE` on `record_hash` (re-import inserts 0); CSV export unchanged; DATA_FORMAT.md documents both tables and views. | OC | G01, R01 | Round-trip test export → import into an empty temp DB → identical rows; re-import inserts 0; `bun run check` | TODO |
+| T31 | **Docs + smoke for phase 3**: README (doctor, verify-copy, goals, ratings/notes, dedup behaviour), extend `bun run smoke` with goals + annotations + a manual/Simkl duplicate pair. | OC | V01, D01, X01 | Manager checks docs against the code; `bun run smoke` passes | TODO |
+
 ## ZCode (hand-fed) — handled by Claude interactively, NOT by the manager
 
 The user's ZCode quota (GLM-5.3-Flash, expires 2026-10-19 03:00) runs through the ZCode desktop app,
@@ -85,5 +105,5 @@ reviews and merges with `scripts/merge-task.sh`. Read-only features only (no sch
 
 ## After phase 2 (later, not now)
 
-Remaining proposed features (F2–F8, F11–F13), TMDB/OMDb covers, ntfy, HTTP ingest sink
-for remote sources, VM move (MIGRATION.md), Y02 if the user asks.
+Remaining proposed features (F4 tags, F12 more sources), TMDB/OMDb covers, ntfy, HTTP ingest
+sink for remote sources, the actual VM move, Y02 if the user asks.
