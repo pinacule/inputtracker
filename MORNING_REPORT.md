@@ -17,3 +17,4 @@ Run in progress.
 ## Decisions needed
 
 ## Limit pauses (log)
+- 2026-10-17 02:06 CEST — overnight loop STARTED
