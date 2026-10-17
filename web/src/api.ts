@@ -156,6 +156,81 @@ export interface InsightsResult {
   on_this_day: OnThisDayResult;
 }
 
+export interface ReviewTotals {
+  items: number;
+  minutes: number;
+  active_days: number;
+  titles: number;
+}
+
+export interface ReviewTitle {
+  title: string;
+  source: string;
+  media_type: string | null;
+  minutes: number;
+  count: number;
+  cover_url: string | null;
+}
+
+/** YouTube events grouped by channel (`parent_title`). */
+export interface ReviewChannel {
+  name: string;
+  count: number;
+}
+
+/** One month bucket ("2026-01"), zeros filled for empty months. */
+export interface ReviewMonth {
+  month: string;
+  minutes: number;
+  count: number;
+}
+
+/** One local day ("YYYY-MM-DD"). */
+export interface ReviewDay {
+  date: string;
+  minutes: number;
+  count: number;
+}
+
+/** Earliest / latest event of the year. */
+export interface ReviewMoment {
+  title: string;
+  source: string;
+  /** UTC ISO as stored. */
+  started_at: string;
+}
+
+/** Result of `GET /api/year-review` (one calendar year summarised). */
+export interface YearReview {
+  year: number;
+  /** True when today is inside this year. */
+  partial: boolean;
+  /** Whole year (365/366), Jan 1..today when partial, 0 for a future year. */
+  days_in_range: number;
+  /** Every local year with at least one event, newest first. */
+  available_years: number[];
+  totals: ReviewTotals;
+  /** The year before, null when it has no events. */
+  previous: ReviewTotals | null;
+  by_source: Record<string, ReviewTotals>;
+  by_media_type: Record<string, { items: number; minutes: number }>;
+  /** Always 12 entries Jan..Dec, zeros filled. */
+  by_month: ReviewMonth[];
+  /** Always 7 entries, 1 = Monday .. 7 = Sunday, zeros filled. */
+  by_weekday: { weekday: number; minutes: number; count: number }[];
+  /** Max 10, by minutes desc, then count desc, then title asc. */
+  top_titles: ReviewTitle[];
+  /** Max 10, YouTube only, by count desc, then name asc. */
+  top_channels: ReviewChannel[];
+  /** By minutes, then count; tie -> earliest date. */
+  busiest_day: ReviewDay | null;
+  /** Same rule as `busiest_day`, null when the year is empty. */
+  busiest_month: ReviewMonth | null;
+  longest_streak: { days: number; start: string | null; end: string | null };
+  first: ReviewMoment | null;
+  last: ReviewMoment | null;
+}
+
 export interface InProgressItem {
   id: number;
   source: string;
@@ -366,6 +441,18 @@ export function getStats(
 
 export function getInsights(source?: string): Promise<InsightsResult> {
   return getJson<InsightsResult>(withQuery("/api/insights", { source }));
+}
+
+export function getYearReview(
+  year?: number,
+  source?: string
+): Promise<YearReview> {
+  return getJson<YearReview>(
+    withQuery("/api/year-review", {
+      year: year !== undefined ? String(year) : undefined,
+      source,
+    })
+  );
 }
 
 export function getInProgress(): Promise<InProgressItem[]> {
