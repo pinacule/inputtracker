@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly InputTracker Simkl sync
+
+[Timer]
+OnCalendar=*-*-* *:30:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=inputtracker-sync@simkl.service
+
+[Install]
+WantedBy=timers.target

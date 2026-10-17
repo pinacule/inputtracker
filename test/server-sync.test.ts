@@ -21,6 +21,11 @@ function mockConfig(overrides: Partial<Config> = {}): Config {
       token: TOKEN,
       timeout_s: 20,
     },
+    simkl: {
+      client_id: "simkl-test-client-id",
+      base_url: "https://api.simkl.com",
+      timeout_s: 20,
+    },
     notify: { desktop: false, ntfy_url: "" },
     toJSON: () => ({}),
     toString: () => "",
@@ -223,6 +228,190 @@ describe("POST /api/sync/audiobookshelf", () => {
   });
 });
 
+describe("POST /api/sync/simkl", () => {
+  let db: Database;
+  const fakeToken = (): {
+    access_token: string;
+    refresh_token: string;
+    scope: string;
+    expires_at: string;
+    obtained_at: string;
+  } => ({
+    access_token: "simkl_at_synth_token_123",
+    refresh_token: "simkl_rt_synth_token_123",
+    scope: "media:read",
+    expires_at: "2026-10-25T00:00:00Z",
+    obtained_at: "2026-10-18T00:00:00Z",
+  });
+
+  const fakeSimklClient = () => ({
+    get: async <T>() => ({}) as T,
+  });
+
+  beforeEach(() => {
+    db = openDb(":memory:");
+  });
+
+  test("runs the injected sync and returns runId, seen, inserted, mode", async () => {
+    const config = mockConfig();
+
+    const app = createApp({
+      db,
+      config,
+      readSimklToken: fakeToken,
+      createSimklClient: fakeSimklClient,
+      syncSimkl: async (deps) => {
+        expect(deps.db).toBe(db);
+        return { runId: 101, seen: 8, inserted: 5, mode: "full" };
+      },
+    });
+
+    const res = await app.request("/api/sync/simkl", { method: "POST" });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      runId: 101,
+      seen: 8,
+      inserted: 5,
+      mode: "full",
+    });
+    expect(fetchCalls).toBe(0);
+  });
+
+  test("maps SyncFailedError to 502 with a redacted message", async () => {
+    const config = mockConfig();
+
+    const app = createApp({
+      db,
+      config,
+      readSimklToken: fakeToken,
+      createSimklClient: fakeSimklClient,
+      syncSimkl: async () => {
+        throw new SyncFailedError("Simkl connection error with simkl_at_synth_token_123", {
+          source: "simkl",
+          runId: 102,
+        });
+      },
+    });
+
+    const res = await app.request("/api/sync/simkl", { method: "POST" });
+
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).not.toContain("simkl_at_synth_token_123");
+    expect(body.error).toContain("***");
+    expect(fetchCalls).toBe(0);
+  });
+
+  test("returns 400 when Simkl is not configured", async () => {
+    const config = mockConfig({
+      simkl: {
+        client_id: "  ",
+        base_url: "",
+        timeout_s: 20,
+      },
+    });
+    let syncRan = false;
+
+    const app = createApp({
+      db,
+      config,
+      readSimklToken: fakeToken,
+      createSimklClient: fakeSimklClient,
+      syncSimkl: async () => {
+        syncRan = true;
+        return { runId: 1, seen: 0, inserted: 0, mode: "full" };
+      },
+    });
+
+    const res = await app.request("/api/sync/simkl", { method: "POST" });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/not configured/i);
+    expect(syncRan).toBe(false);
+    expect(fetchCalls).toBe(0);
+  });
+
+  test("returns 400 when Simkl is not authorised", async () => {
+    const config = mockConfig();
+    let syncRan = false;
+
+    const app = createApp({
+      db,
+      config,
+      readSimklToken: () => null,
+      createSimklClient: fakeSimklClient,
+      syncSimkl: async () => {
+        syncRan = true;
+        return { runId: 1, seen: 0, inserted: 0, mode: "full" };
+      },
+    });
+
+    const res = await app.request("/api/sync/simkl", { method: "POST" });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/not authorised/i);
+    expect(syncRan).toBe(false);
+    expect(fetchCalls).toBe(0);
+  });
+
+  test("rejects a concurrent call with 409 while one is running", async () => {
+    const config = mockConfig();
+    const deferred: { resolve: ((result: { runId: number; seen: number; inserted: number; mode: "full" }) => void) | null } = {
+      resolve: null,
+    };
+    const pending = new Promise<{ runId: number; seen: number; inserted: number; mode: "full" }>((resolve) => {
+      deferred.resolve = resolve;
+    });
+    let startCount = 0;
+
+    const app = createApp({
+      db,
+      config,
+      readSimklToken: fakeToken,
+      createSimklClient: fakeSimklClient,
+      syncSimkl: () => {
+        startCount += 1;
+        return pending;
+      },
+    });
+
+    const first = app.request("/api/sync/simkl", { method: "POST" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(startCount).toBe(1);
+
+    const second = await app.request("/api/sync/simkl", { method: "POST" });
+    expect(second.status).toBe(409);
+    expect(startCount).toBe(1);
+
+    deferred.resolve!({ runId: 1, seen: 0, inserted: 0, mode: "full" });
+    const firstRes = await first;
+    expect(firstRes.status).toBe(200);
+
+    const third = await app.request("/api/sync/simkl", { method: "POST" });
+    expect(third.status).toBe(200);
+    expect(startCount).toBe(2);
+    expect(fetchCalls).toBe(0);
+  });
+
+  test("rejects unknown query parameters with 400", async () => {
+    const app = createApp({
+      db,
+      config: mockConfig(),
+      readSimklToken: fakeToken,
+      createSimklClient: fakeSimklClient,
+      syncSimkl: async () => ({ runId: 1, seen: 0, inserted: 0, mode: "full" }),
+    });
+
+    const res = await app.request("/api/sync/simkl?extra=1", {
+      method: "POST",
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("GET /api/sync/status", () => {
   let db: Database;
 
@@ -306,6 +495,42 @@ describe("GET /api/sync/status", () => {
     const res = await app.request("/api/sync/status");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ runs: [] });
+  });
+
+  test("includes simkl in status once it has run", async () => {
+    const config = mockConfig();
+
+    insertRun(db, {
+      id: 10,
+      source: "simkl",
+      kind: "sync",
+      started_at: "2026-10-17T12:00:00.000Z",
+      finished_at: "2026-10-17T12:00:05.000Z",
+      status: "ok",
+      rows_seen: 15,
+      rows_inserted: 7,
+    });
+
+    const app = createApp({ db, config });
+    const res = await app.request("/api/sync/status");
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      runs: Array<{
+        source: string;
+        started_at: string;
+        finished_at: string | null;
+        rows_seen: number;
+        rows_inserted: number;
+        error: string | null;
+      }>;
+    };
+
+    const simklRun = body.runs.find((r) => r.source === "simkl");
+    expect(simklRun).toBeDefined();
+    expect(simklRun!.started_at).toBe("2026-10-17T12:00:00.000Z");
+    expect(simklRun!.rows_seen).toBe(15);
+    expect(simklRun!.rows_inserted).toBe(7);
   });
 
   test("rejects unknown query parameters with 400", async () => {

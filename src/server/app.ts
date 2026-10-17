@@ -27,6 +27,20 @@ import {
   type SyncAbsDeps,
   type SyncClient,
 } from "../sources/audiobookshelf/sync.ts";
+import { createSimklClient } from "../sources/simkl/client.ts";
+import {
+  isSimklAuthorised,
+  isSimklConfigured,
+  syncSimkl,
+  type SimklSyncResult,
+  type SyncSimklClient,
+  type SyncSimklDeps,
+} from "../sources/simkl/sync.ts";
+import {
+  readSimklToken,
+  simklTokenPath,
+  type SimklToken,
+} from "../sources/simkl/token.ts";
 import {
   getCalendar,
   getHeatmapDays,
@@ -48,6 +62,12 @@ export interface AppDeps {
   syncAudiobookshelf?: (deps: SyncAbsDeps) => Promise<AbsSyncResult>;
   /** Injectable ABS client factory so tests never hit the network. */
   createAbsClient?: (config: Config) => SyncClient;
+  /** Injectable Simkl sync; defaults to the real `syncSimkl`. */
+  syncSimkl?: (deps: SyncSimklDeps) => Promise<SimklSyncResult>;
+  /** Injectable Simkl client factory so tests never hit the network. */
+  createSimklClient?: (config: Config["simkl"]) => SyncSimklClient;
+  /** Injectable token reader for Simkl auth check. */
+  readSimklToken?: (path: string) => SimklToken | null;
   /** Injectable sink factory; defaults to a `LocalDbSink`. */
   sinkFor?: (db: Database) => Sink;
 }
@@ -110,6 +130,8 @@ export function createApp(deps: AppDeps): Hono {
 
   /** Guards against overlapping Audiobookshelf syncs from the same server. */
   let absSyncRunning = false;
+  /** Guards against overlapping Simkl syncs from the same server. */
+  let simklSyncRunning = false;
 
   const app = new Hono();
 
@@ -445,6 +467,72 @@ export function createApp(deps: AppDeps): Hono {
       return c.json({ error: redactString(message, config) }, 502);
     } finally {
       absSyncRunning = false;
+    }
+  });
+
+  // POST /api/sync/simkl
+  app.post("/api/sync/simkl", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    if (!isSimklConfigured(config)) {
+      return c.json(
+        {
+          error:
+            "Simkl is not configured (set simkl.client_id in inputtracker.config.toml)",
+        },
+        400
+      );
+    }
+
+    const tokenReader = deps.readSimklToken ?? readSimklToken;
+    if (!isSimklAuthorised(config, tokenReader)) {
+      return c.json(
+        {
+          error:
+            "Simkl is not authorised (run: bun run it auth simkl)",
+        },
+        400
+      );
+    }
+
+    if (simklSyncRunning) {
+      return c.json({ error: "A Simkl sync is already running" }, 409);
+    }
+
+    simklSyncRunning = true;
+    try {
+      const doSync = deps.syncSimkl ?? syncSimkl;
+      const makeClient =
+        deps.createSimklClient ??
+        ((cfg: Config["simkl"]) => {
+          const tokenPath = simklTokenPath(config);
+          return createSimklClient(cfg, {
+            tokenPath,
+            readToken: () => tokenReader(tokenPath),
+          });
+        });
+      const sink = (deps.sinkFor ?? ((database: Database) => new LocalDbSink(database)))(
+        db
+      );
+      const client = makeClient(config.simkl);
+      const result = await doSync({ client, sink, db, config });
+      return c.json({
+        runId: result.runId,
+        seen: result.seen,
+        inserted: result.inserted,
+        mode: result.mode,
+      });
+    } catch (caught) {
+      const raw =
+        caught instanceof SyncFailedError ? caught.message : errorText(caught);
+      let message = raw.replace(/\b(?:simkl_at_|simkl_rt_)[A-Za-z0-9_\-]+\b/gi, "***");
+      message = redactString(message, config);
+      return c.json({ error: message }, 502);
+    } finally {
+      simklSyncRunning = false;
     }
   });
 

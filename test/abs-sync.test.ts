@@ -329,7 +329,7 @@ describe("CLI", () => {
   test("unknown source → usage and exit 1", async () => {
     let outText = "";
     let errText = "";
-    const code = await runCli(["sync", "simkl"], {
+    const code = await runCli(["sync", "unknown"], {
       out: (line) => {
         outText += `${line}\n`;
       },
@@ -339,7 +339,7 @@ describe("CLI", () => {
     });
 
     expect(code).toBe(1);
-    expect(errText).toContain("Unknown source: simkl");
+    expect(errText).toContain("Unknown source: unknown");
     expect(errText).toContain("Usage: it");
     expect(outText).toBe("");
   });
