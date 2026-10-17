@@ -66,11 +66,40 @@ export interface StatBucket {
   minutes: number;
 }
 
+export interface WeekStatBucket {
+  week: string; // "2026-W42" (ISO week, local)
+  by_source: Record<string, number>;
+  minutes: number;
+}
+
+export interface MonthStatBucket {
+  month: string; // "2026-10"
+  by_source: Record<string, number>;
+  minutes: number;
+}
+
+export interface TopItem {
+  title: string;
+  source: string;
+  media_type: string;
+  minutes: number;
+  count: number;
+}
+
 export interface StatsResult {
   total_items: number;
   total_minutes: number;
   by_source: Record<string, StatBucket>;
   by_media_type: Record<string, StatBucket>;
+  by_week: WeekStatBucket[];
+  by_month: MonthStatBucket[];
+  top_items: TopItem[];
+}
+
+export interface StatsParams {
+  from?: string;
+  to?: string;
+  source?: string;
 }
 
 export interface InProgressItem {
@@ -223,8 +252,20 @@ export function getHeatmapHours(
   );
 }
 
-export function getStats(source?: string): Promise<StatsResult> {
-  return getJson<StatsResult>(withQuery("/api/stats", { source }));
+export function getStats(
+  paramsOrSource?: StatsParams | string
+): Promise<StatsResult> {
+  const params: StatsParams =
+    typeof paramsOrSource === "string"
+      ? { source: paramsOrSource }
+      : paramsOrSource ?? {};
+  return getJson<StatsResult>(
+    withQuery("/api/stats", {
+      from: params.from,
+      to: params.to,
+      source: params.source,
+    })
+  );
 }
 
 export function getInProgress(): Promise<InProgressItem[]> {

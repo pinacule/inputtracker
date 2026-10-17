@@ -85,11 +85,34 @@ export interface StatBucket {
   minutes: number;
 }
 
+export interface WeekStatBucket {
+  week: string; // "2026-W42" (ISO week, local)
+  by_source: Record<string, number>;
+  minutes: number;
+}
+
+export interface MonthStatBucket {
+  month: string; // "2026-10"
+  by_source: Record<string, number>;
+  minutes: number;
+}
+
+export interface TopItem {
+  title: string;
+  source: string;
+  media_type: string;
+  minutes: number;
+  count: number;
+}
+
 export interface StatsResult {
   total_items: number;
   total_minutes: number;
   by_source: Record<string, StatBucket>;
   by_media_type: Record<string, StatBucket>;
+  by_week: WeekStatBucket[];
+  by_month: MonthStatBucket[];
+  top_items: TopItem[];
 }
 
 export interface InProgressItem {
@@ -326,23 +349,108 @@ export function aggregateHeatmapHours(
   return { cells };
 }
 
+/** Options for stats aggregation. */
+export interface AggregateStatsOptions {
+  from?: string;
+  to?: string;
+  source?: string;
+  tz?: string;
+}
+
+/**
+ * Calculates the ISO 8601 week string ("YYYY-Www") from a local date ("YYYY-MM-DD").
+ */
+export function getIsoWeek(dateStr: string): string {
+  const parts = dateStr.split("-");
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+
+  const target = new Date(Date.UTC(year, month - 1, day));
+  // ISO day of week: 1 (Mon) .. 7 (Sun)
+  const dayNr = ((target.getUTCDay() + 6) % 7) + 1;
+  // Nearest Thursday in current week decides the ISO year
+  target.setUTCDate(target.getUTCDate() + 4 - dayNr);
+  const isoYear = target.getUTCFullYear();
+  // First day of ISO year is 4th of January
+  const firstThursday = new Date(Date.UTC(isoYear, 0, 4));
+  const firstDayNr = ((firstThursday.getUTCDay() + 6) % 7) + 1;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() + 4 - firstDayNr);
+  // Difference in weeks
+  const weekDiff = Math.round(
+    (target.getTime() - firstThursday.getTime()) / (7 * 24 * 3600 * 1000)
+  );
+  const weekNr = 1 + weekDiff;
+  return `${isoYear}-W${String(weekNr).padStart(2, "0")}`;
+}
+
+/**
+ * Returns series/show title if the event has one, else title.
+ */
+export function getSeriesOrTitle(event: ConsumptionEvent): string {
+  const isSeriesOrShow =
+    event.media_type === "episode" ||
+    event.media_type === "show" ||
+    event.media_type === "podcast" ||
+    event.media_type === "podcast_episode" ||
+    (event.season !== null && event.season !== undefined) ||
+    (event.episode !== null && event.episode !== undefined);
+
+  if (isSeriesOrShow && event.parent_title && event.parent_title.trim() !== "") {
+    return event.parent_title.trim();
+  }
+  return event.title?.trim() || event.parent_title?.trim() || "Untitled";
+}
+
 /** Pure stats aggregation. */
 export function aggregateStats(
-  events: readonly ConsumptionEvent[]
+  events: readonly ConsumptionEvent[],
+  opts?: AggregateStatsOptions
 ): StatsResult {
+  const tz = opts?.tz ?? "Europe/Bratislava";
+  const from = opts?.from;
+  const to = opts?.to;
+  const sourceFilter = opts?.source;
+
   let totalItems = 0;
   let totalSeconds = 0;
   const bySourceData: Record<string, { count: number; totalSeconds: number }> = {};
   const byMediaTypeData: Record<string, { count: number; totalSeconds: number }> = {};
 
+  const byWeekMap = new Map<
+    string,
+    { week: string; bySourceSeconds: Record<string, number>; totalSeconds: number }
+  >();
+  const byMonthMap = new Map<
+    string,
+    { month: string; bySourceSeconds: Record<string, number>; totalSeconds: number }
+  >();
+  const topItemsMap = new Map<
+    string,
+    { title: string; source: string; media_type: string; totalSeconds: number; count: number }
+  >();
+
   for (const event of events) {
     if (!CONSUMPTION_KINDS.has(event.source_kind)) {
       continue;
     }
+    if (sourceFilter !== undefined && sourceFilter !== "" && event.source !== sourceFilter) {
+      continue;
+    }
+
+    const local = formatLocalParts(event.started_at, tz);
+    if (from !== undefined && from !== "" && local.date < from) {
+      continue;
+    }
+    if (to !== undefined && to !== "" && local.date > to) {
+      continue;
+    }
+
     totalItems += 1;
     const dur = event.duration_seconds ?? 0;
     totalSeconds += dur;
 
+    // by_source
     if (!bySourceData[event.source]) {
       bySourceData[event.source] = { count: 0, totalSeconds: 0 };
     }
@@ -350,12 +458,52 @@ export function aggregateStats(
     src.count += 1;
     src.totalSeconds += dur;
 
+    // by_media_type
     if (!byMediaTypeData[event.media_type]) {
       byMediaTypeData[event.media_type] = { count: 0, totalSeconds: 0 };
     }
     const mt = byMediaTypeData[event.media_type]!;
     mt.count += 1;
     mt.totalSeconds += dur;
+
+    // by_week
+    const week = getIsoWeek(local.date);
+    let weekEntry = byWeekMap.get(week);
+    if (!weekEntry) {
+      weekEntry = { week, bySourceSeconds: {}, totalSeconds: 0 };
+      byWeekMap.set(week, weekEntry);
+    }
+    weekEntry.bySourceSeconds[event.source] =
+      (weekEntry.bySourceSeconds[event.source] ?? 0) + dur;
+    weekEntry.totalSeconds += dur;
+
+    // by_month
+    const month = local.date.slice(0, 7);
+    let monthEntry = byMonthMap.get(month);
+    if (!monthEntry) {
+      monthEntry = { month, bySourceSeconds: {}, totalSeconds: 0 };
+      byMonthMap.set(month, monthEntry);
+    }
+    monthEntry.bySourceSeconds[event.source] =
+      (monthEntry.bySourceSeconds[event.source] ?? 0) + dur;
+    monthEntry.totalSeconds += dur;
+
+    // top_items
+    const effectiveTitle = getSeriesOrTitle(event);
+    const itemKey = `${event.source}:::${effectiveTitle}`;
+    let itemEntry = topItemsMap.get(itemKey);
+    if (!itemEntry) {
+      itemEntry = {
+        title: effectiveTitle,
+        source: event.source,
+        media_type: event.media_type,
+        totalSeconds: 0,
+        count: 0,
+      };
+      topItemsMap.set(itemKey, itemEntry);
+    }
+    itemEntry.totalSeconds += dur;
+    itemEntry.count += 1;
   }
 
   const by_source: Record<string, StatBucket> = {};
@@ -376,11 +524,53 @@ export function aggregateStats(
     };
   }
 
+  const by_week: WeekStatBucket[] = Array.from(byWeekMap.values())
+    .sort((a, b) => a.week.localeCompare(b.week))
+    .map((w) => {
+      const by_source: Record<string, number> = {};
+      for (const [src, sec] of Object.entries(w.bySourceSeconds)) {
+        by_source[src] = sec / 60;
+      }
+      return {
+        week: w.week,
+        by_source,
+        minutes: w.totalSeconds / 60,
+      };
+    });
+
+  const by_month: MonthStatBucket[] = Array.from(byMonthMap.values())
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .map((m) => {
+      const by_source: Record<string, number> = {};
+      for (const [src, sec] of Object.entries(m.bySourceSeconds)) {
+        by_source[src] = sec / 60;
+      }
+      return {
+        month: m.month,
+        by_source,
+        minutes: m.totalSeconds / 60,
+      };
+    });
+
+  const top_items: TopItem[] = Array.from(topItemsMap.values())
+    .map((it) => ({
+      title: it.title,
+      source: it.source,
+      media_type: it.media_type,
+      minutes: it.totalSeconds / 60,
+      count: it.count,
+    }))
+    .sort((a, b) => b.minutes - a.minutes || b.count - a.count || a.title.localeCompare(b.title))
+    .slice(0, 10);
+
   return {
     total_items: totalItems,
     total_minutes: totalSeconds / 60,
     by_source,
     by_media_type,
+    by_week,
+    by_month,
+    top_items,
   };
 }
 
@@ -502,9 +692,42 @@ export function getHeatmapHours(
   return aggregateHeatmapHours(events, year, tz);
 }
 
-export function getStats(db: Database, source?: string): StatsResult {
+export interface GetStatsOptions {
+  from?: string;
+  to?: string;
+  source?: string;
+  tz?: string;
+}
+
+export function getStats(
+  db: Database,
+  optsOrSource?: GetStatsOptions | string,
+  tzParam?: string
+): StatsResult {
+  let source: string | undefined;
+  let from: string | undefined;
+  let to: string | undefined;
+  let tz = "Europe/Bratislava";
+
+  if (typeof optsOrSource === "string") {
+    source = optsOrSource;
+    if (tzParam) {
+      tz = tzParam;
+    }
+  } else if (optsOrSource) {
+    source = optsOrSource.source;
+    from = optsOrSource.from;
+    to = optsOrSource.to;
+    if (optsOrSource.tz) {
+      tz = optsOrSource.tz;
+    }
+  }
+  if (tzParam && typeof optsOrSource !== "string") {
+    tz = tzParam;
+  }
+
   const events = getLatestConsumptionEvents(db, source);
-  return aggregateStats(events);
+  return aggregateStats(events, { from, to, source, tz });
 }
 
 export function getInProgress(
