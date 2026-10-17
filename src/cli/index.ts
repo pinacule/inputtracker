@@ -9,7 +9,7 @@
  */
 
 import type { Database } from "bun:sqlite";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import {
   loadConfig,
   redact,
@@ -21,6 +21,7 @@ import { openDb } from "../core/db.ts";
 import { LocalDbSink, type Sink } from "../core/sink.ts";
 import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
+import { detectFormat, importNative } from "../io/import-native.ts";
 import { createAbsClient, type AbsClient } from "../sources/audiobookshelf/client.ts";
 import {
   ABS_SOURCE,
@@ -42,8 +43,9 @@ export function usage(): string {
     "Commands:",
     "  sync audiobookshelf                      fetch new Audiobookshelf activity into the DB",
     "  export --format json|csv --out <file>    export the full events archive to a file",
+    "  import <file> [--format json|csv]        import a native export file into the DB",
     "",
-    "More commands (import, add, serve) will be added in later tasks.",
+    "More commands (add, serve) will be added in later tasks.",
   ].join("\n");
 }
 
@@ -54,6 +56,7 @@ export interface CliDeps {
   sinkFor?: (db: Database) => Sink;
   syncAudiobookshelf?: (deps: SyncAbsDeps) => Promise<AbsSyncResult>;
   writeFile?: (path: string, data: string) => void;
+  readFile?: (path: string) => string;
   out?: (line: string) => void;
   err?: (line: string) => void;
   env?: Record<string, string | undefined>;
@@ -237,6 +240,121 @@ function runExport(args: string[], ctx: SyncContext): number {
   }
 }
 
+interface ImportArgs {
+  file: string;
+  format: "json" | "csv";
+}
+
+type ImportParseResult =
+  | { ok: true; value: ImportArgs }
+  | { ok: false; message: string };
+
+function parseImportArgs(args: string[]): ImportParseResult {
+  let file: string | undefined;
+  let format: string | undefined;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+
+    if (arg === "--format" || arg.startsWith("--format=")) {
+      const value = arg === "--format" ? args[i + 1] : arg.slice("--format=".length);
+      if (arg === "--format") {
+        i += 1;
+      }
+      if (value === undefined || value === "") {
+        return { ok: false, message: "Missing value for --format." };
+      }
+      format = value;
+    } else if (arg.startsWith("-") && arg !== "-") {
+      return { ok: false, message: `Unknown option: ${arg}` };
+    } else if (file === undefined) {
+      file = arg;
+    } else {
+      return { ok: false, message: `Unexpected argument: ${arg}` };
+    }
+  }
+
+  if (file === undefined) {
+    return { ok: false, message: "Missing <file>." };
+  }
+
+  let resolved = format;
+  if (resolved === undefined) {
+    const detected = detectFormat(file);
+    if (detected === null) {
+      return {
+        ok: false,
+        message: `Cannot infer format from '${file}'; use --format json or --format csv.`,
+      };
+    }
+    resolved = detected;
+  }
+  if (resolved !== "json" && resolved !== "csv") {
+    return {
+      ok: false,
+      message: `Invalid --format: ${resolved} (expected json or csv).`,
+    };
+  }
+
+  return { ok: true, value: { file, format: resolved } };
+}
+
+function runImport(args: string[], ctx: SyncContext): number {
+  const { deps, out, err } = ctx;
+
+  const parsed = parseImportArgs(args);
+  if (!parsed.ok) {
+    err(parsed.message);
+    err(usage());
+    return EXIT_USAGE;
+  }
+  const { file, format } = parsed.value;
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+  const doReadFile =
+    deps.readFile ?? ((path: string) => readFileSync(path, "utf8"));
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let text: string;
+  try {
+    text = doReadFile(file);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const result = importNative(db, text, format);
+    out(`imported ${result.inserted} new of ${result.seen} events from ${file}`);
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
 /**
  * Run the CLI for the given argument list (without the program name).
  * Returns the process exit code; never calls `process.exit`.
@@ -265,6 +383,10 @@ export async function runCli(
 
   if (command === "export") {
     return runExport(rest, { deps, out, err });
+  }
+
+  if (command === "import") {
+    return runImport(rest, { deps, out, err });
   }
 
   err(`Unknown command: ${command}`);
