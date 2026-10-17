@@ -60,7 +60,7 @@ Worktree: `.worktrees/<task>`, worker output in `.worktrees/<task>/.task/`
        worktree and branch, go to B.
 
 ### B. Otherwise — prepare the next task
-- Pick the first task in TASKS.md order (M0 → v1 table incl. F-rows → M03) with status TODO or
+- Pick the first task in TASKS.md order (M0 → v1 table incl. F-rows → M03 → Phase 2 table) with status TODO or
   `WAITING-<worker>` (worker now available), whose dependencies are all DONE. Skip tasks that
   depend on a BLOCKED task (list them in the report as "skipped: depends on <id>").
 - Manager tasks (M…) that are configs/docs/scripts or the M03 real-sync check: do them yourself
@@ -73,7 +73,7 @@ Worktree: `.worktrees/<task>`, worker output in `.worktrees/<task>/.task/`
   limit, reuse it after a hard reset to main).
 - Write `.worktrees/<task>/.task/prompt.md`, self-contained, concise:
   goal; exact files to create/change; data model/API details copied from PLAN.md /
-  docs/abs-fields.md that the task needs; acceptance tests to write and make pass; and these rules:
+  docs/abs-fields.md / docs/simkl-api.md / docs/youtube-takeout.md that the task needs; acceptance tests to write and make pass; and these rules:
   "Follow AGENTS.md. Do not commit or push. Do not touch files outside this task's scope. Use only
   synthetic test data. Run `bun run check` and make it pass before finishing. End with a short
   summary of what you changed and anything left undone."

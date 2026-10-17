@@ -19,6 +19,10 @@ You are a worker. The manager reviews your work, commits and merges it. Your tas
 - Calendar, heat map, stats and lists read **`events_latest` only**, never sum over `events`.
 - Audiobookshelf: **GET requests only**, via `src/sources/audiobookshelf/client.ts`.
   Real field names: `docs/abs-fields.md`.
+- Simkl: data calls are GET only, via `src/sources/simkl/client.ts`; the only POSTs are the auth
+  endpoints `/oauth2/device` and `/oauth2/token`. Never write to the user's Simkl account.
+  Never log or print tokens or `device_code`. API facts: `docs/simkl-api.md`.
+- YouTube Takeout: parse the local file only, no network. Format: `docs/youtube-takeout.md`.
 - Nothing PC-specific hard-coded: DB path, backup dir, bind/port, source URLs come from config.
 
 ## Finish with
