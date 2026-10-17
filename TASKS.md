@@ -69,6 +69,17 @@ Tokens never in logs, output, errors or git. YouTube Takeout: local file only, n
 | T25 | **Docs for phase 2**: README (register a V2 Simkl app as "TV, devices & command line", put `client_id` in config, run `it auth simkl`, re-run `scripts/install.sh`; Takeout export steps with JSON format; import), DATA_FORMAT (`simkl`/`youtube` sources, source_id formats, external_ids keys) | OC | T24 | Manager checks against the code | TODO |
 | Y02 | yt-dlp `:ythistory` poller with browser cookies | — | — | — | DEFERRED (user decision 2026-10-17: not now) |
 
+## ZCode (hand-fed) — handled by Claude interactively, NOT by the manager
+
+The user's ZCode quota (GLM-5.3-Flash, expires 2026-10-19 03:00) runs through the ZCode desktop app,
+fed by hand: Claude prepares `.worktrees/<ID>/.task/prompt.md`, the user pastes it into ZCode, Claude
+reviews and merges with `scripts/merge-task.sh`. Read-only features only (no schema change, no network).
+**Manager: ignore this table and its worktrees.**
+
+| ID | Task | Worker | Depends | Acceptance | Status |
+|---|---|---|---|---|---|
+| Z01 | **Streaks (F2) + On this day (F6)**: `src/server/insights.ts` (pure functions), `GET /api/insights`, shown on the Stats page | ZCode desktop (GLM-5.3-Flash) | — | Unit tests for day boundaries in Europe/Bratislava, DST, leap day, source filter; `bun run check` passes | RUNNING (zcode, hand-fed) |
+
 ## After phase 2 (later, not now)
 
 Remaining proposed features (F2–F8, F11–F13), TMDB/OMDb covers, ntfy, HTTP ingest sink

@@ -60,6 +60,8 @@ Worktree: `.worktrees/<task>`, worker output in `.worktrees/<task>/.task/`
        worktree and branch, go to B.
 
 ### B. Otherwise — prepare the next task
+- The "ZCode (hand-fed)" table and its `.worktrees/Z*` are Claude's (interactive): never pick, review,
+  change or report them as unknown.
 - Pick the first task in TASKS.md order (M0 → v1 table incl. F-rows → M03 → Phase 2 table) with status TODO or
   `WAITING-<worker>` (worker now available), whose dependencies are all DONE. Skip tasks that
   depend on a BLOCKED task (list them in the report as "skipped: depends on <id>").
