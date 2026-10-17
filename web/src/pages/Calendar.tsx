@@ -269,7 +269,9 @@ export function Calendar({ date }: CalendarProps = {}) {
                   .join(" ");
 
                 const label = `${cellDate}${
-                  count > 0 ? `, ${count} items, ${minutes} minutes` : ""
+                  count > 0
+                    ? `, ${count} ${count === 1 ? "item" : "items"}, ${Math.round(minutes)} minutes`
+                    : ""
                 }`;
 
                 return (
