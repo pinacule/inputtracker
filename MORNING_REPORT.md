@@ -28,6 +28,7 @@ Run in progress.
 | F01 Stats dashboard | antigravity | gemini-3.8-flash-high | 1 | e88e92f |
 | F09 ABS covers | opencode | deepseek-v4.1-flash-free | 1 | c7513d6 |
 | F10 In progress / finished | opencode | deepseek-v4.1-flash-free | 1 | eec42e0 |
+| F14 Nightly backup | opencode | deepseek-v4.1-flash-free | 1 | 3b1bf04 |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
