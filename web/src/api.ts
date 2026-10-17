@@ -28,6 +28,7 @@ export interface CalendarItem {
   cover_url: string | null;
   /** Synced later from an offline device: the day is the sync day, the time is unknown. */
   time_uncertain?: boolean;
+  also_from?: string[];
 }
 
 export interface CalendarDay {
@@ -671,3 +672,81 @@ export function syncNow(): Promise<SyncNowResult> {
 export function syncSimklNow(): Promise<SimklSyncResult> {
   return postJson<SimklSyncResult>("/api/sync/simkl", {});
 }
+
+// --- Goals (F8) ------------------------------------------------------------
+
+export type GoalMetric = "items" | "hours" | "titles" | "active_days";
+export type GoalStatus =
+  | "done"
+  | "on_track"
+  | "behind"
+  | "missed"
+  | "not_started";
+
+export interface GoalProgress {
+  current: number;
+  target: number;
+  percent: number;
+  expected: number;
+  status: GoalStatus;
+}
+
+export interface Goal {
+  goal_id: string;
+  year: number;
+  metric: GoalMetric;
+  source: string | null;
+  media_type: string | null;
+  target: number;
+  archived: number;
+  created_at: string;
+  progress: GoalProgress;
+}
+
+export interface GoalsResult {
+  year: number;
+  goals: Goal[];
+}
+
+export interface SaveGoalInput {
+  goal_id?: string;
+  rev_id?: string;
+  year: number;
+  metric: GoalMetric;
+  source?: string | null;
+  media_type?: string | null;
+  target: number;
+  archived?: number;
+}
+
+export interface SaveGoalResult {
+  goal_id: string;
+  rev_id: string;
+  inserted: boolean;
+}
+
+export function getGoals(
+  year?: number,
+  options?: { archived?: boolean | number; date?: string }
+): Promise<GoalsResult> {
+  const params: Record<string, string | undefined> = {};
+  if (year !== undefined) {
+    params.year = String(year);
+  }
+  if (options?.archived) {
+    params.archived = "1";
+  }
+  if (options?.date) {
+    params.date = options.date;
+  }
+  return getJson<GoalsResult>(withQuery("/api/goals", params));
+}
+
+export function saveGoal(body: SaveGoalInput): Promise<SaveGoalResult> {
+  const rev_id = body.rev_id ?? crypto.randomUUID();
+  return postJson<SaveGoalResult>("/api/goals", {
+    ...body,
+    rev_id,
+  });
+}
+

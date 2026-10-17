@@ -16,6 +16,7 @@
 import type { Database } from "bun:sqlite";
 import { isValidSimklPoster } from "./posters.ts";
 import { isValidYoutubeVideoId } from "./thumbs.ts";
+import { dedupeConsumption, type DedupedEvent } from "./dedup.ts";
 
 export const CONSUMPTION_KINDS = new Set([
   "listening_session",
@@ -76,6 +77,7 @@ export interface CalendarItem {
   cover_url: string | null;
   /** Synced later from an offline device: the day is the sync day, the time is unknown. */
   time_uncertain: boolean;
+  also_from?: string[];
 }
 
 export interface CalendarDay {
@@ -422,7 +424,7 @@ export function aggregateCalendar(
       daysMap.set(local.date, day);
     }
     const durationSeconds = event.duration_seconds ?? null;
-    day.items.push({
+    const item: CalendarItem = {
       id: event.id,
       source: event.source,
       media_type: event.media_type,
@@ -435,7 +437,11 @@ export function aggregateCalendar(
       duration_seconds: durationSeconds,
       cover_url: coverUrlFor(event),
       time_uncertain: isTimeUncertain(event),
-    });
+    };
+    if ("also_from" in event && (event as DedupedEvent).also_from) {
+      item.also_from = (event as DedupedEvent).also_from;
+    }
+    day.items.push(item);
     day.totalSeconds += durationSeconds ?? 0;
   }
 
@@ -901,13 +907,22 @@ export function getLatestConsumptionEvents(
     .all();
 }
 
+export function getDisplayConsumptionEvents(
+  db: Database,
+  source?: string,
+  tz: string = "Europe/Bratislava"
+): DedupedEvent[] {
+  const events = getLatestConsumptionEvents(db, source);
+  return dedupeConsumption(events, tz);
+}
+
 export function getCalendar(
   db: Database,
   month: string,
   tz: string,
   source?: string
 ): CalendarResult {
-  const events = getLatestConsumptionEvents(db, source);
+  const events = getDisplayConsumptionEvents(db, source, tz);
   return aggregateCalendar(events, month, tz);
 }
 
@@ -917,7 +932,7 @@ export function getHeatmapDays(
   tz: string,
   source?: string
 ): HeatmapDaysResult {
-  const events = getLatestConsumptionEvents(db, source);
+  const events = getDisplayConsumptionEvents(db, source, tz);
   return aggregateHeatmapDays(events, year, tz);
 }
 
@@ -927,7 +942,7 @@ export function getHeatmapHours(
   tz: string,
   source?: string
 ): HeatmapHoursResult {
-  const events = getLatestConsumptionEvents(db, source);
+  const events = getDisplayConsumptionEvents(db, source, tz);
   return aggregateHeatmapHours(events, year, tz);
 }
 
@@ -965,7 +980,7 @@ export function getStats(
     tz = tzParam;
   }
 
-  const events = getLatestConsumptionEvents(db, source);
+  const events = getDisplayConsumptionEvents(db, source, tz);
   return aggregateStats(events, { from, to, source, tz });
 }
 
