@@ -13,6 +13,7 @@ import {
 } from "../lib/format-date";
 import { formatStreakRange } from "../lib/insights";
 import { sourceLabel } from "../lib/sources";
+import { formatStarValue, ratingToStars } from "../lib/annotations";
 import {
   buildShareLines,
   formatChange,
@@ -550,7 +551,9 @@ export function YearReviewPage({ yearParam }: { yearParam?: string }) {
               <span class="muted stats-card-subtitle">Most consumed</span>
             </div>
             <ol class="stats-top-list">
-              {data.top_titles.map((item, index) => (
+              {data.top_titles.map((item, index) => {
+                const stars = ratingToStars(item.rating);
+                return (
                 <li
                   key={`${item.source}-${item.title}`}
                   class="stats-top-item"
@@ -561,6 +564,15 @@ export function YearReviewPage({ yearParam }: { yearParam?: string }) {
                     <span class="stats-top-title">{item.title}</span>
                     <span class="stats-top-meta">
                       {sourceLabel(item.source)}
+                      {stars !== null && (
+                        <span
+                          class="rating-badge"
+                          aria-label={`Rated ${stars} of 5 stars`}
+                        >
+                          <span class="rating-badge-star" aria-hidden="true">★</span>
+                          {formatStarValue(stars)}
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div class="stats-top-stats">
@@ -574,7 +586,8 @@ export function YearReviewPage({ yearParam }: { yearParam?: string }) {
                     </span>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ol>
           </section>
 

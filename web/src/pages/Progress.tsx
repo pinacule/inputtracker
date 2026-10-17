@@ -1,9 +1,12 @@
 import { useEffect, useState } from "preact/hooks";
 import {
   getProgress,
+  type Annotation,
   type ProgressItem,
   type ProgressLists,
 } from "../api";
+import { RatingEditor } from "../components/RatingEditor";
+import { formatStarValue, ratingToStars } from "../lib/annotations";
 import { sourceIcon } from "../lib/calendar";
 import { sourceLabel } from "../lib/sources";
 import { DEFAULT_TIMEZONE, formatDateTime } from "../lib/format-date";
@@ -68,11 +71,19 @@ function ProgressBar({ progress }: { progress: number | null }) {
   );
 }
 
-function ProgressRow({ item }: { item: ProgressItem }) {
+function ProgressRow({
+  item,
+  onAnnotationSaved,
+}: {
+  item: ProgressItem;
+  onAnnotationSaved: (itemId: number, annotation: Annotation) => void;
+}) {
   const title = item.title?.trim() || "Untitled";
   const dateLabel = item.is_finished
     ? `Finished ${formatTimestamp(item.finished_at ?? item.last_update)}`
     : `Updated ${formatTimestamp(item.last_update)}`;
+  const [editorOpen, setEditorOpen] = useState(false);
+  const stars = ratingToStars(item.rating);
 
   return (
     <li class="progress-item">
@@ -96,7 +107,37 @@ function ProgressRow({ item }: { item: ProgressItem }) {
           </span>
           <span class="progress-item-bullet">·</span>
           <span class="progress-item-date">{dateLabel}</span>
+          {stars !== null && (
+            <>
+              <span class="progress-item-bullet">·</span>
+              <span class="rating-badge" aria-label={`Rated ${stars} of 5 stars`}>
+                <span class="rating-badge-star" aria-hidden="true">★</span>
+                {formatStarValue(stars)}
+              </span>
+            </>
+          )}
+          <span class="progress-item-bullet">·</span>
+          <button
+            type="button"
+            class="progress-rate-button"
+            aria-expanded={editorOpen}
+            onClick={() => setEditorOpen((open) => !open)}
+          >
+            {editorOpen ? "Close" : "Rate"}
+          </button>
         </div>
+        {editorOpen && (
+          <RatingEditor
+            source={item.source}
+            title={item.group_title}
+            initialRating={item.rating}
+            onSaved={(annotation) => {
+              onAnnotationSaved(item.id, annotation);
+              setEditorOpen(false);
+            }}
+            onCancel={() => setEditorOpen(false)}
+          />
+        )}
       </div>
     </li>
   );
@@ -134,6 +175,20 @@ export function Progress() {
   const inProgress = data?.in_progress ?? [];
   const finished = data?.finished ?? [];
 
+  function handleAnnotationSaved(itemId: number, annotation: Annotation): void {
+    setData((prev) => {
+      if (prev === null) {
+        return prev;
+      }
+      const update = (item: ProgressItem): ProgressItem =>
+        item.id === itemId ? { ...item, rating: annotation.rating } : item;
+      return {
+        in_progress: prev.in_progress.map(update),
+        finished: prev.finished.map(update),
+      };
+    });
+  }
+
   return (
     <section class="page progress-page">
       <header class="progress-header">
@@ -167,7 +222,11 @@ export function Progress() {
         ) : (
           <ul class="progress-list">
             {inProgress.map((item) => (
-              <ProgressRow key={item.id} item={item} />
+              <ProgressRow
+                key={item.id}
+                item={item}
+                onAnnotationSaved={handleAnnotationSaved}
+              />
             ))}
           </ul>
         )}
@@ -188,7 +247,11 @@ export function Progress() {
         ) : (
           <ul class="progress-list">
             {finished.map((item) => (
-              <ProgressRow key={item.id} item={item} />
+              <ProgressRow
+                key={item.id}
+                item={item}
+                onAnnotationSaved={handleAnnotationSaved}
+              />
             ))}
           </ul>
         )}

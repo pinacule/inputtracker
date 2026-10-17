@@ -173,6 +173,8 @@ export interface ReviewTitle {
   minutes: number;
   count: number;
   cover_url: string | null;
+  /** Latest rating (1–10) for this title, or null when unrated. */
+  rating: number | null;
 }
 
 /** YouTube events grouped by channel (`parent_title`). */
@@ -311,6 +313,8 @@ export interface TitleHistory {
   minutes: number;
   /** Newest first, capped at 500 (count/minutes still cover all events). */
   items: TitleHistoryItem[];
+  /** Latest rating (1–10) for this title, or null when unrated. */
+  rating: number | null;
 }
 
 /** One item in the in-progress or finished progress list. */
@@ -328,6 +332,13 @@ export interface ProgressItem {
   finished_at: string | null;
   /** `/api/cover/<abs_item>` for ABS items, else null. */
   cover_url: string | null;
+  /** Latest rating (1–10) for this item's title group, or null when unrated. */
+  rating: number | null;
+  /**
+   * The title group the rating/annotation belongs to (`getSeriesOrTitle` of
+   * the underlying event). Use `(source, group_title)` as the annotation key.
+   */
+  group_title: string;
 }
 
 export interface ProgressLists {
@@ -745,6 +756,63 @@ export function getGoals(
 export function saveGoal(body: SaveGoalInput): Promise<SaveGoalResult> {
   const rev_id = body.rev_id ?? crypto.randomUUID();
   return postJson<SaveGoalResult>("/api/goals", {
+    ...body,
+    rev_id,
+  });
+}
+
+/** One annotation revision: the current rating + note of a title. */
+export interface Annotation {
+  id: number;
+  record_hash: string;
+  source: string;
+  title: string;
+  rev_id: string;
+  rating: number | null;
+  note: string | null;
+  created_at: string;
+}
+
+/** What `GET /api/annotations` returns for a title nobody annotated yet. */
+export interface EmptyAnnotation {
+  rating: null;
+  note: null;
+}
+
+export interface SaveAnnotationInput {
+  source: string;
+  title: string;
+  rating?: number | null;
+  note?: string | null;
+  rev_id?: string;
+}
+
+export interface SaveAnnotationResult {
+  rev_id: string;
+  inserted: boolean;
+  annotation: Annotation;
+}
+
+/** Latest annotation for one title (the Search grouping key). */
+export function getAnnotation(
+  source: string,
+  title: string
+): Promise<Annotation | EmptyAnnotation> {
+  return getJson<Annotation | EmptyAnnotation>(
+    withQuery("/api/annotations", { source, title })
+  );
+}
+
+/**
+ * Save a new annotation revision. A `rev_id` is generated once per call;
+ * pass an explicit one and reuse it when retrying a save so the retry
+ * inserts nothing.
+ */
+export function saveAnnotation(
+  body: SaveAnnotationInput
+): Promise<SaveAnnotationResult> {
+  const rev_id = body.rev_id ?? crypto.randomUUID();
+  return postJson<SaveAnnotationResult>("/api/annotations", {
     ...body,
     rev_id,
   });

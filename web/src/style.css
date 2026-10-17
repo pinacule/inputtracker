@@ -1887,6 +1887,27 @@ body {
   opacity: 0.6;
 }
 
+/* Compact "Rate" toggle in a progress row's meta line. */
+.progress-rate-button {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  padding: 0.15rem 0.1rem;
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.progress-rate-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Sessions synced later from an offline phone: day known, time of day not. */
 .calendar-item-time-uncertain {
   font-style: italic;
@@ -2559,3 +2580,162 @@ body {
   margin-top: 0.25rem;
 }
 
+
+/* Ratings + notes (F3). New classes are prefixed `rating-`. */
+
+.rating-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.rating-stars {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.1rem;
+  /* Keep the whole row tappable at 375px with room to spare. */
+  max-width: 100%;
+}
+
+.rating-star {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+/* Each half is its own tap target; the two halves tile into one star. */
+.rating-half {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 0.35em 0;
+  margin: 0;
+  width: 0.5em;
+  overflow: hidden;
+  font-size: 2.1rem;
+  line-height: 1;
+  color: var(--border);
+  cursor: pointer;
+}
+
+.rating-half-filled {
+  color: #f59e0b;
+}
+
+.rating-half:hover {
+  color: #fbbf24;
+}
+
+.rating-half:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.rating-half:disabled:hover {
+  color: var(--border);
+}
+
+.rating-half-filled:disabled:hover {
+  color: #f59e0b;
+}
+
+.rating-half:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.rating-half-glyph {
+  display: inline-block;
+  width: 1em;
+}
+
+.rating-half-right .rating-half-glyph {
+  margin-left: -0.5em;
+}
+
+.rating-note-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.rating-note-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.rating-counter {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rating-note {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 1rem;
+  resize: vertical;
+}
+
+.rating-note:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.rating-note:disabled {
+  opacity: 0.7;
+}
+
+.rating-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.rating-error {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+ul.rating-error {
+  padding-left: 1.75rem;
+}
+
+.rating-saved {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #22c55e;
+}
+
+/* Compact read-only badge, e.g. "★ 3½" next to a title. */
+.rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.rating-badge-star {
+  color: #f59e0b;
+}

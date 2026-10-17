@@ -329,6 +329,43 @@ WHERE archived = 0 AND year = 2026
 ORDER BY id DESC;
 ```
 
+## Table `annotations` and view `annotations_latest`
+
+The append-only store for user ratings (1–10) and free-text notes on titles
+("7/10 for Dune", "re-read when the sequel is out"). A title is the same group
+the Search page uses: `source` + `getSeriesOrTitle(event)` — one book, one
+show, one movie, one YouTube video.
+
+Like `events`, `annotations` is append-only: `UPDATE` and `DELETE` are blocked
+by database triggers (`annotations_no_update`, `annotations_no_delete`). Every
+save is a **new row**; clearing the rating or the note is a new row with
+`NULL`s. A retried save reuses its `rev_id`, and `INSERT OR IGNORE` on the
+unique `record_hash` makes the retry insert nothing — while setting a value
+back to an earlier one (a new `rev_id`) is still a new row.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | INTEGER PRIMARY KEY AUTOINCREMENT | Insertion order. The newest revision has the highest `id`. |
+| `record_hash` | TEXT NOT NULL UNIQUE | SHA-256 hex of canonical JSON `source, title, rev_id, rating, note` (`created_at` is not part of the hash). Makes retried saves idempotent (`INSERT OR IGNORE`). |
+| `source` | TEXT NOT NULL | Event source of the title group (e.g. `audiobookshelf`, `manual`). |
+| `title` | TEXT NOT NULL | The group title, as shown (`getSeriesOrTitle`). |
+| `rev_id` | TEXT NOT NULL | UUID of this specific revision. Retrying the same save reuses it. |
+| `rating` | INTEGER | 1–10, or `NULL` when unrated / cleared. |
+| `note` | TEXT | Free text (≤ 5000 chars), stored as typed except trailing whitespace is trimmed; `NULL` when empty / cleared. |
+| `created_at` | TEXT NOT NULL | When this revision was inserted, UTC ISO 8601 with milliseconds. |
+
+### View `annotations_latest`
+
+The current annotation of each title: the row with `MAX(id)` grouped by
+`(source, title)`. Readers query `annotations_latest`; list endpoints
+(title history, progress, year review) look ratings up in one batch query:
+
+```sql
+SELECT source, title, rating, note
+FROM annotations_latest
+WHERE (source = ? AND title = ?) OR (source = ? AND title = ?);
+```
+
 ## Other tables
 
 - `ingest_runs` — one row per sync / import / manual-entry attempt. Columns:

@@ -12,7 +12,7 @@ describe("goals db & schema (migration v2)", () => {
     db = openDb(":memory:");
   });
 
-  test("migration v2 on a temp DB created at v1 with events → events unchanged, schema_migrations has 2", () => {
+  test("migration v2 on a temp DB created at v1 with events → events unchanged, schema_migrations has every version", () => {
     const v1Db = new Database(":memory:");
     v1Db.run("PRAGMA foreign_keys = ON;");
 
@@ -69,8 +69,10 @@ describe("goals db & schema (migration v2)", () => {
         "SELECT version FROM schema_migrations ORDER BY version ASC;"
       )
       .all();
-    expect(migrationRows).toHaveLength(2);
-    expect(migrationRows.map((r) => r.version)).toEqual([1, 2]);
+    expect(migrationRows).toHaveLength(migrations.length);
+    expect(migrationRows.map((r) => r.version)).toEqual(
+      [...migrations].map((m) => m.version).sort((a, b) => a - b)
+    );
 
     // Check events table is unchanged
     const afterEvents = v1Db

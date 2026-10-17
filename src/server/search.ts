@@ -39,6 +39,7 @@ import {
   getSeriesOrTitle,
   type ConsumptionEvent,
 } from "./aggregate.ts";
+import { getAnnotation } from "./annotations.ts";
 
 /** Combining diacritical marks (Unicode range) stripped by `normalizeForSearch`. */
 const COMBINING_MARKS = /[\u0300-\u036f]/g;
@@ -130,6 +131,12 @@ export interface TitleHistory {
   minutes: number;
   /** Newest first, capped at 500 (count/minutes still cover all events). */
   items: TitleHistoryItem[];
+  /**
+   * Latest rating (1–10) for this title, or null when unrated. Always set by
+   * `getTitleHistory` (the pure `titleHistory` below leaves it null: it does
+   * no annotation lookup).
+   */
+  rating: number | null;
 }
 
 /** Key prefix of a YouTube channel hit. */
@@ -527,6 +534,8 @@ export function titleHistory(
     count: group.count,
     minutes: group.seconds / 60,
     items,
+    // No annotation lookup here; `getTitleHistory` fills in the real rating.
+    rating: null,
   };
 }
 
@@ -556,6 +565,7 @@ export interface GetTitleHistoryOptions {
 /**
  * Reads consumption events (filtered by the source encoded in the key, when
  * it is known) and returns the title history, or null for an unknown key.
+ * The returned history carries the title's latest rating (one lookup).
  */
 export function getTitleHistory(
   db: Database,
@@ -573,5 +583,11 @@ export function getTitleHistory(
     source !== undefined && source !== "" ? source : undefined,
     opts.tz
   );
-  return titleHistory(events, opts.tz, opts.key);
+  const history = titleHistory(events, opts.tz, opts.key);
+  if (history === null) {
+    return null;
+  }
+  // One annotation lookup for the single title in this response.
+  const annotation = getAnnotation(db, history.source, history.title);
+  return { ...history, rating: annotation.rating };
 }
