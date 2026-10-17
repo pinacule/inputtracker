@@ -20,6 +20,7 @@ import {
 import { openDb } from "../core/db.ts";
 import type { MediaType } from "../core/events.ts";
 import { LocalDbSink, type Sink } from "../core/sink.ts";
+import { buildNotifier, reportSyncResult, type Notifier } from "../notify/index.ts";
 import { runBackup } from "../io/backup.ts";
 import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
@@ -60,6 +61,8 @@ export interface CliDeps {
   createAbsClient?: (cfg: Config) => AbsClient;
   sinkFor?: (db: Database) => Sink;
   syncAudiobookshelf?: (deps: SyncAbsDeps) => Promise<AbsSyncResult>;
+  buildNotifier?: (cfg: Config) => Notifier;
+  reportSyncResult?: typeof reportSyncResult;
   writeFile?: (path: string, data: string) => void;
   readFile?: (path: string) => string;
   out?: (line: string) => void;
@@ -107,6 +110,8 @@ async function runSync(
   const makeClient = deps.createAbsClient ?? ((cfg: Config) => createAbsClient(cfg));
   const sinkFor = deps.sinkFor ?? ((db: Database) => new LocalDbSink(db));
   const doSync = deps.syncAudiobookshelf ?? syncAudiobookshelf;
+  const makeNotifier = deps.buildNotifier ?? buildNotifier;
+  const report = deps.reportSyncResult ?? reportSyncResult;
 
   let config: Config;
   try {
@@ -124,14 +129,24 @@ async function runSync(
     return EXIT_FAILURE;
   }
 
+  let notifier: Notifier;
+  try {
+    notifier = makeNotifier(config);
+  } catch {
+    notifier = { notify: async () => {} };
+  }
+
   try {
     const sink = sinkFor(db);
     const client = makeClient(config);
     const result = await doSync({ client, sink, db, config });
     out(`synced ${ABS_SOURCE}: seen ${result.seen}, inserted ${result.inserted}`);
+    await reportSyncSafely(report, db, ABS_SOURCE, true, undefined, notifier);
     return EXIT_OK;
   } catch (caught) {
-    err(redactMessage(errorText(caught), config));
+    const message = redactMessage(errorText(caught), config);
+    err(message);
+    await reportSyncSafely(report, db, ABS_SOURCE, false, message, notifier);
     return EXIT_FAILURE;
   } finally {
     try {
@@ -139,6 +154,25 @@ async function runSync(
     } catch {
       // ignore close errors
     }
+  }
+}
+
+/**
+ * Report one sync result, swallowing every notification error so it can never
+ * change the sync exit code.
+ */
+async function reportSyncSafely(
+  report: typeof reportSyncResult,
+  db: Database,
+  source: string,
+  ok: boolean,
+  message: string | undefined,
+  notifier: Notifier
+): Promise<void> {
+  try {
+    await report(db, source, ok, message, notifier);
+  } catch {
+    // Notification errors must never affect the sync result.
   }
 }
 
