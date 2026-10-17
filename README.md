@@ -45,6 +45,10 @@ Every key, its default and what it means:
 | `simkl.poster_base_url` | `https://simkl.in/posters` | Base URL for Simkl poster images. |
 | `simkl.timeout_s` | `20` | Per-request timeout, in seconds. |
 | `youtube.thumb_base_url` | `https://i.ytimg.com/vi` | Base URL for YouTube video thumbnails. |
+| `activitywatch.url` | `http://127.0.0.1:5600` | ActivityWatch server URL. |
+| `activitywatch.timeout_s` | `20` | Per-request timeout, in seconds. |
+| `activitywatch.device` | `pc` | Device label for YouTube plays. |
+| `activitywatch.include_music` | `false` | Whether `music.youtube.com` counts. |
 | `notify.desktop` | `true` | Desktop notification on sync failure (via `notify-send`; silently ignored when missing). |
 | `notify.ntfy_url` | empty | Optional ntfy topic URL for failure alerts, recovery notices and the weekly summary. |
 | `notify.ntfy_token` | empty | Optional ntfy access token (`Authorization: Bearer …`); never logged. |
@@ -132,6 +136,7 @@ Units and timers it installs:
 | `inputtracker-sync@.service` | oneshot `it sync %i` | launched by its timer |
 | `inputtracker-sync@audiobookshelf.timer` | Audiobookshelf sync | hourly, persistent, up to 120 s jitter |
 | `inputtracker-sync@simkl.timer` | Simkl sync | hourly at :30, persistent, up to 120 s jitter |
+| `inputtracker-sync@activitywatch.timer` | ActivityWatch sync (YouTube) | every 10 minutes (`*:0/10`), persistent, up to 30 s jitter |
 | `inputtracker-backup.service` | oneshot `it backup` | launched by its timer |
 | `inputtracker-backup.timer` | database snapshot + JSON export | daily at 03:30, persistent |
 
@@ -153,7 +158,7 @@ Run commands with `bun run it <command>`.
 
 | Command | Options | Example |
 |---|---|---|
-| `sync <source>` | source is `audiobookshelf` or `simkl` | `bun run it sync audiobookshelf` |
+| `sync <source>` | source is `audiobookshelf`, `simkl`, or `activitywatch` | `bun run it sync activitywatch` |
 | `auth simkl` | `[--status]` | `bun run it auth simkl` |
 | `add` | `--type <t> --title <title> --start <local> [--end <local>] [--duration-min <n>] [--parent <title>] [--season <n>] [--episode <n>] [--progress <0..1>] [--device <name>]` | `bun run it add --type audiobook --title "The Synthetic Tale" --start "2026-10-17 21:30" --duration-min 45` |
 | `export` | `--format json\|csv --out <file>` | `bun run it export --format json --out archive.json` |
@@ -165,6 +170,8 @@ Details:
 
 - `sync audiobookshelf` fetches sessions, media progress and daily stats from
   Audiobookshelf and inserts the new rows. It only ever issues GET requests.
+- `sync activitywatch` queries local ActivityWatch for browser YouTube activity
+  and inserts new plays. It only ever issues GET requests.
 - `auth simkl` connects Simkl via device flow (prints a link + code);
   `--status` shows whether it is connected, without network.
 - `add` records a consumed item by hand. `--type`, `--title` and `--start` are
@@ -242,6 +249,21 @@ no third-party image proxy is used. The import reads the local file only, no net
 Skipped records are counted per reason: `ads` (Google Ads), `no_video` (removed or private
 videos, and anything without a usable video id), `other` (records whose `products` do not
 include `YouTube`) and `invalid` (a record with no parseable time).
+
+## YouTube from ActivityWatch
+
+ActivityWatch runs on your PC with its browser extension (`aw-watcher-web`) in
+Chrome and Firefox. It records active tab URLs, titles, duration, and whether
+audio was playing. InputTracker queries ActivityWatch to turn browser YouTube
+activity into `youtube` events:
+
+- Needs ActivityWatch running locally (default `http://127.0.0.1:5600`) and the
+  `aw-watcher-web` browser extension installed.
+- Incognito tabs are ignored completely.
+- The channel is unknown from tab titles, so it is left empty.
+- Runs every 10 minutes via the `inputtracker-sync@activitywatch.timer` systemd timer.
+- Only issues read-only `GET` requests to the local ActivityWatch API.
+- When the server moves to a cloud VM, this sync will need to run on the PC (where the browser runs).
 
 ## Phone install (PWA)
 

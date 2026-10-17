@@ -66,6 +66,7 @@ UNITS=(
   "inputtracker-sync@.service"
   "inputtracker-sync@audiobookshelf.timer"
   "inputtracker-sync@simkl.timer"
+  "inputtracker-sync@activitywatch.timer"
   "inputtracker-backup.service"
   "inputtracker-backup.timer"
   "inputtracker-weekly.service"
@@ -74,6 +75,7 @@ UNITS=(
 TIMERS=(
   "inputtracker-sync@audiobookshelf.timer"
   "inputtracker-sync@simkl.timer"
+  "inputtracker-sync@activitywatch.timer"
   "inputtracker-backup.timer"
   "inputtracker-weekly.timer"
 )

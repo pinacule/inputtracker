@@ -62,6 +62,12 @@ describe("loadConfig defaults", () => {
     expect(config.youtube).toEqual({
       thumb_base_url: "https://i.ytimg.com/vi",
     });
+    expect(config.activitywatch).toEqual({
+      url: "http://127.0.0.1:5600",
+      timeout_s: 20,
+      device: "pc",
+      include_music: false,
+    });
     // ntfy_token "" is part of the (public-by-value) defaults; redact() masks
     // any `*token*` key, so no serialized form of the config reveals it.
     expect(config.notify).toEqual({
@@ -112,6 +118,12 @@ describe("loadConfig file merging", () => {
         "[youtube]",
         'thumb_base_url = "https://thumbs.example"',
         "",
+        "[activitywatch]",
+        'url = "http://aw.example:5600"',
+        "timeout_s = 10",
+        'device = "laptop-1"',
+        "include_music = true",
+        "",
         "[notify]",
         "desktop = false",
         'ntfy_url = "https://ntfy.example/topic"',
@@ -135,6 +147,12 @@ describe("loadConfig file merging", () => {
     expect(config.simkl.poster_base_url).toBe("https://posters.example");
     expect(config.simkl.timeout_s).toBe(15);
     expect(config.youtube.thumb_base_url).toBe("https://thumbs.example");
+    expect(config.activitywatch).toEqual({
+      url: "http://aw.example:5600",
+      timeout_s: 10,
+      device: "laptop-1",
+      include_music: true,
+    });
     expect(config.notify.desktop).toBe(false);
     expect(config.notify.ntfy_url).toBe("https://ntfy.example/topic");
   });
@@ -230,6 +248,57 @@ describe("loadConfig errors", () => {
 
     const badTable = writeConfig("badytable.toml", 'youtube = "not-a-table"\n');
     expect(() => loadConfig({ path: badTable, env: {} })).toThrow(/youtube/);
+  });
+
+  test("wrong type or invalid value for activitywatch keys throws", () => {
+    const badUrl = writeConfig("badawurl.toml", "[activitywatch]\nurl = 12345\n");
+    expect(() => loadConfig({ path: badUrl, env: {} })).toThrow(/activitywatch\.url/);
+
+    const badTimeout = writeConfig(
+      "badawtimeout.toml",
+      '[activitywatch]\ntimeout_s = "twenty"\n'
+    );
+    expect(() => loadConfig({ path: badTimeout, env: {} })).toThrow(
+      /activitywatch\.timeout_s/
+    );
+
+    const badMusic = writeConfig(
+      "badawmusic.toml",
+      '[activitywatch]\ninclude_music = "yes"\n'
+    );
+    expect(() => loadConfig({ path: badMusic, env: {} })).toThrow(
+      /activitywatch\.include_music/
+    );
+
+    const badDeviceEmpty = writeConfig(
+      "badawdevempty.toml",
+      '[activitywatch]\ndevice = ""\n'
+    );
+    expect(() => loadConfig({ path: badDeviceEmpty, env: {} })).toThrow(
+      /activitywatch\.device/
+    );
+
+    const badDeviceChars = writeConfig(
+      "badawdevchars.toml",
+      '[activitywatch]\ndevice = "PC_User!"\n'
+    );
+    expect(() => loadConfig({ path: badDeviceChars, env: {} })).toThrow(
+      /activitywatch\.device/
+    );
+
+    const badDeviceLong = writeConfig(
+      "badawdevlong.toml",
+      `[activitywatch]\ndevice = "${"a".repeat(33)}"\n`
+    );
+    expect(() => loadConfig({ path: badDeviceLong, env: {} })).toThrow(
+      /activitywatch\.device/
+    );
+
+    const badTable = writeConfig(
+      "badawtable.toml",
+      'activitywatch = "not-a-table"\n'
+    );
+    expect(() => loadConfig({ path: badTable, env: {} })).toThrow(/activitywatch/);
   });
 });
 

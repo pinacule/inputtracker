@@ -45,6 +45,13 @@ export interface YoutubeConfig {
   thumb_base_url: string;
 }
 
+export interface ActivityWatchConfig {
+  url: string;
+  timeout_s: number;
+  device: string;
+  include_music: boolean;
+}
+
 export interface NotifyConfig {
   desktop: boolean;
   ntfy_url: string;
@@ -63,6 +70,7 @@ export interface Config {
   audiobookshelf: AudiobookshelfConfig;
   simkl: SimklConfig;
   youtube: YoutubeConfig;
+  activitywatch?: ActivityWatchConfig;
   notify: NotifyConfig;
   /** Redacted plain object (JSON.stringify uses this automatically). */
   toJSON(): unknown;
@@ -264,6 +272,39 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     ),
   };
 
+  const awTable = readTable(file, "activitywatch", "activitywatch");
+  const awDevice = readString(awTable, "device", "activitywatch.device", "pc");
+  if (
+    awDevice.length < 1 ||
+    awDevice.length > 32 ||
+    !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(awDevice)
+  ) {
+    throw new Error(
+      `Config key "activitywatch.device" must match ^[a-z0-9]+(-[a-z0-9]+)*$ and be 1–32 chars`
+    );
+  }
+  const activitywatch: ActivityWatchConfig = {
+    url: readString(
+      awTable,
+      "url",
+      "activitywatch.url",
+      "http://127.0.0.1:5600"
+    ),
+    timeout_s: readNumber(
+      awTable,
+      "timeout_s",
+      "activitywatch.timeout_s",
+      20
+    ),
+    device: awDevice,
+    include_music: readBoolean(
+      awTable,
+      "include_music",
+      "activitywatch.include_music",
+      false
+    ),
+  };
+
   const notifyTable = readTable(file, "notify", "notify");
   const notify: NotifyConfig = {
     desktop: readBoolean(notifyTable, "desktop", "notify.desktop", true),
@@ -281,7 +322,16 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   // matching /token/ is masked) and by `secretsFrom` for free-text masking, so
   // `config.toJSON()`/`toString()`/`redact(config)` can never reveal it.
 
-  const config = { timezone, server, storage, audiobookshelf, simkl, youtube, notify } as Config;
+  const config = {
+    timezone,
+    server,
+    storage,
+    audiobookshelf,
+    simkl,
+    youtube,
+    activitywatch,
+    notify,
+  } as Config;
 
   // Redacted serialization: token is non-enumerable, so it is already omitted.
   Object.defineProperty(config, "toJSON", {
