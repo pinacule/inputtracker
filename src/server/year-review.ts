@@ -27,6 +27,10 @@ import {
   type ConsumptionEvent,
 } from "./aggregate.ts";
 import { computeStreaks } from "./insights.ts";
+import {
+  annotationMapKey,
+  getAnnotationsFor,
+} from "./annotations.ts";
 
 export interface ReviewTotals {
   items: number;
@@ -42,6 +46,12 @@ export interface ReviewTitle {
   minutes: number;
   count: number;
   cover_url: string | null;
+  /**
+   * Latest rating (1–10) for this title, or null when unrated. Always set by
+   * `getYearReview` (the pure `computeYearReview` below leaves it null: it
+   * does no annotation lookup).
+   */
+  rating: number | null;
 }
 
 /** YouTube events grouped by channel (`parent_title`). */
@@ -326,6 +336,8 @@ export function computeYearReview(
       count: group.count,
       // First event with a cover wins; titles without one keep null.
       cover_url: group.cover_url,
+      // No annotation lookup here; `getYearReview` fills in the rating.
+      rating: null,
     }))
     .sort(
       (a, b) =>
@@ -429,12 +441,29 @@ export interface GetYearReviewOptions {
 /**
  * Reads consumption events through `getLatestConsumptionEvents` (never the
  * `events` table) and computes the year review. `source` filters everything,
- * including `available_years`.
+ * including `available_years`. Top titles carry their latest rating, looked
+ * up in one batch query.
  */
 export function getYearReview(
   db: Database,
   opts: GetYearReviewOptions
 ): YearReview {
   const events = getDisplayConsumptionEvents(db, opts.source, opts.tz);
-  return computeYearReview(events, opts.tz, opts.year, opts.today);
+  const review = computeYearReview(events, opts.tz, opts.year, opts.today);
+
+  const annotations = getAnnotationsFor(
+    db,
+    review.top_titles.map((item) => ({
+      source: item.source,
+      title: item.title,
+    }))
+  );
+  for (const item of review.top_titles) {
+    const annotation = annotations.get(
+      annotationMapKey(item.source, item.title)
+    );
+    item.rating = annotation?.rating ?? null;
+  }
+
+  return review;
 }

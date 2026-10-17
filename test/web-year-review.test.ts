@@ -116,6 +116,7 @@ describe("buildShareLines", () => {
           minutes: 0,
           count: 30,
           cover_url: null,
+          rating: null,
         },
         {
           title: "Fake Video B",
@@ -124,6 +125,7 @@ describe("buildShareLines", () => {
           minutes: 0,
           count: 20,
           cover_url: null,
+          rating: null,
         },
       ],
       busiest_month: { month: "2025-05", minutes: 0, count: 40 },
@@ -155,6 +157,7 @@ describe("buildShareLines", () => {
           minutes: 300,
           count: 5,
           cover_url: null,
+          rating: null,
         },
       ],
       busiest_month: { month: "2024-02", minutes: 300, count: 10 },

@@ -59,6 +59,12 @@ import {
   GoalNotFoundError,
   type AddGoalInput,
 } from "./goals.ts";
+import {
+  AnnotationValidationError,
+  getAnnotation,
+  saveAnnotation,
+  type SaveAnnotationInput,
+} from "./annotations.ts";
 import { getTitleHistory, search } from "./search.ts";
 import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
@@ -383,6 +389,69 @@ export function createApp(deps: AppDeps): Hono {
         { error: caught instanceof Error ? caught.message : String(caught) },
         400
       );
+    }
+  });
+
+  // GET /api/annotations?source=&title= — latest rating + note for one
+  // title (the Search grouping: `source` + `getSeriesOrTitle(event)`).
+  // Returns `{ rating: null, note: null }` when the title has no annotation.
+  app.get("/api/annotations", (c) => {
+    const err = validateQueryParams(c.req.url, ["source", "title"]);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const source = c.req.query("source");
+    if (source === undefined || source === "") {
+      return c.json({ error: "Missing required query parameter: source" }, 400);
+    }
+    const title = c.req.query("title");
+    if (title === undefined || title === "") {
+      return c.json({ error: "Missing required query parameter: title" }, 400);
+    }
+
+    try {
+      return c.json(getAnnotation(db, source, title));
+    } catch (caught) {
+      if (caught instanceof AnnotationValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
+  });
+
+  // POST /api/annotations — save a new annotation revision
+  // (`{ source, title, rating, note, rev_id? }`). Every save is a new row;
+  // clearing the rating or note is a new row with `NULL`s. A retried save
+  // reuses its `rev_id` and inserts nothing.
+  app.post("/api/annotations", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch (caught) {
+      return c.json(
+        {
+          error: `Invalid JSON body: ${
+            caught instanceof Error ? caught.message : String(caught)
+          }`,
+        },
+        400
+      );
+    }
+
+    try {
+      const result = saveAnnotation(db, body as SaveAnnotationInput);
+      return c.json(result, 201);
+    } catch (caught) {
+      if (caught instanceof AnnotationValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
     }
   });
 

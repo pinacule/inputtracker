@@ -150,6 +150,56 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    name: "annotations",
+    up: (db: Database) => {
+      db.run(`
+        CREATE TABLE IF NOT EXISTS annotations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          record_hash TEXT NOT NULL UNIQUE,
+          source TEXT NOT NULL,
+          title TEXT NOT NULL,
+          rev_id TEXT NOT NULL,
+          rating INTEGER CHECK (rating IS NULL OR (rating BETWEEN 1 AND 10)),
+          note TEXT CHECK (note IS NULL OR length(note) <= 5000),
+          created_at TEXT NOT NULL
+        );
+      `);
+
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_annotations_source_title
+        ON annotations (source, title);
+      `);
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS annotations_no_update
+        BEFORE UPDATE ON annotations
+        BEGIN
+          SELECT RAISE(ABORT, 'annotations is append-only');
+        END;
+      `);
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS annotations_no_delete
+        BEFORE DELETE ON annotations
+        BEGIN
+          SELECT RAISE(ABORT, 'annotations is append-only');
+        END;
+      `);
+
+      db.run(`
+        CREATE VIEW IF NOT EXISTS annotations_latest AS
+        SELECT *
+        FROM annotations
+        WHERE id IN (
+          SELECT MAX(id)
+          FROM annotations
+          GROUP BY source, title
+        );
+      `);
+    },
+  },
 ];
 
 export function migrate(db: Database): void {

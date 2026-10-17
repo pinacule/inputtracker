@@ -58,3 +58,14 @@ export interface GoalRow {
   archived: number;
   created_at: string;
 }
+
+export interface AnnotationRow {
+  id: number;
+  record_hash: string;
+  source: string;
+  title: string;
+  rev_id: string;
+  rating: number | null;
+  note: string | null;
+  created_at: string;
+}

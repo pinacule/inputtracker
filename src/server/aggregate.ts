@@ -17,6 +17,11 @@ import type { Database } from "bun:sqlite";
 import { isValidSimklPoster } from "./posters.ts";
 import { isValidYoutubeVideoId } from "./thumbs.ts";
 import { dedupeConsumption, type DedupedEvent } from "./dedup.ts";
+import {
+  annotationMapKey,
+  getAnnotationsFor,
+  type AnnotationKey,
+} from "./annotations.ts";
 
 export const CONSUMPTION_KINDS = new Set([
   "listening_session",
@@ -187,6 +192,17 @@ export interface ProgressItem {
   finished_at: string | null;
   /** `/api/cover/<abs_item>` for ABS items, else null. */
   cover_url: string | null;
+  /**
+   * Latest rating (1–10) for this item's title group, or null when unrated.
+   * Looked up in one batch query by `getProgressLists`.
+   */
+  rating: number | null;
+  /**
+   * The title group this item's rating/annotation belongs to:
+   * `getSeriesOrTitle` of the underlying event. The web uses
+   * `(source, group_title)` as the annotation key when opening the editor.
+   */
+  group_title: string;
 }
 
 export interface ProgressLists {
@@ -1044,6 +1060,9 @@ interface ProgressRow {
   source_id: string;
   title: string | null;
   parent_title: string | null;
+  media_type: string;
+  season: number | null;
+  episode: number | null;
   progress: number | null;
   started_at: string;
   ended_at: string | null;
@@ -1058,6 +1077,9 @@ const PROGRESS_LIST_COLUMNS = `
   p.source_id,
   ${PROGRESS_TITLE_SQL},
   p.parent_title,
+  p.media_type,
+  p.season,
+  p.episode,
   p.progress,
   p.started_at,
   p.ended_at,
@@ -1094,6 +1116,20 @@ function toProgressItem(row: ProgressRow): ProgressItem {
     last_update: row.started_at,
     finished_at: row.ended_at ?? null,
     cover_url: coverUrlFor(row),
+    // No annotation lookup here; `getProgressLists` fills in the rating in
+    // one batch query for all items.
+    rating: null,
+    group_title: getSeriesOrTitle({
+      id: row.id,
+      source: row.source,
+      source_kind: row.source_kind,
+      media_type: row.media_type,
+      title: row.title,
+      parent_title: row.parent_title,
+      season: row.season,
+      episode: row.episode,
+      started_at: row.started_at,
+    }),
   };
 }
 
@@ -1135,6 +1171,20 @@ export function getProgressLists(db: Database, source?: string): ProgressLists {
     } else if (item.progress !== null && item.progress > 0) {
       in_progress.push(item);
     }
+  }
+
+  // One batch annotation lookup for every item in the response.
+  const allItems = [...in_progress, ...finished];
+  const keys: AnnotationKey[] = allItems.map((item) => ({
+    source: item.source,
+    title: item.group_title,
+  }));
+  const annotations = getAnnotationsFor(db, keys);
+  for (const item of allItems) {
+    const annotation = annotations.get(
+      annotationMapKey(item.source, item.group_title)
+    );
+    item.rating = annotation?.rating ?? null;
   }
 
   return { in_progress, finished };

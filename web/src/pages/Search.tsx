@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   getTitleHistory,
   search,
+  type Annotation,
   type SearchHit,
   type SearchResult,
   type TitleHistory,
 } from "../api";
+import { RatingEditor } from "../components/RatingEditor";
 import { formatSeasonEpisode, sourceIcon } from "../lib/calendar";
 import { formatLocalDay } from "../lib/format-date";
 import {
@@ -319,6 +321,18 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
                     </p>
                   </div>
                 </div>
+                <RatingEditor
+                  source={history.source}
+                  title={history.title}
+                  initialRating={history.rating}
+                  onSaved={(annotation: Annotation) =>
+                    setHistory((prev) =>
+                      prev === null
+                        ? prev
+                        : { ...prev, rating: annotation.rating }
+                    )
+                  }
+                />
               </section>
 
               <section class="card" aria-label="History">

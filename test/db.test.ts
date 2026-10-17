@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { migrate, openDb } from "../src/core/db.ts";
+import { migrate, migrations, openDb } from "../src/core/db.ts";
 import type { EventRow } from "../src/core/schema.ts";
 
 describe("db core", () => {
@@ -109,17 +109,16 @@ describe("db core", () => {
         )
         .all();
 
-      expect(migrationRows).toHaveLength(2);
-      expect(migrationRows[0]?.version).toBe(1);
-      expect(migrationRows[1]?.version).toBe(2);
-      expect(typeof migrationRows[0]?.applied_at).toBe("string");
-      expect(migrationRows[0]?.applied_at).toMatch(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+      expect(migrationRows).toHaveLength(migrations.length);
+      expect(migrationRows.map((r) => r.version)).toEqual(
+        [...migrations].map((m) => m.version).sort((a, b) => a - b)
       );
-      expect(typeof migrationRows[1]?.applied_at).toBe("string");
-      expect(migrationRows[1]?.applied_at).toMatch(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
-      );
+      for (const row of migrationRows) {
+        expect(typeof row.applied_at).toBe("string");
+        expect(row.applied_at).toMatch(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+        );
+      }
     });
 
     test("events_latest returns exactly one row (the max id) per key when the same key is inserted 3 times with different record_hash; and separate rows for different keys", () => {
@@ -389,7 +388,7 @@ describe("db core", () => {
             "SELECT version FROM schema_migrations;"
           )
           .all();
-        expect(migrationRows).toHaveLength(2);
+        expect(migrationRows).toHaveLength(migrations.length);
       } finally {
         reopenedDb.close();
       }
