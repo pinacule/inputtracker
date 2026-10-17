@@ -5,8 +5,11 @@ Updated by the manager after every task. If the run stopped early, this is the s
 ## Summary
 **v1 finished (2026-10-17 17:45).** 31 v1 tasks DONE (28 by workers, all on the first attempt; T21, T22 and M03
 done by Claude interactively) plus manager setup M01/M02/M04. 0 BLOCKED, 0 skipped. `bun run check`
-green on main (419 tests), `bun run smoke` merged with T19. Next work (S01–Y03 Simkl/YouTube) is
-listed under "After v1" in TASKS.md and was not started.
+green on main (419 tests), `bun run smoke` merged with T19.
+
+**Phase 2 (Simkl + YouTube Takeout, approved 2026-10-17) started 18:17.** Order: P01 stats chart
+polish → S01 Simkl auth → S02 Simkl sync → S03 Simkl UI → Y01 Takeout import → Y03 YouTube UI →
+T24 smoke → T25 docs. Running now: P01 (opencode).
 
 Check on the phone:
 1. Open the app via your Tailscale URL and install it ("Install app"), if not done yet.
@@ -72,3 +75,4 @@ Check on the phone:
 - 2026-10-17 17:19 CEST — overnight loop ENDED after 20 steps
 - 2026-10-17 17:19 CEST — overnight loop STARTED
 - 2026-10-17 17:41 CEST — overnight loop ENDED after 3 steps
+- 2026-10-17 18:17 CEST — overnight loop STARTED
