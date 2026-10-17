@@ -9,7 +9,7 @@ green on main (419 tests), `bun run smoke` merged with T19.
 
 **Phase 2 (Simkl + YouTube Takeout, approved 2026-10-17) started 18:17.** Order: P01 stats chart
 polish → S01 Simkl auth → S02 Simkl sync → S03 Simkl UI → Y01 Takeout import → Y03 YouTube UI →
-T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). S01 Simkl config/client/auth DONE 18:58 (d6636d7, 480 tests green, attempt 2 after review feedback). Y01 YouTube Takeout import DONE (e7beab2; fixture renamed by Claude interactively, see "Decisions needed"). S02 Simkl sync DONE 19:25 (b34e428, 535 tests green on main after merging with Y01).
+T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). S01 Simkl config/client/auth DONE 18:58 (d6636d7, 480 tests green, attempt 2 after review feedback). Y01 YouTube Takeout import DONE (e7beab2; fixture renamed by Claude interactively, see "Decisions needed"). S02 Simkl sync DONE 19:25 (b34e428, 535 tests green on main after merging with Y01). Running now: S03 Simkl in the UI (opencode, from 19:30; the prompt also adds a "Sync Simkl now" button and a `simkl.poster_base_url` config key so T24 can fake the poster server).
 
 Check on the phone:
 1. Open the app via your Tailscale URL and install it ("Install app"), if not done yet.
