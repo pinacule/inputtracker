@@ -31,7 +31,7 @@ import {
   getProgressLists,
   getStats,
 } from "./aggregate.ts";
-import { getCover, isValidCoverId } from "./covers.ts";
+import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
 
 export interface AppDeps {
   db: Database;
@@ -409,6 +409,11 @@ export function createApp(deps: AppDeps): Hono {
       );
       const client = makeClient(config);
       const result = await doSync({ client, sink, db, config });
+      // Cache covers while the items still exist on the server (never throws).
+      await prefetchCovers(db, result.runId, {
+        config,
+        createAbsClient: deps.createAbsClient,
+      });
       return c.json({
         runId: result.runId,
         seen: result.seen,

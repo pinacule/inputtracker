@@ -380,6 +380,35 @@ describe("CLI", () => {
     expect(errText).toBe("");
   });
 
+  test("successful sync → fills the cover cache for that run; a failed sync does not", async () => {
+    const prefetched: number[] = [];
+    const prefetchCovers = async (_db: unknown, runId: number) => {
+      prefetched.push(runId);
+      return 0;
+    };
+    const ok = await runCli(["sync", "audiobookshelf"], {
+      loadConfig: () => ({ storage: { db_path: ":memory:" } }) as unknown as Config,
+      syncAudiobookshelf: async () => ({ runId: 7, seen: 1, inserted: 1 }),
+      prefetchCovers,
+      out: () => {},
+      err: () => {},
+    });
+    expect(ok).toBe(0);
+    expect(prefetched).toEqual([7]);
+
+    const failed = await runCli(["sync", "audiobookshelf"], {
+      loadConfig: () => ({ storage: { db_path: ":memory:" } }) as unknown as Config,
+      syncAudiobookshelf: async () => {
+        throw new Error("boom");
+      },
+      prefetchCovers,
+      out: () => {},
+      err: () => {},
+    });
+    expect(failed).toBe(2);
+    expect(prefetched).toEqual([7]);
+  });
+
   test("sync failure → exit 2 and no token in output", async () => {
     let errText = "";
     const code = await runCli(["sync", "audiobookshelf"], {

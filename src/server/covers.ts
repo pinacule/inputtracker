@@ -13,6 +13,7 @@
  * Failures are never cached: a missing/unreachable ABS just means "no cover".
  */
 
+import type { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Config } from "../core/config.ts";
@@ -165,4 +166,53 @@ export async function getCover(
   const cover: CoverResult = { bytes, contentType };
   writeCachedCover(imgPath, typePath, cover);
   return cover;
+}
+
+/** Upper bound of covers one prefetch may request, so a sync never stalls on covers. */
+export const PREFETCH_LIMIT = 100;
+
+/**
+ * Library item ids worth caching after a sync: items of the rows inserted by
+ * run `runId`, plus every item that has a progress row. Invalid ids are dropped.
+ */
+export function coverIdsToPrefetch(db: Database, runId: number): string[] {
+  const rows = db
+    .query<{ item: string | null }, [number]>(
+      `SELECT json_extract(external_ids, '$.abs_item') AS item
+         FROM events_latest
+        WHERE source = 'audiobookshelf' AND ingest_run_id = ?
+       UNION
+       SELECT source_id AS item
+         FROM events_latest
+        WHERE source = 'audiobookshelf' AND source_kind = 'media_progress';`
+    )
+    .all(runId);
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (isValidCoverId(row.item)) ids.add(row.item);
+  }
+  return [...ids].sort();
+}
+
+/**
+ * Cache covers right after a sync, while the items still exist on the server:
+ * Audiobookshelf drops a deleted book's cover, but its sessions stay in the
+ * archive. Best-effort and GET-only (via `getCover`); never throws. Returns the
+ * number of items that have a cached cover afterwards.
+ */
+export async function prefetchCovers(
+  db: Database,
+  runId: number,
+  deps: CoverDeps,
+  limit: number = PREFETCH_LIMIT
+): Promise<number> {
+  let available = 0;
+  try {
+    for (const itemId of coverIdsToPrefetch(db, runId).slice(0, limit)) {
+      if ((await getCover(itemId, deps)) !== null) available += 1;
+    }
+  } catch {
+    // Covers are a nicety; a failure here must never affect the sync.
+  }
+  return available;
 }
