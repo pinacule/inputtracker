@@ -50,6 +50,7 @@ import {
   getStats,
 } from "./aggregate.ts";
 import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
+import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
 
 export interface AppDeps {
   db: Database;
@@ -68,6 +69,11 @@ export interface AppDeps {
   createSimklClient?: (config: Config["simkl"]) => SyncSimklClient;
   /** Injectable token reader for Simkl auth check. */
   readSimklToken?: (path: string) => SimklToken | null;
+  /**
+   * Injectable fetch for remote image proxying (Simkl posters); defaults to the
+   * global `fetch`. Tests use this so no network access is ever attempted.
+   */
+  fetchImage?: typeof fetch;
   /** Injectable sink factory; defaults to a `LocalDbSink`. */
   sinkFor?: (db: Database) => Sink;
 }
@@ -291,6 +297,45 @@ export function createApp(deps: AppDeps): Hono {
         "Cache-Control": "public, max-age=86400",
       },
     });
+  });
+
+  // GET /api/poster/simkl/:dir/:name — proxy (and cache) a Simkl poster.
+  // The path is re-validated here, so a malformed value never causes a fetch.
+  app.get("/api/poster/simkl/:dir/:name", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const path = `${c.req.param("dir")}/${c.req.param("name")}`;
+    if (!isValidSimklPoster(path)) {
+      return c.json({ error: "Invalid poster path" }, 400);
+    }
+
+    const poster = await getSimklPoster(path, {
+      config,
+      fetch: deps.fetchImage ?? fetch,
+    });
+    if (poster === null) {
+      return c.json({ error: "Poster not available" }, 404);
+    }
+
+    return new Response(poster.bytes, {
+      status: 200,
+      headers: {
+        "Content-Type": poster.contentType,
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
+  });
+
+  // Any other /api/poster/simkl/... shape is invalid; reject without fetching.
+  app.all("/api/poster/simkl/*", (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+    return c.json({ error: "Invalid poster path" }, 400);
   });
 
   // GET /api/export.json

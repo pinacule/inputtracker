@@ -185,11 +185,17 @@ describe("sourceIcon", () => {
 });
 
 describe("formatSeasonEpisode and formatItemTitle", () => {
-  test("formats S/E indicators", () => {
-    expect(formatSeasonEpisode(1, 2)).toBe("S1E2");
-    expect(formatSeasonEpisode(3, null)).toBe("S3");
-    expect(formatSeasonEpisode(null, 5)).toBe("E5");
+  test("zero-pads season/episode to two digits", () => {
+    expect(formatSeasonEpisode(1, 2)).toBe("S01E02");
+    expect(formatSeasonEpisode(3, null)).toBe("S03");
+    expect(formatSeasonEpisode(null, 5)).toBe("E05");
     expect(formatSeasonEpisode(null, null)).toBe("");
+  });
+
+  test("leaves three-digit numbers unpadded", () => {
+    expect(formatSeasonEpisode(100, 150)).toBe("S100E150");
+    expect(formatSeasonEpisode(100, null)).toBe("S100");
+    expect(formatSeasonEpisode(null, 123)).toBe("E123");
   });
 
   test("formats item title with S/E", () => {
@@ -199,7 +205,7 @@ describe("formatSeasonEpisode and formatItemTitle", () => {
         season: 1,
         episode: 1,
       })
-    ).toBe("S1E1 · Pilot");
+    ).toBe("S01E01 · Pilot");
 
     expect(
       formatItemTitle({
@@ -207,7 +213,7 @@ describe("formatSeasonEpisode and formatItemTitle", () => {
         season: 2,
         episode: null,
       })
-    ).toBe("S2 · Special");
+    ).toBe("S02 · Special");
 
     expect(
       formatItemTitle({
@@ -223,6 +229,16 @@ describe("formatSeasonEpisode and formatItemTitle", () => {
         season: 1,
         episode: 4,
       })
-    ).toBe("S1E4 · Untitled");
+    ).toBe("S01E04 · Untitled");
+  });
+
+  test("renders a Simkl episode as 'S01E03 · Synthetic Show'", () => {
+    expect(
+      formatItemTitle({
+        title: "Synthetic Show",
+        season: 1,
+        episode: 3,
+      })
+    ).toBe("S01E03 · Synthetic Show");
   });
 });

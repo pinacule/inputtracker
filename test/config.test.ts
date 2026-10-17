@@ -56,6 +56,7 @@ describe("loadConfig defaults", () => {
     expect(config.simkl).toEqual({
       client_id: "",
       base_url: "https://api.simkl.com",
+      poster_base_url: "https://simkl.in/posters",
       timeout_s: 20,
     });
     expect(config.notify).toEqual({ desktop: true, ntfy_url: "" });
@@ -94,6 +95,7 @@ describe("loadConfig file merging", () => {
         "[simkl]",
         'client_id = "test-client-id"',
         'base_url = "https://simkl.example"',
+        'poster_base_url = "https://posters.example"',
         "timeout_s = 15",
         "",
         "[notify]",
@@ -116,6 +118,7 @@ describe("loadConfig file merging", () => {
     expect(config.audiobookshelf.timeout_s).toBe(5);
     expect(config.simkl.client_id).toBe("test-client-id");
     expect(config.simkl.base_url).toBe("https://simkl.example");
+    expect(config.simkl.poster_base_url).toBe("https://posters.example");
     expect(config.simkl.timeout_s).toBe(15);
     expect(config.notify.desktop).toBe(false);
     expect(config.notify.ntfy_url).toBe("https://ntfy.example/topic");
@@ -191,6 +194,9 @@ describe("loadConfig errors", () => {
     const badUrl = writeConfig("badurl.toml", '[simkl]\nbase_url = 12345\n');
     expect(() => loadConfig({ path: badUrl, env: {} })).toThrow(/simkl\.base_url/);
 
+    const badPoster = writeConfig("badposter.toml", '[simkl]\nposter_base_url = 12345\n');
+    expect(() => loadConfig({ path: badPoster, env: {} })).toThrow(/simkl\.poster_base_url/);
+
     const badTimeout = writeConfig("badtimeout.toml", '[simkl]\ntimeout_s = "twenty"\n');
     expect(() => loadConfig({ path: badTimeout, env: {} })).toThrow(/simkl\.timeout_s/);
 
@@ -225,7 +231,7 @@ describe("redaction", () => {
     expect(JSON.parse(JSON.stringify(config))).toMatchObject({
       timezone: "Europe/Bratislava",
       audiobookshelf: { url: "http://localhost:13378", timeout_s: 20 },
-      simkl: { client_id: "public-client-id", base_url: "https://api.simkl.com", timeout_s: 20 },
+      simkl: { client_id: "public-client-id", base_url: "https://api.simkl.com", poster_base_url: "https://simkl.in/posters", timeout_s: 20 },
     });
   });
 

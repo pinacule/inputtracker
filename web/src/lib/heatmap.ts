@@ -4,6 +4,7 @@
  */
 
 import type { HeatmapDay, HeatmapHourCell } from "../api";
+import { SOURCES } from "./sources";
 
 export interface HeatmapSourceOption {
   readonly id: string;
@@ -13,12 +14,15 @@ export interface HeatmapSourceOption {
 
 /**
  * Fixed list of supported sources for filtering in the heat map view.
- * Kept in lib for easy extension. Note: import is not a media source.
+ * Derived from the shared `SOURCES` list so it never drifts.
  */
-export const HEATMAP_SOURCES: readonly HeatmapSourceOption[] = [
-  { id: "audiobookshelf", value: "audiobookshelf", label: "Audiobookshelf" },
-  { id: "manual", value: "manual", label: "Manual" },
-];
+export const HEATMAP_SOURCES: readonly HeatmapSourceOption[] = SOURCES.map(
+  (source) => ({
+    id: source.value,
+    value: source.value,
+    label: source.label,
+  })
+);
 
 export interface MonthLabel {
   readonly label: string;

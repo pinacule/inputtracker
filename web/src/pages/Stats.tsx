@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { getStats, type StatsResult, type WeekStatBucket, type MonthStatBucket } from "../api";
 import { sourceIcon } from "../lib/calendar";
+import { sourceLabel } from "../lib/sources";
 import {
   computeBarHeight,
   computeMaxMinutes,
@@ -161,7 +162,7 @@ export function Stats() {
                     class="stats-legend-dot"
                     style={{ backgroundColor: sourceColor(src) }}
                   />
-                  <span class="stats-legend-name">{src}</span>
+                  <span class="stats-legend-name">{sourceLabel(src)}</span>
                 </span>
               ))}
             </div>
@@ -221,7 +222,7 @@ export function Stats() {
                               height: `${seg.percentage}%`,
                               backgroundColor: sourceColor(seg.source),
                             }}
-                            title={`${seg.source}: ${formatMinutes(seg.minutes)} (${seg.percentage}%)`}
+                            title={`${sourceLabel(seg.source)}: ${formatMinutes(seg.minutes)} (${seg.percentage}%)`}
                           />
                         ))}
                       </div>
@@ -261,7 +262,9 @@ export function Stats() {
                 <div class="stats-top-info">
                   <span class="stats-top-title">{item.title}</span>
                   <span class="stats-top-meta">
-                    <span class="stats-top-source">{item.source}</span>
+                    <span class="stats-top-source">
+                      {sourceLabel(item.source)}
+                    </span>
                     <span class="stats-top-sep">·</span>
                     <span class="stats-top-type">{item.media_type}</span>
                   </span>

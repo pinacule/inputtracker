@@ -32,7 +32,7 @@ function mockConfig(overrides: Partial<Config> = {}): Config {
     server: { bind: "127.0.0.1", port: 8787 },
     storage: { db_path: ":memory:", backup_dir: "/tmp/backups", backup_keep: 14 },
     audiobookshelf: { url: "http://abs.test:13378", token: "abs-tok", timeout_s: 20 },
-    simkl: { client_id: "simkl_client_id_synth", base_url: "https://api.simkl.com", timeout_s: 20 },
+    simkl: { client_id: "simkl_client_id_synth", base_url: "https://api.simkl.com", poster_base_url: "https://simkl.in/posters", timeout_s: 20 },
     notify: { desktop: false, ntfy_url: "" },
     toJSON: () => ({}),
     toString: () => "",
@@ -102,10 +102,10 @@ describe("Simkl sync (src/sources/simkl/sync.ts)", () => {
   });
 
   test("isSimklConfigured and isSimklAuthorised helpers", () => {
-    const unconfigured = mockConfig({ simkl: { client_id: "  ", base_url: "", timeout_s: 20 } });
+    const unconfigured = mockConfig({ simkl: { client_id: "  ", base_url: "", poster_base_url: "", timeout_s: 20 } });
     expect(isSimklConfigured(unconfigured)).toBe(false);
 
-    const configured = mockConfig({ simkl: { client_id: "valid_id", base_url: "", timeout_s: 20 } });
+    const configured = mockConfig({ simkl: { client_id: "valid_id", base_url: "", poster_base_url: "", timeout_s: 20 } });
     expect(isSimklConfigured(configured)).toBe(true);
 
     const fakeToken: SimklToken = {
@@ -394,7 +394,7 @@ describe("CLI 'it sync simkl' (src/cli/index.ts)", () => {
 
   test("not configured: exits 0, prints hint to set simkl.client_id, no ingest run", async () => {
     const { runCli } = await import("../src/cli/index.ts");
-    const config = mockConfig({ simkl: { client_id: "  ", base_url: "", timeout_s: 20 } });
+    const config = mockConfig({ simkl: { client_id: "  ", base_url: "", poster_base_url: "", timeout_s: 20 } });
 
     const code = await runCli(["sync", "simkl"], {
       loadConfig: () => config,
@@ -415,7 +415,7 @@ describe("CLI 'it sync simkl' (src/cli/index.ts)", () => {
 
   test("configured but not authorised: exits 0, prints hint to run 'it auth simkl', no ingest run", async () => {
     const { runCli } = await import("../src/cli/index.ts");
-    const config = mockConfig({ simkl: { client_id: "synth_id", base_url: "", timeout_s: 20 } });
+    const config = mockConfig({ simkl: { client_id: "synth_id", base_url: "", poster_base_url: "", timeout_s: 20 } });
 
     const code = await runCli(["sync", "simkl"], {
       loadConfig: () => config,
@@ -437,7 +437,7 @@ describe("CLI 'it sync simkl' (src/cli/index.ts)", () => {
 
   test("configured and authorised: runs sync and prints formatted success line", async () => {
     const { runCli } = await import("../src/cli/index.ts");
-    const config = mockConfig({ simkl: { client_id: "synth_id", base_url: "", timeout_s: 20 } });
+    const config = mockConfig({ simkl: { client_id: "synth_id", base_url: "", poster_base_url: "", timeout_s: 20 } });
 
     const code = await runCli(["sync", "simkl"], {
       loadConfig: () => config,
@@ -466,7 +466,7 @@ describe("CLI 'it sync simkl' (src/cli/index.ts)", () => {
 
   test("sync failure: prints redacted message to stderr and exits 2", async () => {
     const { runCli } = await import("../src/cli/index.ts");
-    const config = mockConfig({ simkl: { client_id: "synth_id", base_url: "", timeout_s: 20 } });
+    const config = mockConfig({ simkl: { client_id: "synth_id", base_url: "", poster_base_url: "", timeout_s: 20 } });
 
     const code = await runCli(["sync", "simkl"], {
       loadConfig: () => config,

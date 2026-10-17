@@ -3,6 +3,8 @@
  * No DOM dependencies; safe to run under Bun or in the browser.
  */
 
+import { sourceEntry } from "./sources";
+
 /**
  * Builds a month grid as an array of weeks (Monday-first).
  * Each week is an array of 7 ISO date strings (`YYYY-MM-DD`).
@@ -139,6 +141,9 @@ export function formatLocalTime(localTime: string): string {
 
 /**
  * Returns an icon/emoji badge for the given source and optional media type.
+ *
+ * Media-type icons take precedence (an episode of a Simkl show is still a 📺),
+ * otherwise the source icon comes from the shared `SOURCES` list.
  */
 export function sourceIcon(
   source: string,
@@ -169,20 +174,20 @@ export function sourceIcon(
   if (m === "book") {
     return "📖";
   }
+  // YouTube is not in `SOURCES` yet (task Y03); keep its icon here until then.
   if (s === "youtube") {
     return "▶️";
   }
-  if (s === "simkl") {
-    return "🎬";
-  }
-  if (s === "manual") {
-    return "📝";
-  }
-  return "📌";
+  return sourceEntry(s)?.icon ?? "📌";
+}
+
+/** Zero-pad an S/E number to two digits (`3` → `03`, `100` stays `100`). */
+function padSeasonEpisode(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
 /**
- * Formats season and episode indicators (e.g. "S1E2").
+ * Formats season and episode indicators (e.g. "S01E03").
  */
 export function formatSeasonEpisode(
   season: number | null | undefined,
@@ -191,13 +196,13 @@ export function formatSeasonEpisode(
   const hasSeason = season !== null && season !== undefined;
   const hasEpisode = episode !== null && episode !== undefined;
   if (hasSeason && hasEpisode) {
-    return `S${season}E${episode}`;
+    return `S${padSeasonEpisode(season)}E${padSeasonEpisode(episode)}`;
   }
   if (hasSeason) {
-    return `S${season}`;
+    return `S${padSeasonEpisode(season)}`;
   }
   if (hasEpisode) {
-    return `E${episode}`;
+    return `E${padSeasonEpisode(episode)}`;
   }
   return "";
 }

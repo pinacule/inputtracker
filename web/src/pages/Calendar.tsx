@@ -13,6 +13,7 @@ import {
   shiftMonth,
   sourceIcon,
 } from "../lib/calendar";
+import { sourceLabel } from "../lib/sources";
 
 export interface CalendarProps {
   /** Optional date in `YYYY-MM-DD` format to open on mount. */
@@ -377,7 +378,9 @@ export function Calendar({ date }: CalendarProps = {}) {
                         {formatDuration(item.duration_seconds)}
                       </span>
                       <span class="calendar-item-bullet">·</span>
-                      <span class="calendar-item-source">{item.source}</span>
+                      <span class="calendar-item-source">
+                        {sourceLabel(item.source)}
+                      </span>
                     </div>
                   </div>
                 </li>

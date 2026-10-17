@@ -29,6 +29,7 @@ function makeMockConfig(dir: string, clientId = FAKE_CLIENT_ID, timezone = "Euro
     simkl: {
       client_id: clientId,
       base_url: "https://api.simkl.test",
+      poster_base_url: "https://simkl.in/posters",
       timeout_s: 5,
     },
     notify: { desktop: false, ntfy_url: "" },
