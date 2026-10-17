@@ -7,4 +7,4 @@ WorkingDirectory=@APP_DIR@
 # Config path: the app reads INPUTTRACKER_CONFIG from the environment when set,
 # otherwise its own default. Nothing is hard-coded here.
 PassEnvironment=INPUTTRACKER_CONFIG
-ExecStart=/usr/bin/env bun run src/cli/index.ts backup
+ExecStart=@BUN@ run src/cli/index.ts backup

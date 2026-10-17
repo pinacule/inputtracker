@@ -97,6 +97,9 @@ function directive(text: string, key: string): string | null {
   return match ? (match[1] as string) : null;
 }
 
+/** Any unresolved template placeholder such as `@APP_DIR@` or `@BUN@`. */
+const PLACEHOLDER = /@[A-Z_]+@/;
+
 // A secret-ish assignment: a token/api-key/bearer value that is not a
 // placeholder. Deploy files must contain none of these.
 const SECRET_PATTERNS = [
@@ -132,9 +135,11 @@ describe("deploy files: presence and content", () => {
     }
   });
 
-  test("service units use the @APP_DIR@ placeholder and no absolute /home path", () => {
+  test("service units use the @APP_DIR@ and @BUN@ placeholders and no absolute /home path", () => {
     for (const name of SERVICE_FILES) {
-      expect(readDeploy(name)).toContain("@APP_DIR@");
+      const text = readDeploy(name);
+      expect(text).toContain("@APP_DIR@");
+      expect(text).toContain("@BUN@");
     }
     for (const name of UNIT_FILES) {
       expect(readDeploy(name)).not.toMatch(/\/home\//);
@@ -164,7 +169,7 @@ describe("deploy files: required directives", () => {
     expect(directive(text, "Type")).toBe("simple");
     expect(directive(text, "WorkingDirectory")).toBe("@APP_DIR@");
     expect(directive(text, "ExecStart")).toBe(
-      "/usr/bin/env bun run src/server/main.ts"
+      "@BUN@ run src/server/main.ts"
     );
     expect(directive(text, "Restart")).toBe("on-failure");
     expect(directive(text, "WantedBy")).toBe("default.target");
@@ -175,7 +180,7 @@ describe("deploy files: required directives", () => {
     expect(directive(text, "Type")).toBe("oneshot");
     expect(directive(text, "WorkingDirectory")).toBe("@APP_DIR@");
     expect(directive(text, "ExecStart")).toBe(
-      "/usr/bin/env bun run src/cli/index.ts sync %i"
+      "@BUN@ run src/cli/index.ts sync %i"
     );
   });
 
@@ -194,7 +199,7 @@ describe("deploy files: required directives", () => {
     expect(directive(service, "Type")).toBe("oneshot");
     expect(directive(service, "WorkingDirectory")).toBe("@APP_DIR@");
     expect(directive(service, "ExecStart")).toBe(
-      "/usr/bin/env bun run src/cli/index.ts backup"
+      "@BUN@ run src/cli/index.ts backup"
     );
 
     const timer = readDeploy("inputtracker-backup.timer");
@@ -211,31 +216,79 @@ describe("deploy files: required directives", () => {
 });
 
 describe("scripts/install.sh", () => {
-  test("--dry-run exits 0, prints the plan, and touches nothing", async () => {
-    const tmp = mkdtempSync(join(tmpdir(), "it-deploy-dry-"));
+  test("--dry-run exits 0, prints the plan and resolved bun, and touches nothing", async () => {
+    const root = mkdtempSync(join(tmpdir(), "it-deploy-dry-"));
     try {
+      const home = join(root, "home");
+      mkdirSync(home);
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      const fakeBun = join(bin, "bun");
+      writeFileSync(fakeBun, "#!/bin/sh\nexit 0\n");
+      chmodSync(fakeBun, 0o755);
+
       const { code, out } = await runInstall(
         ["--dry-run"],
-        cleanEnv({ HOME: tmp, XDG_CONFIG_HOME: tmp })
+        cleanEnv({
+          HOME: home,
+          XDG_CONFIG_HOME: home,
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+        })
       );
 
       expect(code).toBe(0);
       expect(out).toContain("Dry run");
-      expect(out).toContain(tmp);
+      expect(out).toContain(home);
+      // The resolved Bun path is shown, not just the template placeholder.
+      expect(out).toContain(fakeBun);
+      expect(out).not.toContain("@BUN@");
       expect(out).toContain("loginctl enable-linger");
       // Nothing was created: not even the unit directory.
-      expect(readdirSync(tmp)).toHaveLength(0);
+      expect(readdirSync(home)).toHaveLength(0);
     } finally {
-      rmSync(tmp, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     }
   });
 
-  test("--no-start renders units with the repo path and is idempotent", async () => {
-    const tmp = mkdtempSync(join(tmpdir(), "it-deploy-install-"));
+  test("missing bun (absent from PATH and ~/.bun/bin) exits non-zero with a message", async () => {
+    const root = mkdtempSync(join(tmpdir(), "it-deploy-nobun-"));
     try {
-      const bin = join(tmp, "bin");
+      const home = join(root, "home");
+      mkdirSync(home); // Deliberately no ~/.bun/bin/bun here.
+      const bin = join(root, "bin");
+      mkdirSync(bin); // No bun on PATH, but the shell utilities the script needs.
+      const dirnameBin = Bun.which("dirname");
+      if (dirnameBin) {
+        symlinkSync(dirnameBin, join(bin, "dirname"));
+      }
+
+      const { code, out, err } = await runInstall(
+        ["--dry-run"],
+        cleanEnv({ HOME: home, XDG_CONFIG_HOME: home, PATH: bin })
+      );
+
+      expect(code).not.toBe(0);
+      expect(err.toLowerCase()).toContain("bun");
+      expect(out).not.toContain("Dry run");
+      // A failing run writes nothing.
+      expect(readdirSync(home)).toHaveLength(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("--no-start renders absolute bun paths, no placeholders, and is idempotent", async () => {
+    const root = mkdtempSync(join(tmpdir(), "it-deploy-install-"));
+    try {
+      const home = join(root, "home");
+      mkdirSync(home);
+      const bin = join(root, "bin");
       mkdirSync(bin);
-      const logPath = join(tmp, "systemctl.log");
+      const fakeBun = join(bin, "bun");
+      writeFileSync(fakeBun, "#!/bin/sh\nexit 0\n");
+      chmodSync(fakeBun, 0o755);
+
+      const logPath = join(root, "systemctl.log");
       const shim = join(bin, "systemctl");
       writeFileSync(
         shim,
@@ -244,8 +297,8 @@ describe("scripts/install.sh", () => {
       chmodSync(shim, 0o755);
 
       const env = cleanEnv({
-        HOME: tmp,
-        XDG_CONFIG_HOME: tmp,
+        HOME: home,
+        XDG_CONFIG_HOME: home,
         SYSTEMCTL_LOG: logPath,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
       });
@@ -254,14 +307,22 @@ describe("scripts/install.sh", () => {
       expect(first.code).toBe(0);
       expect(first.out).toContain("loginctl enable-linger");
 
-      const unitDir = join(tmp, "systemd", "user");
+      const unitDir = join(home, "systemd", "user");
       for (const name of UNIT_FILES) {
         expect(existsSync(join(unitDir, name))).toBe(true);
+        const text = readFileSync(join(unitDir, name), "utf8");
+        expect(text, `${name} still has an unresolved placeholder`).not.toMatch(
+          PLACEHOLDER
+        );
       }
       for (const name of SERVICE_FILES) {
         const text = readFileSync(join(unitDir, name), "utf8");
         expect(text).toContain(REPO);
-        expect(text).not.toContain("@APP_DIR@");
+        const exec = directive(text, "ExecStart");
+        expect(exec).not.toBeNull();
+        // Absolute path to the resolved bun, with the command unchanged.
+        expect((exec as string).startsWith(`${fakeBun} run `)).toBe(true);
+        expect((exec as string).startsWith("/")).toBe(true);
       }
 
       // systemctl was only asked to reload, never to enable (-now).
@@ -281,15 +342,17 @@ describe("scripts/install.sh", () => {
         );
       }
     } finally {
-      rmSync(tmp, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     }
   });
 
   test("skips systemctl gracefully when it is missing", async () => {
-    const tmp = mkdtempSync(join(tmpdir(), "it-deploy-nosysctl-"));
+    const root = mkdtempSync(join(tmpdir(), "it-deploy-nosysctl-"));
     try {
+      const home = join(root, "home");
+      mkdirSync(home);
       // A PATH with the shell utilities the script needs, but no systemctl.
-      const bin = join(tmp, "bin");
+      const bin = join(root, "bin");
       mkdirSync(bin);
       for (const tool of ["dirname", "mkdir", "cmp", "mv", "rm", "id", "sed"]) {
         const found = Bun.which(tool);
@@ -297,19 +360,23 @@ describe("scripts/install.sh", () => {
           symlinkSync(found, join(bin, tool));
         }
       }
+      // bun must resolve so install.sh gets past the bun check; systemctl stays absent.
+      const fakeBun = join(bin, "bun");
+      writeFileSync(fakeBun, "#!/bin/sh\nexit 0\n");
+      chmodSync(fakeBun, 0o755);
 
       const { code, err } = await runInstall(
         ["--no-start"],
-        cleanEnv({ HOME: tmp, XDG_CONFIG_HOME: tmp, PATH: bin })
+        cleanEnv({ HOME: home, XDG_CONFIG_HOME: home, PATH: bin })
       );
       expect(code).toBe(0);
       expect(err).toContain("systemctl not found");
       // Units still rendered.
       expect(
-        existsSync(join(tmp, "systemd", "user", "inputtracker.service"))
+        existsSync(join(home, "systemd", "user", "inputtracker.service"))
       ).toBe(true);
     } finally {
-      rmSync(tmp, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });
