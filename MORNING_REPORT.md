@@ -42,7 +42,7 @@ Run in progress. Now: T19 smoke test (antigravity).
 ## BLOCKED
 
 ## Decisions needed
-- 2026-10-17 17:22: a worktree `.worktrees/T21` (branch `task/T21`, from main 6d20a7b) appeared that the manager did not create. T21 is not in TASKS.md. Left untouched; please check whether it is yours.
+- 2026-10-17 17:22: a worktree `.worktrees/T21` (branch `task/T21`, from main 6d20a7b) appeared that the manager did not create. T21 is not in TASKS.md. Left untouched; please check whether it is yours. **Resolved:** it is Claude's (interactive session), see T21 in TASKS.md; Claude merges it itself.
 
 ## Limit pauses (log)
 - 2026-10-17 02:06 CEST — overnight loop STARTED
