@@ -28,6 +28,7 @@ import {
   getHeatmapDays,
   getHeatmapHours,
   getInProgress,
+  getProgressLists,
   getStats,
 } from "./aggregate.ts";
 import { getCover, isValidCoverId } from "./covers.ts";
@@ -220,6 +221,18 @@ export function createApp(deps: AppDeps): Hono {
 
     const source = c.req.query("source") || undefined;
     const result = getInProgress(db, source);
+    return c.json(result);
+  });
+
+  // GET /api/progress[?source=] — in-progress + finished media_progress lists
+  app.get("/api/progress", (c) => {
+    const err = validateQueryParams(c.req.url, ["source"]);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const source = c.req.query("source") || undefined;
+    const result = getProgressLists(db, source);
     return c.json(result);
   });
 

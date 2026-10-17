@@ -1,0 +1,204 @@
+import { useEffect, useState } from "preact/hooks";
+import {
+  getProgress,
+  type ProgressItem,
+  type ProgressLists,
+} from "../api";
+import { sourceIcon } from "../lib/calendar";
+
+/** All dates are stored UTC and shown in the configured local timezone. */
+const DISPLAY_TZ = "Europe/Bratislava";
+
+const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: DISPLAY_TZ,
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function formatDateTime(iso: string | null): string {
+  if (iso === null || iso === "") {
+    return "—";
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  return dateTimeFormatter.format(date);
+}
+
+function formatPercent(progress: number | null): string {
+  if (progress === null) {
+    return "—";
+  }
+  const clamped = Math.min(1, Math.max(0, progress));
+  return `${Math.round(clamped * 100)}%`;
+}
+
+/** Cover thumbnail with a source-icon fallback when missing or broken. */
+function ProgressThumbnail({ item }: { item: ProgressItem }) {
+  const [failed, setFailed] = useState(false);
+
+  if (item.cover_url && !failed) {
+    return (
+      <img
+        class="progress-item-cover"
+        src={item.cover_url}
+        alt=""
+        width={48}
+        height={48}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <span class="progress-item-icon-badge" aria-hidden="true">
+      {sourceIcon(item.source)}
+    </span>
+  );
+}
+
+function ProgressBar({ progress }: { progress: number | null }) {
+  const ratio = progress === null ? 0 : Math.min(1, Math.max(0, progress));
+  const pct = Math.round(ratio * 100);
+  return (
+    <div
+      class="progress-bar"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct}
+      aria-label={`${pct}% complete`}
+    >
+      <div class="progress-bar-fill" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+function ProgressRow({ item }: { item: ProgressItem }) {
+  const title = item.title?.trim() || "Untitled";
+  const dateLabel = item.is_finished
+    ? `Finished ${formatDateTime(item.finished_at ?? item.last_update)}`
+    : `Updated ${formatDateTime(item.last_update)}`;
+
+  return (
+    <li class="progress-item">
+      <ProgressThumbnail item={item} />
+      <div class="progress-item-body">
+        {item.parent_title && (
+          <div class="progress-item-parent">{item.parent_title}</div>
+        )}
+        <div class="progress-item-title">{title}</div>
+        {!item.is_finished && (
+          <div class="progress-item-progress">
+            <ProgressBar progress={item.progress} />
+            <span class="progress-item-percent">
+              {formatPercent(item.progress)}
+            </span>
+          </div>
+        )}
+        <div class="progress-item-meta">
+          <span class="progress-item-source">{item.source}</span>
+          <span class="progress-item-bullet">·</span>
+          <span class="progress-item-date">{dateLabel}</span>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+export function Progress() {
+  const [data, setData] = useState<ProgressLists | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    getProgress()
+      .then((res) => {
+        if (!cancelled) {
+          setData(res);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const inProgress = data?.in_progress ?? [];
+  const finished = data?.finished ?? [];
+
+  return (
+    <section class="page progress-page">
+      <header class="progress-header">
+        <h1>Progress</h1>
+        <p class="muted">
+          Items you are part-way through, and what you have finished.
+        </p>
+      </header>
+
+      {error && (
+        <div class="alert alert-error" role="alert">
+          <strong>Error loading progress:</strong> {error}
+        </div>
+      )}
+
+      <section
+        class="card progress-section"
+        aria-labelledby="progress-in-progress-heading"
+      >
+        <h2 id="progress-in-progress-heading" class="card-title">
+          In progress
+          <span class="progress-count">{inProgress.length}</span>
+        </h2>
+        {loading ? (
+          <p class="muted progress-empty">Loading…</p>
+        ) : inProgress.length === 0 ? (
+          <p class="muted progress-empty">Nothing in progress.</p>
+        ) : (
+          <ul class="progress-list">
+            {inProgress.map((item) => (
+              <ProgressRow key={item.id} item={item} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section
+        class="card progress-section"
+        aria-labelledby="progress-finished-heading"
+      >
+        <h2 id="progress-finished-heading" class="card-title">
+          Finished
+          <span class="progress-count">{finished.length}</span>
+        </h2>
+        {loading ? (
+          <p class="muted progress-empty">Loading…</p>
+        ) : finished.length === 0 ? (
+          <p class="muted progress-empty">Nothing finished yet.</p>
+        ) : (
+          <ul class="progress-list">
+            {finished.map((item) => (
+              <ProgressRow key={item.id} item={item} />
+            ))}
+          </ul>
+        )}
+      </section>
+    </section>
+  );
+}
