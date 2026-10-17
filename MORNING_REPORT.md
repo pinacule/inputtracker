@@ -9,7 +9,7 @@ green on main (419 tests), `bun run smoke` merged with T19.
 
 **Phase 2 (Simkl + YouTube Takeout, approved 2026-10-17) started 18:17.** Order: P01 stats chart
 polish → S01 Simkl auth → S02 Simkl sync → S03 Simkl UI → Y01 Takeout import → Y03 YouTube UI →
-T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). S01 Simkl config/client/auth DONE 18:58 (d6636d7, 480 tests green, attempt 2 after review feedback). Y01 YouTube Takeout import DONE (e7beab2; fixture renamed by Claude interactively, see "Decisions needed"). S02 Simkl sync DONE 19:25 (b34e428, 535 tests green on main after merging with Y01). Running now: S03 Simkl in the UI (opencode, from 19:30; the prompt also adds a "Sync Simkl now" button and a `simkl.poster_base_url` config key so T24 can fake the poster server).
+T24 smoke → T25 docs. P01 DONE 18:30 (26bd63c, 437 tests green). S01 Simkl config/client/auth DONE 18:58 (d6636d7, 480 tests green, attempt 2 after review feedback). Y01 YouTube Takeout import DONE (e7beab2; fixture renamed by Claude interactively, see "Decisions needed"). S02 Simkl sync DONE 19:25 (b34e428, 535 tests green on main after merging with Y01). S03 Simkl in the UI DONE 19:36 (48a4dce, 561 tests green): shared source list, `S01E03 · Show` titles, poster proxy `/api/poster/simkl/…`, "Sync Simkl now" button, `simkl.poster_base_url` config key.
 
 Check on the phone:
 1. Open the app via your Tailscale URL and install it ("Install app"), if not done yet.
@@ -58,6 +58,7 @@ Check on the phone:
 | S01 Simkl config, client, token store, `it auth simkl` | antigravity | gemini-3.8-flash-high | 2 | d6636d7 |
 | Y01 YouTube Takeout import (`it import youtube-takeout`, web upload) | opencode | deepseek-v4.1-flash-free | 1 | e7beab2 |
 | S02 Simkl sync (`it sync simkl`, `POST /api/sync/simkl`, `:30` hourly timer) | antigravity | gemini-3.8-flash-high | 1 | b34e428 |
+| S03 Simkl in UI (source list, S01E03 titles, poster proxy, Sync Simkl now) | opencode | deepseek-v4.1-flash-free | 1 | 48a4dce |
 | M01 orchestration scripts, M02 AGENTS.md/config example, M04 ABS field capture | manager (Claude) | — | 1 | see git log |
 
 ## Failed / sent back
