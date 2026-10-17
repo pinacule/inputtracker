@@ -12,6 +12,11 @@ import type { Config } from "../src/core/config.ts";
 import { openDb } from "../src/core/db.ts";
 import { finishRun, insertEvents, startRun } from "../src/core/events.ts";
 import { createApp } from "../src/server/app.ts";
+import {
+  coverIdsToPrefetch,
+  coverCacheDir,
+  prefetchCovers,
+} from "../src/server/covers.ts";
 import type { AbsBinaryResponse } from "../src/sources/audiobookshelf/client.ts";
 import type { SyncClient } from "../src/sources/audiobookshelf/sync.ts";
 
@@ -371,6 +376,114 @@ describe("cover_url on calendar and in-progress items", () => {
     }[];
     const byTitle = new Map(body.map((it) => [it.title, it]));
     expect(byTitle.get("In Progress")?.cover_url).toBe("/api/cover/absProg_2");
-    expect(byTitle.get("No Ids")?.cover_url).toBeNull();
+    // A progress row's source_id is the library item id (real ABS data).
+    expect(byTitle.get("No Ids")?.cover_url).toBe("/api/cover/prog-2");
+  });
+});
+
+describe("prefetchCovers (cache covers right after a sync)", () => {
+  let db: Database;
+  let tempDir: string;
+  let config: Config;
+
+  beforeEach(() => {
+    db = openDb(":memory:");
+    tempDir = mkdtempSync(join(tmpdir(), "inputtracker-prefetch-"));
+    config = mockConfig(join(tempDir, "inputtracker.db"));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function seed(): { oldRun: number; newRun: number } {
+    const oldRun = startRun(db, "test-sync");
+    insertEvents(db, oldRun, [
+      {
+        source: "audiobookshelf",
+        source_kind: "listening_session",
+        source_id: "sess-old",
+        external_ids: { abs_item: "itemOld" },
+        media_type: "audiobook",
+        title: "Old Book",
+        started_at: "2026-10-01T10:00:00.000Z",
+        duration_seconds: 600,
+      },
+    ]);
+    finishRun(db, oldRun, { status: "ok", rowsSeen: 1, rowsInserted: 1 });
+    const newRun = startRun(db, "test-sync");
+    insertEvents(db, newRun, [
+      {
+        source: "audiobookshelf",
+        source_kind: "listening_session",
+        source_id: "sess-new",
+        external_ids: { abs_item: "itemNew" },
+        media_type: "audiobook",
+        title: "New Book",
+        started_at: "2026-10-17T10:00:00.000Z",
+        duration_seconds: 600,
+      },
+      {
+        source: "audiobookshelf",
+        source_kind: "listening_session",
+        source_id: "sess-bad",
+        external_ids: { abs_item: "../etc/passwd" },
+        media_type: "audiobook",
+        title: "Bad Id",
+        started_at: "2026-10-17T11:00:00.000Z",
+        duration_seconds: 600,
+      },
+      {
+        source: "audiobookshelf",
+        source_kind: "media_progress",
+        source_id: "itemProg",
+        media_type: "audiobook",
+        title: "Progress Book",
+        started_at: "2026-10-17T12:00:00.000Z",
+        progress: 0.3,
+      },
+    ]);
+    finishRun(db, newRun, { status: "ok", rowsSeen: 3, rowsInserted: 3 });
+    return { oldRun, newRun };
+  }
+
+  test("picks items of this run plus all progress items, never invalid ids", () => {
+    const { newRun } = seed();
+    expect(coverIdsToPrefetch(db, newRun)).toEqual(["itemNew", "itemProg"]);
+  });
+
+  test("fetches each missing cover once over GET, then serves the cache", async () => {
+    const { newRun } = seed();
+    const calls: CallLog[] = [];
+    const deps = { config, createAbsClient: () => fakeClient({ calls }) };
+
+    expect(await prefetchCovers(db, newRun, deps)).toBe(2);
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "getBinary /api/items/itemNew/cover",
+      "getBinary /api/items/itemProg/cover",
+    ]);
+    expect(existsSync(join(coverCacheDir(config), "itemNew.img"))).toBe(true);
+
+    // Second run: everything is cached, no further requests.
+    expect(await prefetchCovers(db, newRun, deps)).toBe(2);
+    expect(calls).toHaveLength(2);
+  });
+
+  test("respects the limit", async () => {
+    const { newRun } = seed();
+    const calls: CallLog[] = [];
+    await prefetchCovers(db, newRun, { config, createAbsClient: () => fakeClient({ calls }) }, 1);
+    expect(calls).toHaveLength(1);
+  });
+
+  test("an unreachable server yields 0 and never throws", async () => {
+    const { newRun } = seed();
+    const calls: CallLog[] = [];
+    const deps = {
+      config,
+      createAbsClient: () => fakeClient({ calls, error: new Error(`down ${TOKEN}`) }),
+    };
+    expect(await prefetchCovers(db, newRun, deps)).toBe(0);
+    expect(existsSync(coverCacheDir(config))).toBe(false);
   });
 });

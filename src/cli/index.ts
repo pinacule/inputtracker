@@ -22,6 +22,7 @@ import type { MediaType } from "../core/events.ts";
 import { LocalDbSink, type Sink } from "../core/sink.ts";
 import { buildNotifier, reportSyncResult, type Notifier } from "../notify/index.ts";
 import { runBackup } from "../io/backup.ts";
+import { prefetchCovers } from "../server/covers.ts";
 import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
@@ -61,6 +62,8 @@ export interface CliDeps {
   createAbsClient?: (cfg: Config) => AbsClient;
   sinkFor?: (db: Database) => Sink;
   syncAudiobookshelf?: (deps: SyncAbsDeps) => Promise<AbsSyncResult>;
+  /** Cover cache fill after a successful sync; defaults to the real `prefetchCovers`. */
+  prefetchCovers?: typeof prefetchCovers;
   buildNotifier?: (cfg: Config) => Notifier;
   reportSyncResult?: typeof reportSyncResult;
   writeFile?: (path: string, data: string) => void;
@@ -141,6 +144,11 @@ async function runSync(
     const client = makeClient(config);
     const result = await doSync({ client, sink, db, config });
     out(`synced ${ABS_SOURCE}: seen ${result.seen}, inserted ${result.inserted}`);
+    // Cache covers while the items still exist on the server (never throws).
+    await (deps.prefetchCovers ?? prefetchCovers)(db, result.runId, {
+      config,
+      createAbsClient: () => client,
+    });
     await reportSyncSafely(report, db, ABS_SOURCE, true, undefined, notifier);
     return EXIT_OK;
   } catch (caught) {

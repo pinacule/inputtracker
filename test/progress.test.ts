@@ -194,13 +194,17 @@ describe("getProgressLists", () => {
     expect(other.finished).toHaveLength(0);
   });
 
-  test("items carry cover_url for ABS rows with an abs_item external id", () => {
+  test("items carry cover_url: abs_item when present, else the ABS item id in source_id", () => {
     seedRun([
       progressEvent("with-cover", {
         external_ids: { abs_item: "absItem_9" },
         started_at: "2026-10-17T08:00:00.000Z",
       }),
       progressEvent("no-cover", { started_at: "2026-10-17T09:00:00.000Z" }),
+      progressEvent("manual-1", {
+        source: "manual",
+        started_at: "2026-10-17T10:00:00.000Z",
+      }),
     ]);
 
     const result = getProgressLists(db);
@@ -208,7 +212,35 @@ describe("getProgressLists", () => {
     expect(byTitle.get("Book with-cover")?.cover_url).toBe(
       "/api/cover/absItem_9"
     );
-    expect(byTitle.get("Book no-cover")?.cover_url).toBeNull();
+    // ABS progress rows use the library item id as source_id.
+    expect(byTitle.get("Book no-cover")?.cover_url).toBe("/api/cover/no-cover");
+    // Only Audiobookshelf has covers.
+    expect(byTitle.get("Book manual-1")?.cover_url).toBeNull();
+  });
+
+  test("a progress row titled with its own item id takes the newest session title", () => {
+    const session = (sourceId: string, title: string, startedAt: string): NewEvent => ({
+      source: "audiobookshelf",
+      source_kind: "listening_session",
+      source_id: sourceId,
+      external_ids: { abs_item: "item-x" },
+      media_type: "audiobook",
+      title,
+      started_at: startedAt,
+      duration_seconds: 600,
+    });
+    seedRun([
+      session("s1", "Old Session Title", "2026-10-01T08:00:00.000Z"),
+      session("s2", "Session Title", "2026-10-02T08:00:00.000Z"),
+      progressEvent("item-x", { title: "item-x" }),
+      progressEvent("item-y", { title: "item-y", started_at: "2026-10-17T07:00:00.000Z" }),
+      progressEvent("item-z", { title: null, started_at: "2026-10-17T06:00:00.000Z" }),
+    ]);
+
+    const titles = getProgressLists(db).in_progress.map((i) => i.title);
+    // item-y / item-z have no session: they keep what they had.
+    expect(titles).toEqual(["Session Title", "item-y", null]);
+    expect(getInProgress(db).map((i) => i.title)).toEqual(["Session Title", "item-y", null]);
   });
 
   test("existing getInProgress still returns only unfinished in-progress rows", () => {

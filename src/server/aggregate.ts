@@ -220,31 +220,49 @@ export function parseExternalIds(
 
 /**
  * `/api/cover/<abs_item>` for Audiobookshelf events carrying an `abs_item`
- * external id (real field `libraryItemId`), otherwise null. The id is
+ * external id (real field `libraryItemId`), otherwise null. `media_progress`
+ * rows have no external ids: their `source_id` is the library item id. The id is
  * re-validated so a malformed value can never be turned into a URL/path.
  */
 export function coverUrlFor(event: {
   source?: string;
+  source_kind?: string;
+  source_id?: string;
   external_ids?: unknown;
 }): string | null {
   if (event.source !== "audiobookshelf") {
     return null;
   }
   const ids = parseExternalIds(event.external_ids);
-  if (ids === null) {
-    return null;
-  }
-  const absItem = ids["abs_item"];
+  const absItem =
+    ids?.["abs_item"] ??
+    (event.source_kind === "media_progress" ? event.source_id : undefined);
   if (typeof absItem !== "string" || !/^[A-Za-z0-9_-]+$/.test(absItem)) {
     return null;
   }
   return `/api/cover/${absItem}`;
 }
 
+/**
+ * Progress rows from Audiobookshelf `/api/me` carry no title when the payload
+ * lacks one (the mapper then stores the item id). Fall back to the title of the
+ * newest listening session for the same library item. Used as `title` column.
+ */
+const PROGRESS_TITLE_SQL = `COALESCE(
+    NULLIF(NULLIF(p.title, ''), p.source_id),
+    (SELECT s.title FROM events_latest s
+      WHERE s.source = p.source
+        AND s.source_kind = 'listening_session'
+        AND json_extract(s.external_ids, '$.abs_item') = p.source_id
+      ORDER BY s.id DESC LIMIT 1),
+    p.title) AS title`;
+
 /** Raw `events_latest` row for the in-progress query (before `cover_url`). */
 interface InProgressRow {
   id: number;
   source: string;
+  source_kind: string;
+  source_id: string;
   title: string | null;
   parent_title: string | null;
   progress: number | null;
@@ -893,19 +911,21 @@ export function getInProgress(
     return db
       .query<InProgressRow, [string]>(
         `SELECT
-          id,
-          source,
-          title,
-          parent_title,
-          progress,
-          started_at,
-          external_ids
-        FROM events_latest
-        WHERE source_kind = 'media_progress'
-          AND progress > 0
-          AND progress < 1
-          AND source = ?
-        ORDER BY started_at DESC, id DESC;`
+          p.id,
+          p.source,
+          p.source_kind,
+          p.source_id,
+          ${PROGRESS_TITLE_SQL},
+          p.parent_title,
+          p.progress,
+          p.started_at,
+          p.external_ids
+        FROM events_latest p
+        WHERE p.source_kind = 'media_progress'
+          AND p.progress > 0
+          AND p.progress < 1
+          AND p.source = ?
+        ORDER BY p.started_at DESC, p.id DESC;`
       )
       .all(source)
       .map(toInProgressItem);
@@ -914,18 +934,20 @@ export function getInProgress(
   return db
     .query<InProgressRow, []>(
       `SELECT
-        id,
-        source,
-        title,
-        parent_title,
-        progress,
-        started_at,
-        external_ids
-      FROM events_latest
-      WHERE source_kind = 'media_progress'
-        AND progress > 0
-        AND progress < 1
-      ORDER BY started_at DESC, id DESC;`
+        p.id,
+        p.source,
+        p.source_kind,
+        p.source_id,
+        ${PROGRESS_TITLE_SQL},
+        p.parent_title,
+        p.progress,
+        p.started_at,
+        p.external_ids
+      FROM events_latest p
+      WHERE p.source_kind = 'media_progress'
+        AND p.progress > 0
+        AND p.progress < 1
+      ORDER BY p.started_at DESC, p.id DESC;`
     )
     .all()
     .map(toInProgressItem);
@@ -937,6 +959,8 @@ export function getInProgress(
 interface ProgressRow {
   id: number;
   source: string;
+  source_kind: string;
+  source_id: string;
   title: string | null;
   parent_title: string | null;
   progress: number | null;
@@ -947,15 +971,17 @@ interface ProgressRow {
 }
 
 const PROGRESS_LIST_COLUMNS = `
-  id,
-  source,
-  title,
-  parent_title,
-  progress,
-  started_at,
-  ended_at,
-  external_ids,
-  raw`;
+  p.id,
+  p.source,
+  p.source_kind,
+  p.source_id,
+  ${PROGRESS_TITLE_SQL},
+  p.parent_title,
+  p.progress,
+  p.started_at,
+  p.ended_at,
+  p.external_ids,
+  p.raw`;
 
 /**
  * An item counts as finished when it has an end timestamp, reached 100%
@@ -1003,18 +1029,18 @@ export function getProgressLists(db: Database, source?: string): ProgressLists {
       ? db
           .query<ProgressRow, [string]>(
             `SELECT ${PROGRESS_LIST_COLUMNS}
-             FROM events_latest
-             WHERE source_kind = 'media_progress'
-               AND source = ?
-             ORDER BY started_at DESC, id DESC;`
+             FROM events_latest p
+             WHERE p.source_kind = 'media_progress'
+               AND p.source = ?
+             ORDER BY p.started_at DESC, p.id DESC;`
           )
           .all(source)
       : db
           .query<ProgressRow, []>(
             `SELECT ${PROGRESS_LIST_COLUMNS}
-             FROM events_latest
-             WHERE source_kind = 'media_progress'
-             ORDER BY started_at DESC, id DESC;`
+             FROM events_latest p
+             WHERE p.source_kind = 'media_progress'
+             ORDER BY p.started_at DESC, p.id DESC;`
           )
           .all();
 
