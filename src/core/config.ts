@@ -45,6 +45,14 @@ export interface YoutubeConfig {
   thumb_base_url: string;
 }
 
+export interface IngestConfig {
+  /**
+   * Shared bearer token for `POST /api/ingest/youtube-plays`. Empty disables
+   * ingest; a non-empty token must be at least 32 characters. Never logged.
+   */
+  token: string;
+}
+
 export interface ActivityWatchConfig {
   url: string;
   timeout_s: number;
@@ -70,6 +78,11 @@ export interface Config {
   audiobookshelf: AudiobookshelfConfig;
   simkl: SimklConfig;
   youtube: YoutubeConfig;
+  /**
+   * Optional: hand-built (test/partial) configs may omit `ingest`; a missing
+   * or empty token disables the ingest endpoint.
+   */
+  ingest?: IngestConfig;
   activitywatch?: ActivityWatchConfig;
   notify: NotifyConfig;
   /** Redacted plain object (JSON.stringify uses this automatically). */
@@ -272,6 +285,24 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     ),
   };
 
+  // The ingest token is a secret exactly like the ABS token: non-enumerable
+  // (invisible to JSON.stringify/util.inspect/Object.keys) and masked by the
+  // `token` key-name rule and `secretsFrom`.
+  const ingestTable = readTable(file, "ingest", "ingest");
+  const ingestToken = readString(ingestTable, "token", "ingest.token", "");
+  if (ingestToken !== "" && ingestToken.length < 32) {
+    throw new Error(
+      `Config key "ingest.token" must be at least 32 characters (got ${ingestToken.length})`
+    );
+  }
+  const ingest = {} as IngestConfig;
+  Object.defineProperty(ingest, "token", {
+    value: ingestToken,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+
   const awTable = readTable(file, "activitywatch", "activitywatch");
   const awDevice = readString(awTable, "device", "activitywatch.device", "pc");
   if (
@@ -329,6 +360,7 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     audiobookshelf,
     simkl,
     youtube,
+    ingest,
     activitywatch,
     notify,
   } as Config;
@@ -345,6 +377,14 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
 
   activeConfig = config;
   return config;
+}
+
+/** True when a non-empty ingest token is configured (ingest accepts requests). */
+export function isIngestEnabled(
+  config: { ingest?: { token?: string } } | null | undefined
+): boolean {
+  const token = config?.ingest?.token;
+  return typeof token === "string" && token !== "";
 }
 
 // --- redaction ---
@@ -377,10 +417,16 @@ function secretsFrom(value: unknown): string[] {
   if (isConfigLike(value)) {
     add((value as Config).audiobookshelf?.token);
     add((value as Config).notify?.ntfy_token);
+    if ((value as Config).ingest) {
+      add((value as Config).ingest?.token);
+    }
   }
   if (activeConfig) {
     add(activeConfig.audiobookshelf.token);
     add(activeConfig.notify?.ntfy_token);
+    if (activeConfig.ingest) {
+      add(activeConfig.ingest.token);
+    }
   }
 
   return secrets;
@@ -439,6 +485,13 @@ export function redactString(text: string, config: Config): string {
   const ntfy = notify?.ntfy_token;
   if (typeof ntfy === "string" && ntfy !== "") {
     secrets.push(ntfy);
+  }
+  // Optional in hand-built (partial) configs, hence the guard.
+  const ingestToken = (
+    config as { ingest?: { token?: string } } | null | undefined
+  )?.ingest?.token;
+  if (typeof ingestToken === "string" && ingestToken !== "") {
+    secrets.push(ingestToken);
   }
   return maskString(text, secrets);
 }

@@ -63,6 +63,7 @@ import { getTitleHistory, search } from "./search.ts";
 import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
 import { getYoutubeThumb, isValidYoutubeVideoId } from "./thumbs.ts";
+import { handleYoutubePlays } from "./ingest.ts";
 
 export interface AppDeps {
   db: Database;
@@ -88,6 +89,8 @@ export interface AppDeps {
   fetchImage?: typeof fetch;
   /** Injectable sink factory; defaults to a `LocalDbSink`. */
   sinkFor?: (db: Database) => Sink;
+  /** Wall clock for the ingest 5-minute-future check; defaults to `Date.now()`. */
+  nowMs?: () => number;
 }
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -845,6 +848,17 @@ export function createApp(deps: AppDeps): Hono {
     } finally {
       simklSyncRunning = false;
     }
+  });
+
+  // POST /api/ingest/youtube-plays — token-protected ingest from the phone.
+  // The handler covers disabled/disabled-token, auth and validation; only the
+  // query-parameter check (the first check per the contract) lives here.
+  app.post("/api/ingest/youtube-plays", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+    return handleYoutubePlays(c, { db, config, nowMs: deps.nowMs });
   });
 
   // GET /api/sync/status — latest run per source (read-only)

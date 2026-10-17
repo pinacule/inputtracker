@@ -45,6 +45,7 @@ Every key, its default and what it means:
 | `simkl.poster_base_url` | `https://simkl.in/posters` | Base URL for Simkl poster images. |
 | `simkl.timeout_s` | `20` | Per-request timeout, in seconds. |
 | `youtube.thumb_base_url` | `https://i.ytimg.com/vi` | Base URL for YouTube video thumbnails. |
+| `ingest.token` | empty | Shared bearer token for `POST /api/ingest/youtube-plays` (phone); empty disables ingest, a non-empty value must be at least 32 characters. Never logged. |
 | `activitywatch.url` | `http://127.0.0.1:5600` | ActivityWatch server URL. |
 | `activitywatch.timeout_s` | `20` | Per-request timeout, in seconds. |
 | `activitywatch.device` | `pc` | Device label for YouTube plays. |
@@ -58,7 +59,8 @@ Every key, its default and what it means:
 The Audiobookshelf token stays server-side. It is read from the config and is
 never sent to the browser: cover images and every Audiobookshelf call are
 proxied by the server, so the browser never sees the token or the
-Audiobookshelf URL either.
+Audiobookshelf URL either. The `ingest` token is treated the same way: phones
+send it in the `Authorization` header, and the server only compares it.
 
 ## Phone notifications (ntfy)
 
@@ -290,6 +292,23 @@ What needs the server:
 - syncing with Audiobookshelf, importing a file, and adding manual entries (all
   of these are writes, and export/import/sync responses are never cached);
 - any data you have not loaded at least once while online.
+
+## Ingest from the phone
+
+The second-brain Android app reads what the YouTube app plays and POSTs each
+batch to InputTracker. Set it up:
+
+1. Generate a token: `bun run it ingest token`.
+2. Put that value under `[ingest] token` in `inputtracker.config.toml`
+   (leave it empty to keep ingest off; a shorter value is a config error).
+3. Run `scripts/install.sh` to restart the server with the new config.
+4. In the phone app, enter the server URL and the same token.
+
+The endpoint is `POST /api/ingest/youtube-plays`; the request/response contract,
+the size limit and the idempotency rules are in
+[`docs/ingest-api.md`](docs/ingest-api.md). `bun run it ingest status` shows
+whether ingest is enabled. The token never appears in logs, the web app or
+error responses.
 
 ## Backups, export and import
 

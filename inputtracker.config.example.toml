@@ -46,6 +46,13 @@ ntfy_url = ""
 # Base URL used to fetch video thumbnails (YouTube Takeout imports carry a video id).
 # thumb_base_url = "https://i.ytimg.com/vi"
 
+# [ingest]
+# Token for POST /api/ingest/youtube-plays (the phone apps POST what YouTube
+# plays here). Empty disables ingest. Generate one with `bun run it ingest
+# token`; shorter than 32 characters is a config error. A secret: never commit
+# or log it.
+# token = ""
+
 # [activitywatch]
 # ActivityWatch runs locally on the PC with aw-watcher-web in Chrome/Firefox.
 # url = "http://127.0.0.1:5600"

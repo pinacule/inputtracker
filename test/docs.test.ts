@@ -109,6 +109,7 @@ describe("README.md matches the code", () => {
       "import",
       "backup",
       "notify",
+      "ingest",
       "doctor",
       "verify-copy",
     ]);

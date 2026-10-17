@@ -9,8 +9,10 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import {
+  isIngestEnabled,
   loadConfig,
   redact,
   redactString,
@@ -103,6 +105,8 @@ export function usage(): string {
     "  backup                                   snapshot the DB + JSON export into backup_dir",
     "  notify test                              test every configured notification channel",
     "  notify weekly                            push the weekly summary (needs notify.weekly_summary)",
+    "  ingest token                             print a fresh phone-ingest token",
+    "  ingest status                            show whether ingest is enabled",
     "  doctor                                   check the environment before/after a move",
     "  verify-copy <copy.db>                    check a copied DB has every event of the configured DB",
     "",
@@ -1143,6 +1147,52 @@ async function runNotifyWeekly(ctx: SyncContext): Promise<number> {
 }
 
 /**
+ * `it ingest token` — print a fresh random ingest token (32 random bytes,
+ * base64url, no padding) plus a one-line hint. It never reads the config
+ * and never writes a file: the user pastes the token into the config.
+ */
+export function generateIngestToken(bytes = 32): string {
+  return randomBytes(bytes).toString("base64url");
+}
+
+async function runIngest(args: string[], ctx: SyncContext): Promise<number> {
+  const { deps, out, err } = ctx;
+  const sub = args[0];
+
+  if (sub === "token") {
+    if (args.length > 1) {
+      err(`Unexpected argument: ${args[1]}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+    out(generateIngestToken());
+    out("add it to [ingest] token in your config, then restart the server");
+    return EXIT_OK;
+  }
+
+  if (sub === "status") {
+    if (args.length > 1) {
+      err(`Unexpected argument: ${args[1]}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+    const doLoadConfig = deps.loadConfig ?? loadConfig;
+    let config: Config;
+    try {
+      config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+    } catch (caught) {
+      err(redactMessage(errorText(caught)));
+      return EXIT_FAILURE;
+    }
+    out(`ingest: ${isIngestEnabled(config) ? "enabled" : "disabled"}`);
+    return EXIT_OK;
+  }
+
+  err("Usage: it ingest token|status");
+  return EXIT_USAGE;
+}
+
+/**
  * Run the CLI for the given argument list (without the program name).
  * Returns the process exit code; never calls `process.exit`.
  */
@@ -1198,6 +1248,10 @@ export async function runCli(
     }
     err("Usage: it notify test|weekly");
     return EXIT_USAGE;
+  }
+
+  if (command === "ingest") {
+    return await runIngest(rest, { deps, out, err });
   }
 
   if (command === "doctor") {
