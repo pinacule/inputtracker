@@ -45,7 +45,6 @@ import {
   fetchOpenLibraryCover,
   OPEN_LIBRARY_MAX_BYTES,
   OPEN_LIBRARY_TIMEOUT_MS,
-  searchOpenLibrary,
 } from "./openlibrary.ts";
 import { readYoutubeEnrichmentByVideoId } from "./youtube-filter.ts";
 
@@ -79,6 +78,8 @@ export interface CoverDeps {
   fetch?: typeof fetch;
   /** Wall clock for 7-day .none expiration; defaults to Date.now. */
   now?: () => number;
+  /** When true, ignore cached `.none` negative entries once for this lookup. */
+  retryMissing?: boolean;
 }
 
 export interface CoverResult {
@@ -373,6 +374,670 @@ interface ItunesCoverHit {
   artworkUrl: string;
 }
 
+export type CoverResolvedSource = "abs" | "openlibrary" | "itunes";
+
+interface CoverLookupOutcome {
+  title: string;
+  found: boolean;
+  source: CoverResolvedSource | null;
+  reason: string | null;
+}
+
+const lastCoverOutcomes = new Map<string, CoverLookupOutcome>();
+
+const MOJIBAKE_SENTINEL = "\uE000";
+
+/**
+ * True when `s` contains a corrupted character such as `¿` (U+00BF), `\uFFFD`,
+ * or an intra-word `?` between letters (e.g. `Sh¿gun` or `Sh?gun`).
+ */
+export function hasMojibake(s: string): boolean {
+  return /[¿\uFFFD]|(?<=\p{L})\?(?=\p{L})/u.test(s);
+}
+
+function replaceMojibakeWithSentinel(s: string): string {
+  return s
+    .replace(/[¿\uFFFD]+/gu, MOJIBAKE_SENTINEL)
+    .replace(/(?<=\p{L})\?+(?=\p{L})/gu, MOJIBAKE_SENTINEL);
+}
+
+/**
+ * Obvious non-author values stored in folder-derived or publisher-derived
+ * audiobook metadata (e.g. `GraphicAudio`, `Downloads`).
+ */
+const NON_AUTHOR_NAMES = new Set([
+  "graphicaudio",
+  "graphic audio",
+  "downloads",
+  "download",
+  "incoming",
+  "audiobooks",
+  "audiobook",
+  "books",
+  "book",
+  "podcasts",
+  "podcast",
+  "media",
+  "music",
+  "audio",
+  "documents",
+  "files",
+  "folder",
+  "unknown",
+  "unknown author",
+  "anonymous",
+  "various",
+  "various authors",
+  "na",
+  "n a",
+  "none",
+  "null",
+  "undefined",
+  "audible",
+  "audible studios",
+  "audible originals",
+  "bbc",
+  "bbc audio",
+  "bbc radio",
+  "bbc worldwide",
+  "full cast",
+  "dramatized",
+  "unabridged",
+  "abridged",
+  "tantor",
+  "tantor audio",
+  "tantor media",
+  "podium",
+  "podium audio",
+  "blackstone",
+  "blackstone audio",
+  "blackstone publishing",
+  "recorded books",
+  "brilliance",
+  "brilliance audio",
+  "penguin audio",
+  "random house audio",
+  "macmillan audio",
+  "harperaudio",
+  "hachette audio",
+]);
+
+const ROLE_SEGMENT_RE =
+  /(?:[-–—]\s*(?:translator|narrator|editor|illustrator|adapter|reader|foreword|introduction|afterword|contributor|abridger|performer)s?\b|[\(\[](?:translator|narrator|editor|illustrator|adapter|reader|foreword|introduction|afterword|contributor|abridger|performer|read\s+by|narrated\s+by|translated\s+by)[^)\]]*[\]\)]|^(?:read|narrated|translated|edited|illustrated|adapted|performed|foreword|introduction|afterword)\s+by\b|\b(?:translator|narrator|editor|illustrator|adapter|reader)\s*$)/i;
+
+export function isIgnoredNonAuthor(name: string): boolean {
+  const norm = normalizeForSearch(name)
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!norm) return true;
+  if (NON_AUTHOR_NAMES.has(norm)) return true;
+  if (/^(?:graphicaudio|graphic\s+audio)\b/i.test(norm)) return true;
+  return false;
+}
+
+/**
+ * Split an author string on `,`, `&`, `;`, `/`, ` and `, drop role segments
+ * (`- translator`, `(narrator)`, `read by ...`) and obvious non-authors
+ * (`GraphicAudio`, `Downloads`), and drop known narrators when other authors
+ * are listed.
+ */
+export function parseBookAuthors(
+  rawAuthor: string | null | undefined,
+  knownNarrators?: readonly string[]
+): string[] {
+  if (typeof rawAuthor !== "string" || !rawAuthor.trim()) {
+    return [];
+  }
+  const trimmed = rawAuthor.trim();
+
+  // Detect single "Surname, Given" when there is 1 comma, no & / and / role, and the first part is 1 word
+  const commaParts = trimmed.split(",");
+  if (
+    commaParts.length === 2 &&
+    !/&|;|\band\b/i.test(trimmed) &&
+    !ROLE_SEGMENT_RE.test(trimmed)
+  ) {
+    const p0 = commaParts[0]!.trim();
+    const p1 = commaParts[1]!.trim();
+    const p0Words = p0.split(/\s+/).filter(Boolean);
+    const p1Words = p1.split(/\s+/).filter(Boolean);
+    if (
+      p0Words.length === 1 &&
+      !p0.includes(".") &&
+      p1Words.length >= 1 &&
+      p1Words.length <= 2 &&
+      !isIgnoredNonAuthor(p0) &&
+      !isIgnoredNonAuthor(p1)
+    ) {
+      return [`${p1} ${p0}`.trim()];
+    }
+  }
+
+  const rawParts = trimmed.split(/\s*(?:,|;|&|\/|\band\b)\s*/i);
+  const cleaned: string[] = [];
+
+  for (const part of rawParts) {
+    const s = part.trim();
+    if (!s) continue;
+    if (ROLE_SEGMENT_RE.test(s)) continue;
+    const strippedParens = s.replace(/\s*[\(\[][^)\]]*[\]\)]\s*/g, " ").trim();
+    if (!strippedParens || isIgnoredNonAuthor(strippedParens)) continue;
+    cleaned.push(strippedParens);
+  }
+
+  if (knownNarrators && knownNarrators.length > 0 && cleaned.length > 1) {
+    const narratorNorms = new Set(
+      knownNarrators
+        .map((n) =>
+          normalizeForSearch(n)
+            .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+        )
+        .filter(Boolean)
+    );
+    const withoutNarrators = cleaned.filter((c) => {
+      const nc = normalizeForSearch(c)
+        .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return !narratorNorms.has(nc);
+    });
+    if (withoutNarrators.length > 0) {
+      return withoutNarrators;
+    }
+  }
+
+  return cleaned;
+}
+
+function editDistanceAtMostOne(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < la && j < lb) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+    } else {
+      edits++;
+      if (edits > 1) return false;
+      if (la > lb) {
+        i++;
+      } else if (lb > la) {
+        j++;
+      } else {
+        i++;
+        j++;
+      }
+    }
+  }
+  if (i < la || j < lb) edits++;
+  return edits <= 1;
+}
+
+function personTokens(name: string): {
+  words: string[];
+  collapsedWords: string[];
+  surname: string;
+  collapsedSurname: string;
+  firstGiven: string | null;
+} {
+  const trimmed = name.trim();
+  // Handle "Surname, Given" inside candidate lists (e.g. Open Library ["Novak, Ana"])
+  if (
+    trimmed.includes(",") &&
+    !trimmed.includes("&") &&
+    !/\band\b/i.test(trimmed)
+  ) {
+    const parts = trimmed.split(",");
+    if (parts.length === 2) {
+      const surRaw = parts[0]!.trim();
+      const givRaw = parts[1]!.trim();
+      const surWords = artistWords(surRaw);
+      const surCollapsed = artistWords(surRaw.replace(/['’ʻ]/gu, ""));
+      const givWords = artistWords(givRaw);
+      if (surWords.length > 0 && givWords.length > 0) {
+        return {
+          words: [...givWords, ...surWords],
+          collapsedWords: [...givWords, ...surCollapsed],
+          surname: surWords[surWords.length - 1]!,
+          collapsedSurname:
+            surCollapsed[surCollapsed.length - 1] ?? surWords[surWords.length - 1]!,
+          firstGiven: givWords[0] ?? null,
+        };
+      }
+    }
+  }
+
+  const words = artistWords(trimmed);
+  const collapsedWords = artistWords(trimmed.replace(/['’ʻ]/gu, ""));
+  const surname = words[words.length - 1] ?? "";
+  const collapsedSurname =
+    collapsedWords[collapsedWords.length - 1] ?? surname;
+  const firstGiven = words.length > 1 ? (words[0] ?? null) : null;
+  return { words, collapsedWords, surname, collapsedSurname, firstGiven };
+}
+
+function singlePersonAuthorMatches(targetName: string, candName: string): boolean {
+  const t = personTokens(targetName);
+  const c = personTokens(candName);
+  if (!t.surname || !c.surname) return false;
+
+  const surnameMatched =
+    t.surname === c.surname ||
+    t.collapsedSurname === c.collapsedSurname ||
+    c.words.includes(t.surname) ||
+    c.collapsedWords.includes(t.collapsedSurname) ||
+    t.words.includes(c.surname) ||
+    t.collapsedWords.includes(c.collapsedSurname);
+  if (!surnameMatched) return false;
+
+  if (t.firstGiven && c.firstGiven) {
+    if (t.firstGiven[0] !== c.firstGiven[0]) {
+      return false;
+    }
+    if (t.firstGiven.length >= 3 && c.firstGiven.length >= 3) {
+      if (
+        t.firstGiven !== c.firstGiven &&
+        !t.firstGiven.startsWith(c.firstGiven) &&
+        !c.firstGiven.startsWith(t.firstGiven) &&
+        !editDistanceAtMostOne(t.firstGiven, c.firstGiven)
+      ) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * True when ANY parsed target author matches ANY candidate author string.
+ */
+export function bookAuthorsMatch(
+  targetAuthors: readonly string[],
+  candidateAuthorsRaw: readonly string[]
+): boolean {
+  if (targetAuthors.length === 0 || candidateAuthorsRaw.length === 0) {
+    return false;
+  }
+
+  const expandedCandidates: string[] = [];
+  for (const raw of candidateAuthorsRaw) {
+    if (typeof raw !== "string" || !raw.trim()) continue;
+    expandedCandidates.push(raw.trim());
+    const parsed = parseBookAuthors(raw);
+    for (const p of parsed) {
+      if (!expandedCandidates.includes(p)) {
+        expandedCandidates.push(p);
+      }
+    }
+  }
+
+  for (const t of targetAuthors) {
+    for (const c of expandedCandidates) {
+      if (singlePersonAuthorMatches(t, c) || authorMatches(t, [c])) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+const SUMMARY_AUTHOR_RE =
+  /\b(?:bright\s*summaries|swift\s*reads|abbey\s*beathan|everest\s*media|instaread|blinkist|worth\s*books|50minutes|super\s*summary|spark\s*notes|cliff\s*notes|cliffs\s*notes|bookcaps|litcharts|bookhabits|zip\s*reads|smart\s*reads|in\s*30\s*minutes)\b/i;
+
+const SUMMARY_TITLE_RE =
+  /(?:^\s*summary\s+of\b|\bsummary\s+of\s+.|\bbook\s+analysis\b|\bbook\s+summary\b|\bstudy\s+guide\b|\breading\s+guide\b|\bspark\s*notes\b|\bcliff\s*notes\b|\bcliffs\s*notes\b|\bsuper\s*summary\b|\blitcharts\b|\bkey\s+takeaways\b|\banalysis\s+of\b|\bworkbook\s+for\b|\bcompanion\s+to\b|^\s*concise\s+)/i;
+
+/**
+ * Reject third-party summaries, study guides, and book analyses ("Summary of …",
+ * "Book Analysis", "by Bright Summaries") unless the target title itself asks for one.
+ */
+export function isSummaryOrAnalysis(
+  candidateTitle: string,
+  candidateAuthors: readonly string[],
+  queryTitle?: string
+): boolean {
+  const qNorm = normalizeForSearch(queryTitle ?? "");
+  for (const a of candidateAuthors) {
+    if (typeof a === "string" && SUMMARY_AUTHOR_RE.test(a)) {
+      return true;
+    }
+  }
+  if (!SUMMARY_TITLE_RE.test(candidateTitle)) {
+    // Also reject titles containing " by <Author>" when the query does not contain " by "
+    if (
+      /\bby\s+[A-Z][\p{L}.'-]+\s+[A-Z][\p{L}.'-]+/u.test(candidateTitle) &&
+      !/\bby\b/i.test(qNorm)
+    ) {
+      return true;
+    }
+    return false;
+  }
+  if (
+    qNorm.includes("summary") ||
+    qNorm.includes("analysis") ||
+    qNorm.includes("study guide")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function normalizeBookTitleWithSentinel(s: string): string {
+  const withSentinel = replaceMojibakeWithSentinel(s);
+  return normalizeForSearch(withSentinel)
+    .replace(/['’ʻ]/gu, "")
+    .replace(new RegExp(`[^\\p{L}\\p{N}\\s${MOJIBAKE_SENTINEL}]+`, "gu"), " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stripLeadingArticle(normTitle: string): string {
+  const stripped = normTitle.replace(/^(?:the|a|an)\s+/i, "").trim();
+  const words = stripped.split(" ").filter(Boolean);
+  if (words.length >= 2 || stripped.length >= 6) {
+    return stripped;
+  }
+  return normTitle;
+}
+
+function stripCompleteTrilogyNoise(normTitle: string): string {
+  return normTitle
+    .replace(/^(the\s+)?complete\s+(.+)$/i, "$1$2")
+    .replace(/\s+(?:trilogy|omnibus|boxed\s+set|box\s+set|collection)$/i, "")
+    .trim();
+}
+
+/**
+ * Clean a store-returned book/audiobook title, stripping edition/part/series suffixes.
+ */
+function cleanStoreBookTitleVariants(rawStoreTitle: string): {
+  fullForms: string[];
+  preColonForms: string[];
+  postColonForms: string[];
+} {
+  let s = rawStoreTitle.trim();
+  // Strip repeated trailing (...) or [...] tags for edition / part / format
+  let prev = "";
+  while (s !== prev) {
+    prev = s;
+    s = s
+      .replace(
+        /\s*[\(\[](?:unabridged|abridged|\d+\s*(?:of|\/)\s*\d+[^)\]]*|part\s+(?:\d+|one|two|three|four|five|i|ii|iii|iv)[^)\]]*|book\s+(?:\d+|one|two|three|four|five|i|ii|iii|iv)[^)\]]*|vol(?:ume|\.)?\s*\d+(?:\.\d+)?[^)\]]*|dramatized[^)\]]*|booktrack\s*edition[^)\]]*|light\s*novel[^)\]]*|the\s+young\s+adult\s+adaptation[^)\]]*)[\]\)]\s*$/i,
+        ""
+      )
+      .trim();
+  }
+
+  // Strip trailing ", Part One", " Vol. 1", " - Booktrack Edition", " – Osa 1", etc.
+  const stripTrailingPartAndEdition = (val: string): string => {
+    let v = val.trim();
+    let p = "";
+    while (v !== p) {
+      p = v;
+      v = v
+        .replace(
+          /\s*[\(\[](?:light\s*novel|booktrack\s*edition|dramatized\s*adaptation|unabridged|abridged)[\]\)]\s*/gi,
+          " "
+        )
+        .replace(
+          /(?:[,:\s]+|\s+[-–—]\s+)(?:part\s+(?:\d+|one|two|three|four|five|i|ii|iii|iv)|vol(?:ume|\.)?\s*\d+(?:\.\d+)?|book\s+(?:\d+|one|two|three|four|five|i|ii|iii|iv)|tome\s+\d+.*|osa\s+\d+.*|booktrack\s+edition.*)$/i,
+          ""
+        )
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+    return v;
+  };
+
+  const baseClean = stripTrailingPartAndEdition(cleanTitle(s));
+  // Also variant without a trailing parenthetical series tag like "(Earthsea Cycle)" or "(The Asian Saga)"
+  const withoutTrailingParens = stripTrailingPartAndEdition(
+    s.replace(/\s*\([^()]+\)\s*$/, "").trim()
+  );
+
+  const fullFormsSet = new Set<string>();
+  for (const cand of [s, baseClean, withoutTrailingParens]) {
+    if (cand.length > 0) {
+      fullFormsSet.add(cand);
+    }
+  }
+
+  const preColonFormsSet = new Set<string>();
+  const postColonFormsSet = new Set<string>();
+  for (const f of fullFormsSet) {
+    const colonIdx = f.indexOf(":");
+    if (colonIdx > 0) {
+      const before = stripTrailingPartAndEdition(cleanTitle(f.slice(0, colonIdx)));
+      if (before.length >= 3) {
+        preColonFormsSet.add(before);
+      }
+      const after = stripTrailingPartAndEdition(cleanTitle(f.slice(colonIdx + 1)));
+      if (after.length >= 3) {
+        postColonFormsSet.add(after);
+      }
+    }
+  }
+
+  return {
+    fullForms: [...fullFormsSet],
+    preColonForms: [...preColonFormsSet],
+    postColonForms: [...postColonFormsSet],
+  };
+}
+
+function normFormsMatch(queryNorm: string, candNorm: string): boolean {
+  if (!queryNorm || !candNorm) return false;
+  if (queryNorm.includes(MOJIBAKE_SENTINEL)) {
+    const buildMojibakeRegex = (patternNorm: string): RegExp => {
+      const escaped = patternNorm
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        .replace(new RegExp(`${MOJIBAKE_SENTINEL}+`, "g"), "[a-z0-9]{1,2}");
+      return new RegExp(`^${escaped}$`, "i");
+    };
+    const candPlain = candNorm.replaceAll(MOJIBAKE_SENTINEL, "");
+    if (buildMojibakeRegex(queryNorm).test(candPlain)) return true;
+    const qNoArt = stripLeadingArticle(queryNorm);
+    const cNoArt = stripLeadingArticle(candPlain);
+    return buildMojibakeRegex(qNoArt).test(cNoArt);
+  }
+
+  if (queryNorm === candNorm) return true;
+  const qNoArt = stripLeadingArticle(queryNorm);
+  const cNoArt = stripLeadingArticle(candNorm);
+  if (qNoArt === cNoArt) return true;
+
+  const qNoTrilogy = stripCompleteTrilogyNoise(qNoArt);
+  const cNoTrilogy = stripCompleteTrilogyNoise(cNoArt);
+  if (qNoTrilogy.length >= 5 && qNoTrilogy === cNoTrilogy) return true;
+
+  return false;
+}
+
+export function bookTitleMatches(
+  queryTitle: string,
+  candidateTitle: string,
+  opts: { hasAuthor: boolean; allowSubtitleMatch?: boolean }
+): boolean {
+  const qVariants = cleanStoreBookTitleVariants(queryTitle);
+  const cVariants = cleanStoreBookTitleVariants(candidateTitle);
+
+  const qFullNorms = qVariants.fullForms
+    .map(normalizeBookTitleWithSentinel)
+    .filter(Boolean);
+  const cFullNorms = cVariants.fullForms
+    .map(normalizeBookTitleWithSentinel)
+    .filter(Boolean);
+
+  for (const qn of qFullNorms) {
+    for (const cn of cFullNorms) {
+      if (normFormsMatch(qn, cn)) return true;
+    }
+  }
+
+  if (opts.hasAuthor) {
+    const qPreNorms = qVariants.preColonForms
+      .map(normalizeBookTitleWithSentinel)
+      .filter((s) => s.length >= 4 || s.includes(MOJIBAKE_SENTINEL));
+    const cPreNorms = cVariants.preColonForms
+      .map(normalizeBookTitleWithSentinel)
+      .filter((s) => s.length >= 4 || s.includes(MOJIBAKE_SENTINEL));
+
+    for (const qn of [...qFullNorms, ...qPreNorms]) {
+      for (const cn of [...cFullNorms, ...cPreNorms]) {
+        if (normFormsMatch(qn, cn)) return true;
+      }
+    }
+
+    if (opts.allowSubtitleMatch) {
+      const cPostNorms = cVariants.postColonForms
+        .map(normalizeBookTitleWithSentinel)
+        .filter(Boolean);
+      for (const qn of qFullNorms) {
+        for (const cn of cPostNorms) {
+          if (normFormsMatch(qn, cn)) return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * True when a title has enough distinctive structure to be searched without a
+ * known author. Single-word titles (`me`, `shadow`, `Communication`, `Focus`)
+ * are rejected so they never get a random cover.
+ */
+export function isDistinctiveTitleWithoutAuthor(title: string): boolean {
+  const cleaned = cleanTitle(title);
+  const norm = normalizeBookTitleWithSentinel(cleaned).replaceAll(
+    MOJIBAKE_SENTINEL,
+    ""
+  );
+  if (!norm || norm.length < 6) return false;
+  const withoutArticle = norm.replace(/^(?:the|a|an)\s+/i, "").trim();
+  const words = withoutArticle.split(" ").filter((w) => w.length > 0);
+  if (words.length < 2) return false;
+  return words.some((w) => w.length >= 3);
+}
+
+export interface BookTitleCandidate {
+  title: string;
+  requiredEmbeddedAuthor?: string;
+  allowSubtitleMatch?: boolean;
+}
+
+const EDITION_DASH_SUFFIX_RE =
+  /\s+[-–—]\s+(?:bbc\b.*|.*?\bradio\s+drama\b.*|.*?\baudio\s+drama\b.*|booktrack\s+edition\b.*|dramatized\b.*|unabridged\b.*|abridged\b.*|full\s+cast\b.*)$/i;
+
+function looksLikeAuthorPrefix(prefix: string): boolean {
+  const s = prefix.trim();
+  if (!s || s.length < 3 || s.length > 60) return false;
+  if (/\d/.test(s)) return false;
+  if (/^(?:the|a|an)\s+/i.test(s)) return false;
+  if (isIgnoredNonAuthor(s)) return false;
+  const words = s.split(/\s+/).filter(Boolean);
+  return words.length >= 1 && words.length <= 4;
+}
+
+/**
+ * Build ordered title search candidates from a stored title, parsed authors,
+ * and optional series name.
+ */
+export function buildBookTitleCandidates(
+  rawTitle: string,
+  parsedAuthors: readonly string[],
+  seriesName?: string
+): BookTitleCandidate[] {
+  const candidates: BookTitleCandidate[] = [];
+  const seen = new Set<string>();
+
+  const add = (cand: BookTitleCandidate) => {
+    const t = cand.title.trim();
+    if (!t) return;
+    const key = `${normalizeForSearch(t)}\0${normalizeForSearch(cand.requiredEmbeddedAuthor ?? "")}\0${cand.allowSubtitleMatch ? "1" : "0"}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push({ ...cand, title: t });
+  };
+
+  const trimmed = rawTitle.trim();
+  if (!trimmed) return [];
+
+  // Check for "Author - Title" prefix (e.g. "Laura Hillenbrand - Unbroken")
+  const withoutEditionDash = trimmed.replace(EDITION_DASH_SUFFIX_RE, "").trim();
+  const dashMatch = /^(.+?)\s+[-–—]\s+(.+)$/.exec(withoutEditionDash);
+  if (dashMatch && dashMatch[1] && dashMatch[2]) {
+    const left = dashMatch[1].trim();
+    const right = cleanTitle(dashMatch[2].trim(), seriesName);
+    if (right.length >= 3 && looksLikeAuthorPrefix(left)) {
+      if (parsedAuthors.length === 0) {
+        add({ title: right, requiredEmbeddedAuthor: left });
+      } else if (bookAuthorsMatch(parsedAuthors, [left])) {
+        add({ title: right });
+      }
+    }
+  }
+
+  const cleaned = cleanTitle(trimmed, seriesName);
+  if (cleaned) {
+    add({ title: cleaned });
+  }
+
+  // Strip subtitle after ":" (e.g. "Iron Prince: Warformed: Stormweaver, Book 1" -> "Iron Prince")
+  for (const base of [cleaned, trimmed]) {
+    const colonIdx = base.indexOf(":");
+    if (colonIdx >= 3) {
+      const beforeColon = cleanTitle(base.slice(0, colonIdx), seriesName);
+      if (beforeColon.length >= 3) {
+        add({ title: beforeColon });
+      }
+    }
+  }
+
+  // Strip trailing "Trilogy", "Omnibus", "Box Set", "Collection" (e.g. "The Poppy War Trilogy" -> "The Poppy War")
+  for (const existing of [...candidates]) {
+    const strippedSeriesSuffix = existing.title
+      .replace(/\s+(?:trilogy|omnibus|boxed\s+set|box\s+set|collection)$/i, "")
+      .trim();
+    if (
+      strippedSeriesSuffix.length >= 3 &&
+      strippedSeriesSuffix !== existing.title
+    ) {
+      add({
+        title: strippedSeriesSuffix,
+        requiredEmbeddedAuthor: existing.requiredEmbeddedAuthor,
+      });
+    }
+  }
+
+  // Expand light-novel shorthand "Y2" -> "Year 2" when an author is known
+  if (parsedAuthors.length > 0) {
+    const yMatch = /^Y(\d+)(?:\s*V(?:ol\.?)?\s*(\d+(?:\.\d+)?))?$/i.exec(cleaned);
+    if (yMatch && yMatch[1]) {
+      add({ title: `Year ${yMatch[1]}`, allowSubtitleMatch: true });
+    }
+    if (seriesName && seriesName.trim().length >= 3) {
+      add({ title: cleanTitle(seriesName.trim()) });
+    }
+  }
+
+  if (trimmed !== cleaned) {
+    add({ title: trimmed });
+  }
+
+  return candidates;
+}
+
 async function fetchExternalImage(
   url: string,
   fetchFn: typeof fetch
@@ -418,18 +1083,201 @@ async function fetchExternalImage(
   });
 }
 
-async function searchItunesAudiobook(
-  title: string,
-  author: string,
+interface StoreSearchOutcome<T> {
+  hit: T | null;
+  sawSummary: boolean;
+  sawAuthorMismatch: boolean;
+}
+
+async function queryOpenLibraryDocs(
+  queryTitle: string | null,
+  queryAuthor: string | null,
+  limit: number,
+  baseUrl: string,
+  fetchFn: typeof fetch
+): Promise<any[]> {
+  const url = new URL(`${baseUrl.replace(/\/+$/, "")}/search.json`);
+  if (queryTitle && queryTitle.trim()) {
+    url.searchParams.set("title", queryTitle.trim());
+  }
+  if (queryAuthor && queryAuthor.trim()) {
+    url.searchParams.set("author", queryAuthor.trim());
+  }
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("fields", "key,title,author_name,cover_i");
+
+  return defaultOpenLibraryLimiter.run(async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort(new DOMException("Open Library request timed out", "TimeoutError"));
+    }, OPEN_LIBRARY_TIMEOUT_MS);
+    try {
+      const response = await fetchFn(url.toString(), {
+        method: "GET",
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        if (response.status >= 500) {
+          throw new Error(`Open Library server error: HTTP ${response.status}`);
+        }
+        return [];
+      }
+      let data: any;
+      try {
+        data = await response.json();
+      } catch (err) {
+        throw new Error(`Failed to parse Open Library JSON: ${err}`);
+      }
+      return Array.isArray(data?.docs) ? data.docs : [];
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+}
+
+function matchOpenLibraryDocs(
+  docs: any[],
+  cand: BookTitleCandidate,
+  effectiveAuthors: readonly string[]
+): StoreSearchOutcome<number> {
+  let sawSummary = false;
+  let sawAuthorMismatch = false;
+  const hasAuthor = effectiveAuthors.length > 0;
+
+  interface ValidOlDoc {
+    coverId: number;
+    title: string;
+    authors: string[];
+  }
+  const validDocs: ValidOlDoc[] = [];
+
+  for (const doc of docs) {
+    if (typeof doc?.cover_i !== "number" || doc.cover_i <= 0) continue;
+    if (typeof doc?.title !== "string" || !doc.title.trim()) continue;
+    const docAuthors = Array.isArray(doc.author_name)
+      ? doc.author_name.filter((a: unknown): a is string => typeof a === "string")
+      : [];
+    if (isSummaryOrAnalysis(doc.title, docAuthors, cand.title)) {
+      sawSummary = true;
+      continue;
+    }
+    validDocs.push({
+      coverId: doc.cover_i,
+      title: doc.title.trim(),
+      authors: docAuthors,
+    });
+  }
+
+  if (hasAuthor) {
+    for (const doc of validDocs) {
+      if (
+        bookTitleMatches(cand.title, doc.title, {
+          hasAuthor: true,
+          allowSubtitleMatch: cand.allowSubtitleMatch,
+        })
+      ) {
+        if (bookAuthorsMatch(effectiveAuthors, doc.authors)) {
+          return { hit: doc.coverId, sawSummary, sawAuthorMismatch };
+        }
+        sawAuthorMismatch = true;
+      }
+    }
+    return { hit: null, sawSummary, sawAuthorMismatch };
+  }
+
+  // Authorless match: require a strong title match and either the top result
+  // matches or there is a single clear result (all matches share an author).
+  const matching = validDocs.filter((doc) =>
+    bookTitleMatches(cand.title, doc.title, { hasAuthor: false })
+  );
+  if (matching.length === 0) {
+    return { hit: null, sawSummary, sawAuthorMismatch };
+  }
+  if (validDocs[0] && matching.includes(validDocs[0])) {
+    return { hit: validDocs[0].coverId, sawSummary, sawAuthorMismatch };
+  }
+  if (matching.length === 1) {
+    return { hit: matching[0]!.coverId, sawSummary, sawAuthorMismatch };
+  }
+  const firstAuthors = matching[0]!.authors;
+  if (
+    firstAuthors.length > 0 &&
+    matching.every((m) => bookAuthorsMatch(firstAuthors, m.authors))
+  ) {
+    return { hit: matching[0]!.coverId, sawSummary, sawAuthorMismatch };
+  }
+  return { hit: null, sawSummary, sawAuthorMismatch };
+}
+
+async function searchOpenLibraryCandidate(
+  cand: BookTitleCandidate,
+  effectiveAuthors: readonly string[],
+  baseUrl: string,
+  fetchFn: typeof fetch
+): Promise<StoreSearchOutcome<number>> {
+  const primaryAuthor = effectiveAuthors[0] ?? null;
+  const docs1 = await queryOpenLibraryDocs(
+    cand.title,
+    primaryAuthor,
+    5,
+    baseUrl,
+    fetchFn
+  );
+  const res1 = matchOpenLibraryDocs(docs1, cand, effectiveAuthors);
+  if (res1.hit !== null) return res1;
+
+  let sawSummary = res1.sawSummary;
+  let sawAuthorMismatch = res1.sawAuthorMismatch;
+
+  // If title has mojibake (e.g. "Sh¿gun") and an author is known, Open Library's
+  // title= index cannot match the corrupted token: search by author and match locally.
+  if (hasMojibake(cand.title) && primaryAuthor) {
+    const cleanWords = cand.title
+      .split(/\s+/)
+      .filter((w) => w.length >= 2 && !hasMojibake(w))
+      .join(" ");
+    const docs2 = await queryOpenLibraryDocs(
+      cleanWords || null,
+      primaryAuthor,
+      15,
+      baseUrl,
+      fetchFn
+    );
+    const res2 = matchOpenLibraryDocs(docs2, cand, effectiveAuthors);
+    sawSummary = sawSummary || res2.sawSummary;
+    sawAuthorMismatch = sawAuthorMismatch || res2.sawAuthorMismatch;
+    if (res2.hit !== null) {
+      return { hit: res2.hit, sawSummary, sawAuthorMismatch };
+    }
+  }
+
+  // If multiple people were listed and the first person was a narrator (not on Open Library),
+  // search by title and verify any listed person locally.
+  if (docs1.length === 0 && effectiveAuthors.length > 1) {
+    const docs3 = await queryOpenLibraryDocs(cand.title, null, 10, baseUrl, fetchFn);
+    const res3 = matchOpenLibraryDocs(docs3, cand, effectiveAuthors);
+    sawSummary = sawSummary || res3.sawSummary;
+    sawAuthorMismatch = sawAuthorMismatch || res3.sawAuthorMismatch;
+    if (res3.hit !== null) {
+      return { hit: res3.hit, sawSummary, sawAuthorMismatch };
+    }
+  }
+
+  return { hit: null, sawSummary, sawAuthorMismatch };
+}
+
+async function queryItunesAudiobookItems(
+  term: string,
+  limit: number,
   config: Config,
   fetchFn: typeof fetch
-): Promise<ItunesCoverHit | null> {
+): Promise<any[]> {
   const itunesBase = resolveMetadataConfig(config).itunes_url;
   const url = new URL(`${itunesBase}/search`);
   url.searchParams.set("media", "audiobook");
   url.searchParams.set("entity", "audiobook");
-  url.searchParams.set("term", author ? `${title} ${author}` : title);
-  url.searchParams.set("limit", "10");
+  url.searchParams.set("term", term);
+  url.searchParams.set("limit", String(limit));
 
   return defaultOpenLibraryLimiter.run(async () => {
     const controller = new AbortController();
@@ -445,57 +1293,163 @@ async function searchItunesAudiobook(
         if (response.status >= 500) {
           throw new Error(`iTunes server error: HTTP ${response.status}`);
         }
-        return null;
+        return [];
       }
       let data: any;
       try {
         data = await response.json();
       } catch {
-        return null;
+        return [];
       }
-      const results = Array.isArray(data?.results) ? data.results : [];
-      const normQuery = normalizeTrackForMatch(cleanTitle(title));
-      const queryColonIdx = title.indexOf(":");
-      const normStripped =
-        queryColonIdx >= 4 ? normalizeTrackForMatch(title.slice(0, queryColonIdx)) : "";
-
-      for (const item of results) {
-        if (!item || typeof item !== "object") continue;
-        const rawId = item.collectionId ?? item.trackId;
-        if (typeof rawId !== "number" || rawId <= 0) continue;
-
-        const itemTitleRaw = String(item.collectionName ?? item.trackName ?? "").trim();
-        const itemAuthorRaw = String(item.artistName ?? "").trim();
-        if (!itemTitleRaw || !itemAuthorRaw) continue;
-
-        const cleanedItemTitle = cleanTitle(itemTitleRaw);
-        const normItem = normalizeTrackForMatch(cleanedItemTitle);
-        const itemColonIdx = cleanedItemTitle.indexOf(":");
-        const normItemStripped =
-          itemColonIdx >= 4
-            ? normalizeTrackForMatch(cleanedItemTitle.slice(0, itemColonIdx))
-            : "";
-
-        const titleMatch =
-          normItem === normQuery ||
-          (normStripped.length >= 4 && normItem === normStripped) ||
-          (normItemStripped.length >= 4 && normItemStripped === normQuery);
-        if (!titleMatch) continue;
-
-        if (!authorMatches(author, [itemAuthorRaw]) && !artistMatches(author, itemAuthorRaw)) {
-          continue;
-        }
-
-        const artworkUrl = upscaleItunesArtwork(item.artworkUrl100 ?? item.artworkUrl60);
-        if (artworkUrl) {
-          return { id: String(rawId), artworkUrl };
-        }
-      }
-      return null;
+      return Array.isArray(data?.results) ? data.results : [];
     } finally {
       clearTimeout(timer);
     }
   });
+}
+
+function matchItunesAudiobookResults(
+  results: any[],
+  cand: BookTitleCandidate,
+  effectiveAuthors: readonly string[]
+): StoreSearchOutcome<ItunesCoverHit> {
+  let sawSummary = false;
+  let sawAuthorMismatch = false;
+  const hasAuthor = effectiveAuthors.length > 0;
+
+  interface ValidItunesItem {
+    id: string;
+    title: string;
+    author: string;
+    artworkUrl: string;
+  }
+  const validItems: ValidItunesItem[] = [];
+
+  for (const item of results) {
+    if (!item || typeof item !== "object") continue;
+    const rawId = item.collectionId ?? item.trackId;
+    if (typeof rawId !== "number" || rawId <= 0) continue;
+
+    const itemTitleRaw = String(item.collectionName ?? item.trackName ?? "").trim();
+    const itemAuthorRaw = String(item.artistName ?? "").trim();
+    if (!itemTitleRaw || !itemAuthorRaw) continue;
+
+    if (isSummaryOrAnalysis(itemTitleRaw, [itemAuthorRaw], cand.title)) {
+      sawSummary = true;
+      continue;
+    }
+
+    const artworkUrl = upscaleItunesArtwork(item.artworkUrl100 ?? item.artworkUrl60);
+    if (!artworkUrl) continue;
+
+    validItems.push({
+      id: String(rawId),
+      title: itemTitleRaw,
+      author: itemAuthorRaw,
+      artworkUrl,
+    });
+  }
+
+  if (hasAuthor) {
+    for (const item of validItems) {
+      if (
+        bookTitleMatches(cand.title, item.title, {
+          hasAuthor: true,
+          allowSubtitleMatch: cand.allowSubtitleMatch,
+        })
+      ) {
+        if (
+          bookAuthorsMatch(effectiveAuthors, [item.author]) ||
+          effectiveAuthors.some((a) => artistMatches(a, item.author))
+        ) {
+          return {
+            hit: { id: item.id, artworkUrl: item.artworkUrl },
+            sawSummary,
+            sawAuthorMismatch,
+          };
+        }
+        sawAuthorMismatch = true;
+      }
+    }
+    return { hit: null, sawSummary, sawAuthorMismatch };
+  }
+
+  // Authorless match: require a strong title match and either the top non-summary
+  // result matches or there is a single clear result.
+  const matching = validItems.filter((item) =>
+    bookTitleMatches(cand.title, item.title, { hasAuthor: false })
+  );
+  if (matching.length === 0) {
+    return { hit: null, sawSummary, sawAuthorMismatch };
+  }
+  if (validItems[0] && matching.includes(validItems[0])) {
+    return {
+      hit: { id: validItems[0].id, artworkUrl: validItems[0].artworkUrl },
+      sawSummary,
+      sawAuthorMismatch,
+    };
+  }
+  if (matching.length === 1) {
+    return {
+      hit: { id: matching[0]!.id, artworkUrl: matching[0]!.artworkUrl },
+      sawSummary,
+      sawAuthorMismatch,
+    };
+  }
+  const firstAuthor = matching[0]!.author;
+  if (matching.every((m) => bookAuthorsMatch([firstAuthor], [m.author]))) {
+    return {
+      hit: { id: matching[0]!.id, artworkUrl: matching[0]!.artworkUrl },
+      sawSummary,
+      sawAuthorMismatch,
+    };
+  }
+  return { hit: null, sawSummary, sawAuthorMismatch };
+}
+
+async function searchItunesAudiobookCandidate(
+  cand: BookTitleCandidate,
+  effectiveAuthors: readonly string[],
+  config: Config,
+  fetchFn: typeof fetch
+): Promise<StoreSearchOutcome<ItunesCoverHit>> {
+  const primaryAuthor = effectiveAuthors[0] ?? "";
+  const term1 = primaryAuthor ? `${cand.title} ${primaryAuthor}` : cand.title;
+  const results1 = await queryItunesAudiobookItems(term1, 10, config, fetchFn);
+  const res1 = matchItunesAudiobookResults(results1, cand, effectiveAuthors);
+  if (res1.hit !== null) return res1;
+
+  let sawSummary = res1.sawSummary;
+  let sawAuthorMismatch = res1.sawAuthorMismatch;
+
+  if (hasMojibake(cand.title) && primaryAuthor) {
+    const cleanWords = cand.title
+      .split(/\s+/)
+      .filter((w) => w.length >= 2 && !hasMojibake(w))
+      .join(" ");
+    const term2 = cleanWords ? `${cleanWords} ${primaryAuthor}` : primaryAuthor;
+    if (term2 !== term1) {
+      const results2 = await queryItunesAudiobookItems(term2, 20, config, fetchFn);
+      const res2 = matchItunesAudiobookResults(results2, cand, effectiveAuthors);
+      sawSummary = sawSummary || res2.sawSummary;
+      sawAuthorMismatch = sawAuthorMismatch || res2.sawAuthorMismatch;
+      if (res2.hit !== null) {
+        return { hit: res2.hit, sawSummary, sawAuthorMismatch };
+      }
+    }
+  }
+
+  if ( results1.length === 0 && effectiveAuthors.length > 1) {
+    const results3 = await queryItunesAudiobookItems(cand.title, 10, config, fetchFn);
+    const res3 = matchItunesAudiobookResults(results3, cand, effectiveAuthors);
+    sawSummary = sawSummary || res3.sawSummary;
+    sawAuthorMismatch = sawAuthorMismatch || res3.sawAuthorMismatch;
+    if (res3.hit !== null) {
+      return { hit: res3.hit, sawSummary, sawAuthorMismatch };
+    }
+  }
+
+  return { hit: null, sawSummary, sawAuthorMismatch };
 }
 
 async function searchItunesSong(
@@ -503,11 +1457,22 @@ async function searchItunesSong(
   rawArtist: string | null | undefined,
   config: Config,
   fetchFn: typeof fetch
-): Promise<ItunesCoverHit | null> {
+): Promise<{ hit: ItunesCoverHit | null; reason: string }> {
   const { cleanTrack, embeddedArtist } = cleanMusicTitle(rawTitle);
   const effectiveArtist = cleanMusicArtist(rawArtist) || cleanMusicArtist(embeddedArtist);
   const trackToSearch = cleanTrack || rawTitle.trim();
-  if (!trackToSearch) return null;
+  if (!trackToSearch) return { hit: null, reason: "no title" };
+
+  const normTargetTrack = normalizeTrackForMatch(trackToSearch);
+  const normFullTitle = normalizeTrackForMatch(rawTitle);
+  if (!normTargetTrack) return { hit: null, reason: "no title" };
+
+  if (!effectiveArtist) {
+    const words = normTargetTrack.split(" ").filter(Boolean);
+    if (words.length < 2 && normTargetTrack.length < 8) {
+      return { hit: null, reason: "title too generic without author" };
+    }
+  }
 
   const itunesBase = resolveMetadataConfig(config).itunes_url;
   const url = new URL(`${itunesBase}/search`);
@@ -533,18 +1498,16 @@ async function searchItunesSong(
         if (response.status >= 500) {
           throw new Error(`iTunes server error: HTTP ${response.status}`);
         }
-        return null;
+        return { hit: null, reason: "no match in itunes" };
       }
       let data: any;
       try {
         data = await response.json();
       } catch {
-        return null;
+        return { hit: null, reason: "no match in itunes" };
       }
       const results = Array.isArray(data?.results) ? data.results : [];
-      const normTargetTrack = normalizeTrackForMatch(trackToSearch);
-      const normFullTitle = normalizeTrackForMatch(rawTitle);
-      if (!normTargetTrack) return null;
+      let sawArtistMismatch = false;
 
       for (const item of results) {
         if (!item || typeof item !== "object") continue;
@@ -562,22 +1525,20 @@ async function searchItunesSong(
 
         if (effectiveArtist) {
           if (!artistMatches(effectiveArtist, itemArtist)) {
-            continue;
-          }
-        } else {
-          // Without a known artist, require a distinctive multi-word or >= 8 char title
-          const words = normTargetTrack.split(" ").filter(Boolean);
-          if (words.length < 2 && normTargetTrack.length < 8) {
+            sawArtistMismatch = true;
             continue;
           }
         }
 
         const artworkUrl = upscaleItunesArtwork(item.artworkUrl100 ?? item.artworkUrl60);
         if (artworkUrl) {
-          return { id: String(rawId), artworkUrl };
+          return { hit: { id: String(rawId), artworkUrl }, reason: "" };
         }
       }
-      return null;
+      return {
+        hit: null,
+        reason: sawArtistMismatch ? "author mismatch" : "no match in itunes",
+      };
     } finally {
       clearTimeout(timer);
     }
@@ -680,11 +1641,12 @@ function findTitleCoverTargetInDb(
 }
 
 /**
- * Strip trailing "(Unabridged)" / "(1 of 5)"-style suffixes and leading series
- * prefixes like "The Stormlight Archive 2: " for the fallback lookup try.
+ * Strip trailing "(Unabridged)" / "(1 of 5)"-style suffixes, "- BBC 1996 Radio Drama..."
+ * adaptation noise, "[01]"-style series markers, and leading series prefixes like
+ * "The Stormlight Archive 2: " for the fallback lookup try.
  */
 export function cleanTitle(title: string, seriesName?: string): string {
-  let cleaned = title;
+  let cleaned = title.trim();
 
   // 1. Strip trailing suffix: e.g. " (Unabridged)", "(Abridged)", "(1 of 5)", "[1 of 5]", "(Part 1)", etc.
   cleaned = cleaned
@@ -694,7 +1656,32 @@ export function cleanTitle(title: string, seriesName?: string): string {
     )
     .trim();
 
-  // 2. Strip leading series prefix:
+  // 2. Strip trailing adaptation / radio drama / edition dash suffixes:
+  // e.g. "A Wizard of Earthsea - BBC 1996 Radio Drama J…"
+  cleaned = cleaned.replace(EDITION_DASH_SUFFIX_RE, "").trim();
+
+  // 3. Strip "[01]"-style bracketed series markers:
+  // e.g. "The Stormlight Archive [01] The Way Of Kings " -> "The Way Of Kings"
+  const midBracketMatch =
+    /^(.+?)\s*\[\s*(?:book|vol\.?|volume|part|#)?\s*\d+(?:\.\d+)?\s*\]\s*[-–—:]?\s*(.+)$/i.exec(
+      cleaned
+    );
+  if (midBracketMatch && midBracketMatch[2]?.trim()) {
+    cleaned = midBracketMatch[2].trim();
+  } else {
+    cleaned = cleaned
+      .replace(
+        /^\[\s*(?:book|vol\.?|volume|part|#)?\s*\d+(?:\.\d+)?\s*\]\s*[-–—:]?\s*/i,
+        ""
+      )
+      .replace(
+        /\s*\[\s*(?:book|vol\.?|volume|part|#)?\s*\d+(?:\.\d+)?\s*\]$/i,
+        ""
+      )
+      .trim();
+  }
+
+  // 4. Strip leading series prefix:
   // If seriesName is known and non-empty:
   if (seriesName && seriesName.trim()) {
     const escaped = seriesName.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -705,9 +1692,10 @@ export function cleanTitle(title: string, seriesName?: string): string {
     cleaned = cleaned.replace(seriesRe, "").trim();
   }
 
-  // Also handle generic series prefix with a number: e.g. "Series Name 2: Title" or "Series Name, Book 2: Title"
+  // Also handle generic series prefix with a number before the first colon:
+  // e.g. "Series Name 2: Title" or "Series Name, Book 2: Title"
   cleaned = cleaned
-    .replace(/^.+?(?:[,\s]+(?:Book|Vol|Volume|Part|#)?\s*\d+)\s*:\s*/i, "")
+    .replace(/^[^:]+?(?:[,\s]+(?:Book|Vol|Volume|Part|#)?\s*\d+)\s*:\s*/i, "")
     .trim();
 
   return cleaned;
@@ -781,36 +1769,89 @@ export async function getCover(
 }
 
 async function resolveExternalBookOrAudiobookCover(
-  titleCandidates: readonly string[],
+  rawTitle: string,
   targetAuthor: string,
   deps: CoverDeps,
   imgPath: string,
   typePath: string,
   srcPath: string,
-  nonePath: string
-): Promise<{ cover: CoverResult | null; hadNetworkError: boolean }> {
+  nonePath: string,
+  extra?: { seriesName?: string; knownNarrators?: readonly string[] }
+): Promise<{
+  cover: CoverResult | null;
+  source: "openlibrary" | "itunes" | null;
+  hadNetworkError: boolean;
+  reason: string;
+}> {
   const coversConfig = deps.config.covers ?? {
     external: true,
     openlibrary_url: "https://openlibrary.org",
     openlibrary_covers_url: "https://covers.openlibrary.org",
   };
-  if (!coversConfig.external || targetAuthor === "") {
-    return { cover: null, hadNetworkError: false };
+  if (!coversConfig.external) {
+    return {
+      cover: null,
+      source: null,
+      hadNetworkError: false,
+      reason: "external covers disabled",
+    };
+  }
+
+  const parsedAuthors = parseBookAuthors(targetAuthor, extra?.knownNarrators);
+  const allCandidates = buildBookTitleCandidates(
+    rawTitle,
+    parsedAuthors,
+    extra?.seriesName
+  );
+  if (allCandidates.length === 0) {
+    return {
+      cover: null,
+      source: null,
+      hadNetworkError: false,
+      reason: "no title",
+    };
+  }
+
+  // Filter out candidates that have neither a valid author nor a distinctive multi-word title
+  const viableCandidates = allCandidates.filter((cand) => {
+    const effAuthors = cand.requiredEmbeddedAuthor
+      ? [cand.requiredEmbeddedAuthor]
+      : parsedAuthors;
+    if (effAuthors.length > 0) return true;
+    return isDistinctiveTitleWithoutAuthor(cand.title);
+  });
+
+  if (viableCandidates.length === 0) {
+    return {
+      cover: null,
+      source: null,
+      hadNetworkError: false,
+      reason: "title too generic without author",
+    };
   }
 
   let hadNetworkError = false;
+  let sawSummary = false;
+  let sawAuthorMismatch = false;
   const fetchFn = deps.fetch ?? globalThis.fetch;
 
   // 1. Open Library
-  for (const titleCandidate of titleCandidates) {
+  for (const cand of viableCandidates) {
+    const effectiveAuthors = cand.requiredEmbeddedAuthor
+      ? [cand.requiredEmbeddedAuthor]
+      : parsedAuthors;
     try {
-      const coverId = await searchOpenLibrary(titleCandidate, targetAuthor, {
-        fetch: fetchFn,
-        baseUrl: coversConfig.openlibrary_url,
-      });
+      const olRes = await searchOpenLibraryCandidate(
+        cand,
+        effectiveAuthors,
+        coversConfig.openlibrary_url,
+        fetchFn
+      );
+      sawSummary = sawSummary || olRes.sawSummary;
+      sawAuthorMismatch = sawAuthorMismatch || olRes.sawAuthorMismatch;
 
-      if (coverId !== null) {
-        const fetched = await fetchOpenLibraryCover(coverId, {
+      if (olRes.hit !== null) {
+        const fetched = await fetchOpenLibraryCover(olRes.hit, {
           fetch: fetchFn,
           coversBaseUrl: coversConfig.openlibrary_covers_url,
         });
@@ -822,9 +1863,14 @@ async function resolveExternalBookOrAudiobookCover(
             srcPath,
             nonePath,
             fetched,
-            `openlibrary:${coverId}`
+            `openlibrary:${olRes.hit}`
           );
-          return { cover: fetched, hadNetworkError };
+          return {
+            cover: fetched,
+            source: "openlibrary",
+            hadNetworkError,
+            reason: "",
+          };
         }
       }
     } catch (err) {
@@ -836,16 +1882,25 @@ async function resolveExternalBookOrAudiobookCover(
 
   // 2. iTunes Audiobook search fallback when Open Library did not have the cover
   if (!hadNetworkError) {
-    for (const titleCandidate of titleCandidates) {
+    for (const cand of viableCandidates) {
+      const effectiveAuthors = cand.requiredEmbeddedAuthor
+        ? [cand.requiredEmbeddedAuthor]
+        : parsedAuthors;
       try {
-        const hit = await searchItunesAudiobook(
-          titleCandidate,
-          targetAuthor,
+        const itunesRes = await searchItunesAudiobookCandidate(
+          cand,
+          effectiveAuthors,
           deps.config,
           fetchFn
         );
-        if (hit !== null) {
-          const fetched = await fetchExternalImage(hit.artworkUrl, fetchFn);
+        sawSummary = sawSummary || itunesRes.sawSummary;
+        sawAuthorMismatch = sawAuthorMismatch || itunesRes.sawAuthorMismatch;
+
+        if (itunesRes.hit !== null) {
+          const fetched = await fetchExternalImage(
+            itunesRes.hit.artworkUrl,
+            fetchFn
+          );
           if (fetched !== null) {
             writeCachedCover(
               imgPath,
@@ -853,9 +1908,14 @@ async function resolveExternalBookOrAudiobookCover(
               srcPath,
               nonePath,
               fetched,
-              `itunes:${hit.id}`
+              `itunes:${itunesRes.hit.id}`
             );
-            return { cover: fetched, hadNetworkError };
+            return {
+              cover: fetched,
+              source: "itunes",
+              hadNetworkError,
+              reason: "",
+            };
           }
         }
       } catch (err) {
@@ -866,7 +1926,95 @@ async function resolveExternalBookOrAudiobookCover(
     }
   }
 
-  return { cover: null, hadNetworkError };
+  let reason = "no match in openlibrary or itunes";
+  if (hadNetworkError) {
+    reason = "network error";
+  } else if (sawAuthorMismatch) {
+    reason = "author mismatch";
+  } else if (sawSummary) {
+    reason = "only summary/analysis found";
+  }
+
+  return { cover: null, source: null, hadNetworkError, reason };
+}
+
+function extractAbsMetadataFromRow(
+  row: { raw: string | null; title: string | null; parent_title: string | null },
+  itemId: string
+): {
+  title: string;
+  author: string;
+  seriesName: string;
+  narrators: string[];
+} {
+  let rawObj: any = null;
+  if (typeof row.raw === "string") {
+    try {
+      rawObj = JSON.parse(row.raw);
+    } catch {}
+  }
+  const meta = rawObj?.mediaMetadata;
+  const rawTitle = (meta?.title ?? rawObj?.displayTitle ?? row.title ?? "").trim();
+  const title =
+    rawTitle === itemId && !meta?.title && !rawObj?.displayTitle
+      ? ""
+      : rawTitle;
+
+  let author = (meta?.authorName ?? rawObj?.displayAuthor ?? row.parent_title ?? "").trim();
+  if (!author && Array.isArray(meta?.authors)) {
+    const names = (meta.authors as unknown[])
+      .map((a) =>
+        typeof a === "string"
+          ? a.trim()
+          : a && typeof a === "object" && typeof (a as any).name === "string"
+            ? String((a as any).name).trim()
+            : ""
+      )
+      .filter(Boolean);
+    if (names.length > 0) {
+      author = names.join(", ");
+    }
+  }
+
+  let seriesName = "";
+  if (typeof meta?.seriesName === "string" && meta.seriesName.trim()) {
+    seriesName = meta.seriesName.trim();
+  } else if (Array.isArray(meta?.series) && meta.series.length > 0) {
+    const firstSeries = meta.series[0];
+    if (typeof firstSeries === "string" && firstSeries.trim()) {
+      seriesName = firstSeries.trim();
+    } else if (
+      firstSeries &&
+      typeof firstSeries === "object" &&
+      typeof (firstSeries as any).name === "string"
+    ) {
+      seriesName = String((firstSeries as any).name).trim();
+    }
+  }
+
+  const narrators: string[] = [];
+  if (Array.isArray(meta?.narrators)) {
+    for (const n of meta.narrators) {
+      if (typeof n === "string" && n.trim()) {
+        narrators.push(n.trim());
+      } else if (n && typeof n === "object" && typeof (n as any).name === "string") {
+        narrators.push(String((n as any).name).trim());
+      }
+    }
+  }
+
+  return { title, author, seriesName, narrators };
+}
+
+function readCachedSourceLabel(srcPath: string): CoverResolvedSource {
+  try {
+    if (existsSync(srcPath)) {
+      const raw = readFileSync(srcPath, "utf8").trim().toLowerCase();
+      if (raw.startsWith("openlibrary")) return "openlibrary";
+      if (raw.startsWith("itunes")) return "itunes";
+    }
+  } catch {}
+  return "abs";
 }
 
 async function getCoverInternal(
@@ -881,10 +2029,16 @@ async function getCoverInternal(
 
   const cached = readCachedCover(imgPath, typePath);
   if (cached !== null) {
+    lastCoverOutcomes.set(itemId, {
+      title: lastCoverOutcomes.get(itemId)?.title ?? itemId,
+      found: true,
+      source: readCachedSourceLabel(srcPath),
+      reason: null,
+    });
     return cached;
   }
 
-  if (readCachedNone(nonePath, nowMs)) {
+  if (!deps.retryMissing && readCachedNone(nonePath, nowMs)) {
     return null;
   }
 
@@ -896,15 +2050,29 @@ async function getCoverInternal(
       openlibrary_url: "https://openlibrary.org",
       openlibrary_covers_url: "https://covers.openlibrary.org",
     };
-    if (!coversConfig.external) {
-      writeCachedNone(nonePath, nowMs);
-      return null;
-    }
-
     const target = deps.db
       ? findTitleCoverTargetInDb(deps.db, itemId)
       : (titleCoverRegistry.get(itemId) ?? null);
+    const displayTitle = target?.title || itemId;
+
+    if (!coversConfig.external) {
+      writeCachedNone(nonePath, nowMs);
+      lastCoverOutcomes.set(itemId, {
+        title: displayTitle,
+        found: false,
+        source: null,
+        reason: "external covers disabled",
+      });
+      return null;
+    }
+
     if (!target || !target.title) {
+      lastCoverOutcomes.set(itemId, {
+        title: displayTitle,
+        found: false,
+        source: null,
+        reason: "no title",
+      });
       return null;
     }
 
@@ -912,15 +2080,17 @@ async function getCoverInternal(
 
     if (target.category === "music") {
       let hadNetworkError = false;
+      let notFoundReason = "no match in itunes";
       try {
-        const hit = await searchItunesSong(
+        const songRes = await searchItunesSong(
           target.title,
           target.creator,
           deps.config,
           fetchFn
         );
-        if (hit !== null) {
-          const fetched = await fetchExternalImage(hit.artworkUrl, fetchFn);
+        notFoundReason = songRes.reason || "no match in itunes";
+        if (songRes.hit !== null) {
+          const fetched = await fetchExternalImage(songRes.hit.artworkUrl, fetchFn);
           if (fetched !== null) {
             writeCachedCover(
               imgPath,
@@ -928,8 +2098,14 @@ async function getCoverInternal(
               srcPath,
               nonePath,
               fetched,
-              `itunes:${hit.id}`
+              `itunes:${songRes.hit.id}`
             );
+            lastCoverOutcomes.set(itemId, {
+              title: target.title,
+              found: true,
+              source: "itunes",
+              reason: null,
+            });
             return fetched;
           }
         }
@@ -941,18 +2117,17 @@ async function getCoverInternal(
       if (!hadNetworkError) {
         writeCachedNone(nonePath, nowMs);
       }
+      lastCoverOutcomes.set(itemId, {
+        title: target.title,
+        found: false,
+        source: null,
+        reason: hadNetworkError ? "network error" : notFoundReason,
+      });
       return null;
     }
 
-    const exactTitle = target.title;
-    const cleaned = cleanTitle(exactTitle);
-    const candidates = [exactTitle];
-    if (cleaned !== exactTitle && cleaned.length > 0) {
-      candidates.push(cleaned);
-    }
-
-    const { cover, hadNetworkError } = await resolveExternalBookOrAudiobookCover(
-      candidates,
+    const extRes = await resolveExternalBookOrAudiobookCover(
+      target.title,
       target.creator ?? "",
       deps,
       imgPath,
@@ -960,12 +2135,24 @@ async function getCoverInternal(
       srcPath,
       nonePath
     );
-    if (cover !== null) {
-      return cover;
+    if (extRes.cover !== null) {
+      lastCoverOutcomes.set(itemId, {
+        title: target.title,
+        found: true,
+        source: extRes.source ?? "openlibrary",
+        reason: null,
+      });
+      return extRes.cover;
     }
-    if (!hadNetworkError) {
+    if (!extRes.hadNetworkError) {
       writeCachedNone(nonePath, nowMs);
     }
+    lastCoverOutcomes.set(itemId, {
+      title: target.title,
+      found: false,
+      source: null,
+      reason: extRes.reason,
+    });
     return null;
   }
 
@@ -1000,6 +2187,12 @@ async function getCoverInternal(
             "abs",
             absMissPath
           );
+          lastCoverOutcomes.set(itemId, {
+            title: itemId,
+            found: true,
+            source: "abs",
+            reason: null,
+          });
           return cover;
         }
       }
@@ -1010,6 +2203,12 @@ async function getCoverInternal(
       // API key without library access still fetches covers.)
       if (isNetworkOrServerError(err) || isAuthError(err)) {
         hadNetworkError = true;
+        lastCoverOutcomes.set(itemId, {
+          title: itemId,
+          found: false,
+          source: null,
+          reason: "network error",
+        });
         // ABS offline / 5xx / auth: do not query further, do not cache failure
         return null;
       }
@@ -1028,6 +2227,7 @@ async function getCoverInternal(
   let targetTitle = "";
   let targetAuthor = "";
   let seriesName = "";
+  let knownNarrators: string[] = [];
 
   try {
     const row = deps.db
@@ -1050,24 +2250,11 @@ async function getCoverInternal(
       .get(itemId, itemId, itemId, itemId);
 
     if (row) {
-      let rawObj: any = null;
-      if (typeof row.raw === "string") {
-        try {
-          rawObj = JSON.parse(row.raw);
-        } catch {}
-      }
-      const meta = rawObj?.mediaMetadata;
-      const rawTitle = (meta?.title ?? rawObj?.displayTitle ?? row.title ?? "").trim();
-      // A media_progress row without a real title stores the itemId as row.title;
-      // do not treat the opaque itemId as a book title to search for.
-      targetTitle =
-        rawTitle === itemId && !meta?.title && !rawObj?.displayTitle
-          ? ""
-          : rawTitle;
-      targetAuthor = (meta?.authorName ?? rawObj?.displayAuthor ?? row.parent_title ?? "").trim();
-      if (typeof meta?.seriesName === "string" && meta.seriesName.trim()) {
-        seriesName = meta.seriesName.trim();
-      }
+      const extracted = extractAbsMetadataFromRow(row, itemId);
+      targetTitle = extracted.title;
+      targetAuthor = extracted.author;
+      seriesName = extracted.seriesName;
+      knownNarrators = extracted.narrators;
     }
   } catch {
     // Best-effort metadata retrieval
@@ -1077,6 +2264,12 @@ async function getCoverInternal(
     if (!hadNetworkError) {
       writeCachedNone(nonePath, nowMs);
     }
+    lastCoverOutcomes.set(itemId, {
+      title: itemId,
+      found: false,
+      source: null,
+      reason: "no title",
+    });
     return null;
   }
 
@@ -1187,6 +2380,12 @@ async function getCoverInternal(
                     `abs-relinked:${candidateId}`,
                     absMissPath
                   );
+                  lastCoverOutcomes.set(itemId, {
+                    title: targetTitle,
+                    found: true,
+                    source: "abs",
+                    reason: null,
+                  });
                   return cover;
                 }
               } catch (err) {
@@ -1209,15 +2408,22 @@ async function getCoverInternal(
 
   // --- Step 3: Open Library then iTunes Audiobooks ---
   const extRes = await resolveExternalBookOrAudiobookCover(
-    titleCandidates,
+    targetTitle,
     targetAuthor,
     deps,
     imgPath,
     typePath,
     srcPath,
-    nonePath
+    nonePath,
+    { seriesName, knownNarrators }
   );
   if (extRes.cover !== null) {
+    lastCoverOutcomes.set(itemId, {
+      title: targetTitle,
+      found: true,
+      source: extRes.source ?? "openlibrary",
+      reason: null,
+    });
     return extRes.cover;
   }
   if (extRes.hadNetworkError) {
@@ -1228,6 +2434,12 @@ async function getCoverInternal(
   if (!hadNetworkError) {
     writeCachedNone(nonePath, nowMs);
   }
+  lastCoverOutcomes.set(itemId, {
+    title: targetTitle,
+    found: false,
+    source: null,
+    reason: hadNetworkError ? "network error" : extRes.reason,
+  });
 
   return null;
 }
@@ -1281,15 +2493,26 @@ export async function prefetchCovers(
   return available;
 }
 
+export interface BackfillCoverItem {
+  id: string;
+  title: string;
+  found: boolean;
+  source: CoverResolvedSource | null;
+  reason: string | null;
+}
+
 export interface BackfillCoversOptions extends CoverDeps {
   limit?: number;
   onlyCategories?: ReadonlyArray<TitleCoverCategory>;
+  /** Report callback invoked once per attempted work in order. */
+  onItem?: (item: BackfillCoverItem) => void;
 }
 
 export interface BackfillCoversResult {
   attempted: number;
   resolved: number;
   notFound: number;
+  items?: BackfillCoverItem[];
 }
 
 /**
@@ -1299,6 +2522,7 @@ export interface BackfillCoversResult {
  *
  * Items already known missing on Audiobookshelf (`<id>.abs404`) skip ABS and
  * go straight to the Open Library / iTunes title fallback.
+ * When `retryMissing` is true, cached `.none` negative entries are ignored once.
  */
 export async function backfillCovers(
   db: Database,
@@ -1310,32 +2534,45 @@ export async function backfillCovers(
   }
 
   const nowMs = opts.now ? opts.now() : Date.now();
-  const candidateIds: string[] = [];
+  const candidates: Array<{ id: string; title: string }> = [];
   const seen = new Set<string>();
 
-  const addCandidate = (id: string) => {
+  const addCandidate = (id: string, title: string) => {
     if (!isValidCoverId(id) || seen.has(id)) return;
     const { imgPath, typePath, nonePath } = cachePaths(opts.config, id);
     if (readCachedCover(imgPath, typePath) !== null) return;
-    if (readCachedNone(nonePath, nowMs)) return;
+    if (!opts.retryMissing && readCachedNone(nonePath, nowMs)) return;
     seen.add(id);
-    candidateIds.push(id);
+    candidates.push({ id, title: title.trim() || id });
   };
 
-  // 1. Audiobookshelf items (unless restricted to specific categories like ["music"])
+  // 1. Audiobookshelf book/audiobook items (never daily_stat or untitled orphan progress rows)
   if (!opts.onlyCategories || opts.onlyCategories.includes("audiobook")) {
     const absRows = db
-      .query<{ item: string | null }, []>(
-        `SELECT DISTINCT COALESCE(json_extract(external_ids, '$.abs_item'), source_id) AS item
+      .query<
+        {
+          item: string | null;
+          raw: string | null;
+          title: string | null;
+          parent_title: string | null;
+          source_kind: string;
+        },
+        []
+      >(
+        `SELECT COALESCE(json_extract(external_ids, '$.abs_item'), source_id) AS item,
+                raw, title, parent_title, source_kind
            FROM events_latest
           WHERE source = 'audiobookshelf'
-          ORDER BY id DESC;`
+            AND source_kind IN ('listening_session', 'media_progress')
+            AND media_type IN ('audiobook', 'book')
+          ORDER BY (CASE WHEN source_kind = 'listening_session' THEN 0 ELSE 1 END), id DESC;`
       )
       .all();
     for (const r of absRows) {
-      if (r.item && isValidCoverId(r.item)) {
-        addCandidate(r.item);
-      }
+      if (!r.item || !isValidCoverId(r.item)) continue;
+      const extracted = extractAbsMetadataFromRow(r, r.item);
+      if (!extracted.title) continue;
+      addCandidate(r.item, extracted.title);
     }
   }
 
@@ -1356,6 +2593,7 @@ export async function backfillCovers(
     >(
       `SELECT source, source_kind, media_type, title, parent_title, external_ids, raw
        FROM events_latest
+       WHERE source_kind != 'daily_stat'
        ORDER BY id DESC;`
     )
     .all();
@@ -1370,8 +2608,11 @@ export async function backfillCovers(
     }
 
     const ext = parseExternalIds(row.external_ids);
-    // Skip items that already have an ABS item id or metadata provider id
-    if (cat !== "music" && (ext?.["abs_item"] || ext?.["meta_id"])) {
+    // Skip items that already come from Audiobookshelf or have an ABS/metadata provider id
+    if (
+      cat !== "music" &&
+      (row.source === "audiobookshelf" || ext?.["abs_item"] || ext?.["meta_id"])
+    ) {
       continue;
     }
 
@@ -1424,20 +2665,36 @@ export async function backfillCovers(
     }
 
     const id = titleCoverId(cat, title, creator);
-    addCandidate(id);
+    addCandidate(id, title);
   }
 
   let attempted = 0;
   let resolved = 0;
   let notFound = 0;
 
-  for (const id of candidateIds.slice(0, limit)) {
+  for (const cand of candidates.slice(0, limit)) {
     attempted += 1;
-    const res = await getCover(id, { ...opts, db });
+    const res = await getCover(cand.id, { ...opts, db });
+    const outcome = lastCoverOutcomes.get(cand.id);
+    const { srcPath } = cachePaths(opts.config, cand.id);
     if (res !== null) {
       resolved += 1;
+      opts.onItem?.({
+        id: cand.id,
+        title: cand.title,
+        found: true,
+        source: outcome?.source ?? readCachedSourceLabel(srcPath),
+        reason: null,
+      });
     } else {
       notFound += 1;
+      opts.onItem?.({
+        id: cand.id,
+        title: cand.title,
+        found: false,
+        source: null,
+        reason: outcome?.reason ?? "no match",
+      });
     }
   }
 

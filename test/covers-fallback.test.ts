@@ -1,12 +1,24 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Config } from "../src/core/config.ts";
 import { openDb } from "../src/core/db.ts";
 import { finishRun, insertEvents, startRun } from "../src/core/events.ts";
-import { cleanTitle, coverCacheDir, getCover } from "../src/server/covers.ts";
+import {
+  backfillCovers,
+  bookAuthorsMatch,
+  bookTitleMatches,
+  buildBookTitleCandidates,
+  cleanTitle,
+  coverCacheDir,
+  getCover,
+  isDistinctiveTitleWithoutAuthor,
+  isSummaryOrAnalysis,
+  parseBookAuthors,
+} from "../src/server/covers.ts";
+import { runCli } from "../src/cli/index.ts";
 import { authorMatches, Limiter } from "../src/server/openlibrary.ts";
 import { SourceUnavailable } from "../src/sources/audiobookshelf/client.ts";
 
@@ -706,8 +718,8 @@ describe("Covers fallback chain", () => {
         },
       }) as any;
 
-    // No author in the session: a bare title is too generic, Open Library is not asked.
-    seedSession(db, "item-no-author", { title: "Focus Point", author: "" });
+    // No author in the session + single-word generic title: too generic, Open Library is not asked.
+    seedSession(db, "item-no-author", { title: "Focus", author: "" });
     let calls = 0;
     const noAuthor = await getCover("item-no-author", {
       config,
@@ -970,5 +982,640 @@ describe("Covers fallback chain", () => {
 
     await Promise.all([task(), task(), task(), task(), task()]);
     expect(peakActive).toBe(2);
+  });
+
+  test("W12: normalisation helpers handle series markers, Author - Title, roles, non-authors, mojibake, and summaries", () => {
+    // [01] series markers and adaptation suffixes
+    expect(cleanTitle("The Stormlight Archive [01] The Way Of Kings ")).toBe(
+      "The Way Of Kings"
+    );
+    expect(
+      cleanTitle("A Wizard of Earthsea - BBC 1996 Radio Drama J…")
+    ).toBe("A Wizard of Earthsea");
+    expect(cleanTitle("33 Strategies of War (Unabridged)")).toBe(
+      "33 Strategies of War"
+    );
+
+    // Author splitting, role dropping, and non-author ignoring
+    expect(parseBookAuthors("Bryce O'Connor, Luke Chmilenko")).toEqual([
+      "Bryce O'Connor",
+      "Luke Chmilenko",
+    ]);
+    expect(
+      parseBookAuthors("Herman Hesse, Paul Ansdell - translator")
+    ).toEqual(["Herman Hesse"]);
+    expect(parseBookAuthors("GraphicAudio")).toEqual([]);
+    expect(parseBookAuthors("Downloads")).toEqual([]);
+    expect(parseBookAuthors("M. L. Wang, Andrew Tell")).toEqual([
+      "M. L. Wang",
+      "Andrew Tell",
+    ]);
+
+    // Author matching across lists, spelling variants, and initials
+    expect(
+      bookAuthorsMatch(
+        ["Bryce O'Connor", "Luke Chmilenko"],
+        ["Bryce O'Connor & Luke Chmilenko"]
+      )
+    ).toBe(true);
+    expect(bookAuthorsMatch(["Herman Hesse"], ["Hermann Hesse"])).toBe(true);
+    expect(
+      bookAuthorsMatch(["M. L. Wang", "Andrew Tell"], ["M. L. Wang"])
+    ).toBe(true);
+    expect(
+      bookAuthorsMatch(["Henry Petroski", "Matthew Boston"], ["Henry Petroski"])
+    ).toBe(true);
+    expect(bookAuthorsMatch(["R.F. Kuang"], ["R. F. Kuang"])).toBe(true);
+
+    // Summary and analysis rejection
+    expect(
+      isSummaryOrAnalysis(
+        "Summary of Robert Greene’s The 33 Strategies of War (Unabridged)",
+        ["Swift Reads"],
+        "33 Strategies of War"
+      )
+    ).toBe(true);
+    expect(
+      isSummaryOrAnalysis(
+        "The Talented Mr Ripley by Patricia Highsmith (Book Analysis)",
+        ["Bright Summaries"],
+        "The Talented Mr. Ripley"
+      )
+    ).toBe(true);
+    expect(
+      isSummaryOrAnalysis(
+        "Summary of Laura Hillenbrand's Unbroken",
+        ["Everest Media"],
+        "Unbroken"
+      )
+    ).toBe(true);
+    expect(
+      isSummaryOrAnalysis(
+        "The 33 Strategies of War",
+        ["Robert Greene"],
+        "33 Strategies of War"
+      )
+    ).toBe(false);
+
+    // Mojibake wildcard matching
+    expect(
+      bookTitleMatches("Sh¿gun", "Shōgun", { hasAuthor: true })
+    ).toBe(true);
+    expect(
+      bookTitleMatches("Sh¿gun", "Shōgun, Part One (The Asian Saga)", {
+        hasAuthor: true,
+      })
+    ).toBe(true);
+    expect(
+      bookTitleMatches("Sh¿gun", "King Rat", { hasAuthor: true })
+    ).toBe(false);
+
+    // Junk single-word titles rejected without author
+    for (const junk of ["me", "shadow", "Communication", "Focus"]) {
+      expect(isDistinctiveTitleWithoutAuthor(junk)).toBe(false);
+    }
+    expect(isDistinctiveTitleWithoutAuthor("The Talented Mr. Ripley")).toBe(true);
+    expect(isDistinctiveTitleWithoutAuthor("The Way Of Kings")).toBe(true);
+    expect(isDistinctiveTitleWithoutAuthor("A Wizard of Earthsea")).toBe(true);
+
+    // Candidate building for Author - Title and Y2
+    const unbrokenCands = buildBookTitleCandidates(
+      "Laura Hillenbrand - Unbroken",
+      []
+    );
+    expect(unbrokenCands[0]).toEqual({
+      title: "Unbroken",
+      requiredEmbeddedAuthor: "Laura Hillenbrand",
+    });
+
+    const y2Cands = buildBookTitleCandidates("Y2", ["Syougo Kinugasa"]);
+    expect(y2Cands).toContainEqual({
+      title: "Year 2",
+      allowSubtitleMatch: true,
+    });
+  });
+
+  test("W12: resolves covers across all real failure shapes, rejects summaries and junk titles, and supports covers backfill --retry-missing with per-work CLI output", async () => {
+    const abs404Client = {
+      getAllSessions: async () => [],
+      get: async () => ({ book: [] }),
+      getBinary: async () => {
+        throw new Error("HTTP 404: Not Found");
+      },
+    };
+
+    const cases: Array<{
+      id: string;
+      title: string;
+      author: string;
+      expectedFound: boolean;
+      expectedSource?: "openlibrary" | "itunes";
+    }> = [
+      {
+        id: "w12_iron_prince",
+        title: "Iron Prince: Warformed: Stormweaver, Book 1",
+        author: "Bryce O'Connor, Luke Chmilenko",
+        expectedFound: true,
+        expectedSource: "openlibrary",
+      },
+      {
+        id: "w12_ripley",
+        title: "The Talented Mr. Ripley",
+        author: "",
+        expectedFound: true,
+        expectedSource: "itunes",
+      },
+      {
+        id: "w12_unbroken",
+        title: "Laura Hillenbrand - Unbroken",
+        author: "",
+        expectedFound: true,
+        expectedSource: "itunes",
+      },
+      {
+        id: "w12_stormlight",
+        title: "The Stormlight Archive [01] The Way Of Kings ",
+        author: "GraphicAudio",
+        expectedFound: true,
+        expectedSource: "openlibrary",
+      },
+      {
+        id: "w12_33_strategies",
+        title: "33 Strategies of War (Unabridged)",
+        author: "Robert Greene",
+        expectedFound: true,
+        expectedSource: "itunes",
+      },
+      {
+        id: "w12_shogun",
+        title: "Sh¿gun",
+        author: "James Clavell",
+        expectedFound: true,
+        expectedSource: "openlibrary",
+      },
+      {
+        id: "w12_siddhartha",
+        title: "Siddhartha",
+        author: "Herman Hesse, Paul Ansdell - translator",
+        expectedFound: true,
+        expectedSource: "openlibrary",
+      },
+      {
+        id: "w12_kaigen",
+        title: "The Sword of Kaigen: A Theonite War Story",
+        author: "M. L. Wang, Andrew Tell",
+        expectedFound: true,
+        expectedSource: "openlibrary",
+      },
+      {
+        id: "w12_earthsea",
+        title: "A Wizard of Earthsea - BBC 1996 Radio Drama J…",
+        author: "Downloads",
+        expectedFound: true,
+        expectedSource: "itunes",
+      },
+      {
+        id: "w12_fire_and_song",
+        title: "Fire and Song: Warformed: Stormweaver, Book 2",
+        author: "Bryce O'Connor, Luke Chmilenko",
+        expectedFound: true,
+        expectedSource: "openlibrary",
+      },
+      {
+        id: "w12_poppy_war",
+        title: "The Poppy War Trilogy",
+        author: "R.F. Kuang",
+        expectedFound: true,
+        expectedSource: "itunes",
+      },
+      {
+        id: "w12_engineer",
+        title: "To Engineer Is Human",
+        author: "Henry Petroski, Matthew Boston",
+        expectedFound: true,
+        expectedSource: "itunes",
+      },
+      {
+        id: "w12_one_tin_soldier",
+        title: "One Tin Soldier: The Murder of Crows, Book 3",
+        author: "Chris Tullbane",
+        expectedFound: true,
+        expectedSource: "itunes",
+      },
+      {
+        id: "w12_y2",
+        title: "Y2",
+        author: "Syougo Kinugasa",
+        expectedFound: true,
+        expectedSource: "itunes",
+      },
+      // Junk titles that must stay uncovered
+      { id: "w12_junk_me", title: "me", author: "", expectedFound: false },
+      { id: "w12_junk_shadow", title: "shadow", author: "", expectedFound: false },
+      {
+        id: "w12_junk_comm",
+        title: "Communication",
+        author: "",
+        expectedFound: false,
+      },
+      { id: "w12_junk_focus", title: "Focus", author: "Downloads", expectedFound: false },
+    ];
+
+    const fileDb = openDb(dbPath);
+    const cDir = coverCacheDir(config);
+    mkdirSync(cDir, { recursive: true });
+    for (const c of cases) {
+      seedSession(fileDb, c.id, { title: c.title, author: c.author });
+      // Pre-populate .none to verify that regular backfill skips it and --retry-missing ignores it once
+      writeFileSync(join(cDir, `${c.id}.abs404`), `${Date.now()}\n`, "utf8");
+      writeFileSync(join(cDir, `${c.id}.none`), `${Date.now()}\n`, "utf8");
+    }
+
+    const mockFetch = (async (input: unknown) => {
+      const rawUrl = String(input);
+      const u = new URL(rawUrl);
+
+      if (u.pathname.endsWith("/search.json")) {
+        const qTitle = u.searchParams.get("title") ?? "";
+        const qAuthor = u.searchParams.get("author") ?? "";
+
+        // Open Library only matches Iron Prince when subtitle is stripped and single author is passed
+        if (qTitle === "Iron Prince" && qAuthor === "Bryce O'Connor") {
+          return Response.json({
+            docs: [
+              {
+                key: "/works/OL1W",
+                title: "Iron Prince",
+                author_name: ["Bryce O'Connor", "Luke Chmilenko"],
+                cover_i: 1001,
+              },
+            ],
+          });
+        }
+        if (qTitle === "Fire and Song" && qAuthor === "Bryce O'Connor") {
+          return Response.json({
+            docs: [
+              {
+                key: "/works/OL2W",
+                title: "Fire and Song",
+                author_name: ["Bryce O'Connor"],
+                cover_i: 1002,
+              },
+            ],
+          });
+        }
+        if (qTitle === "The Way Of Kings" && !qAuthor) {
+          return Response.json({
+            docs: [
+              {
+                key: "/works/OL3W",
+                title: "The Way of Kings",
+                author_name: ["Brandon Sanderson"],
+                cover_i: 1003,
+              },
+            ],
+          });
+        }
+        // Sh¿gun: title=Sh¿gun returns nothing on Open Library; author=James Clavell (without title) returns Shōgun
+        if (!qTitle && qAuthor === "James Clavell") {
+          return Response.json({
+            docs: [
+              {
+                key: "/works/OL4W",
+                title: "Shōgun",
+                author_name: ["James Clavell"],
+                cover_i: 1004,
+              },
+            ],
+          });
+        }
+        if (qTitle === "Siddhartha" && qAuthor === "Herman Hesse") {
+          return Response.json({
+            docs: [
+              {
+                key: "/works/OL5W",
+                title: "Siddhartha",
+                author_name: ["Hermann Hesse"],
+                cover_i: 1005,
+              },
+            ],
+          });
+        }
+        if (qTitle === "The Sword of Kaigen" && qAuthor === "M. L. Wang") {
+          return Response.json({
+            docs: [
+              {
+                key: "/works/OL6W",
+                title: "The Sword of Kaigen",
+                author_name: ["M. L. Wang"],
+                cover_i: 1006,
+              },
+            ],
+          });
+        }
+        // Even if Open Library had books for "me", "shadow", "Communication", "Focus", they must never be used
+        if (["me", "shadow", "Communication", "Focus"].includes(qTitle)) {
+          return Response.json({
+            docs: [
+              {
+                key: "/works/OLJUNK",
+                title: qTitle,
+                author_name: ["Random Author"],
+                cover_i: 9999,
+              },
+            ],
+          });
+        }
+        return Response.json({ docs: [] });
+      }
+
+      if (u.pathname.endsWith("/search") && u.searchParams.get("entity") === "audiobook") {
+        const term = u.searchParams.get("term") ?? "";
+
+        if (term === "The Talented Mr. Ripley") {
+          return Response.json({
+            results: [
+              // Summary/analysis result even if placed first must be rejected!
+              {
+                collectionId: 9001,
+                collectionName:
+                  "The Talented Mr Ripley by Patricia Highsmith (Book Analysis)",
+                artistName: "Bright Summaries",
+                artworkUrl100: "https://itunes.invalid/img/summary100x100bb.jpg",
+              },
+              {
+                collectionId: 2001,
+                collectionName: "The Talented Mr. Ripley (Unabridged)",
+                artistName: "Patricia Highsmith",
+                artworkUrl100: "https://itunes.invalid/img/2001/100x100bb.jpg",
+              },
+            ],
+          });
+        }
+        if (term === "Unbroken Laura Hillenbrand") {
+          return Response.json({
+            results: [
+              {
+                collectionId: 9002,
+                collectionName: "Summary of Laura Hillenbrand's Unbroken",
+                artistName: "Everest Media",
+                artworkUrl100: "https://itunes.invalid/img/summary2/100x100bb.jpg",
+              },
+              {
+                collectionId: 2002,
+                collectionName:
+                  "Unbroken: A World War II Story of Survival, Resilience, and Redemption (Unabridged)",
+                artistName: "Laura Hillenbrand",
+                artworkUrl100: "https://itunes.invalid/img/2002/100x100bb.jpg",
+              },
+            ],
+          });
+        }
+        if (term === "33 Strategies of War Robert Greene") {
+          return Response.json({
+            results: [
+              {
+                collectionId: 9003,
+                collectionName:
+                  "Summary of Robert Greene’s The 33 Strategies of War (Unabridged)",
+                artistName: "Swift Reads",
+                artworkUrl100: "https://itunes.invalid/img/summary3/100x100bb.jpg",
+              },
+              {
+                collectionId: 2003,
+                collectionName: "The 33 Strategies of War",
+                artistName: "Robert Greene",
+                artworkUrl100: "https://itunes.invalid/img/2003/100x100bb.jpg",
+              },
+            ],
+          });
+        }
+        if (term === "A Wizard of Earthsea") {
+          return Response.json({
+            results: [
+              {
+                collectionId: 2004,
+                collectionName: "A Wizard of Earthsea (Earthsea Cycle)",
+                artistName: "Ursula K. Le Guin",
+                artworkUrl100: "https://itunes.invalid/img/2004/100x100bb.jpg",
+              },
+            ],
+          });
+        }
+        if (term.includes("Poppy War") && term.includes("Kuang")) {
+          return Response.json({
+            results: [
+              {
+                collectionId: 2005,
+                collectionName: "The Complete Poppy War Trilogy",
+                artistName: "R. F. Kuang",
+                artworkUrl100: "https://itunes.invalid/img/2005/100x100bb.jpg",
+              },
+            ],
+          });
+        }
+        if (term === "To Engineer Is Human Henry Petroski") {
+          return Response.json({
+            results: [
+              {
+                collectionId: 2006,
+                collectionName:
+                  "To Engineer Is Human : The Role of Failure in Successful Design",
+                artistName: "Henry Petroski",
+                artworkUrl100: "https://itunes.invalid/img/2006/100x100bb.jpg",
+              },
+            ],
+          });
+        }
+        if (term.startsWith("One Tin Soldier") && term.includes("Chris Tullbane")) {
+          return Response.json({
+            results: [
+              {
+                collectionId: 2007,
+                collectionName:
+                  "One Tin Soldier: The Murder of Crows, Book 3 (Unabridged)",
+                artistName: "Chris Tullbane",
+                artworkUrl100: "https://itunes.invalid/img/2007/100x100bb.jpg",
+              },
+            ],
+          });
+        }
+        if (term === "Year 2 Syougo Kinugasa") {
+          return Response.json({
+            results: [
+              {
+                collectionId: 2008,
+                collectionName:
+                  "Classroom of the Elite: Year 2 (Light Novel) Vol. 1",
+                artistName: "Syougo Kinugasa & Tomoseshunsaku",
+                artworkUrl100: "https://itunes.invalid/img/2008/100x100bb.jpg",
+              },
+            ],
+          });
+        }
+        return Response.json({ results: [] });
+      }
+
+      if (u.pathname.includes("/b/id/") || u.pathname.endsWith("600x600bb.jpg")) {
+        return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+
+      return new Response("Not found", { status: 404 });
+    }) as typeof fetch;
+
+    // 1. Without --retry-missing, all 18 items have fresh .none files and are skipped
+    const skippedRes = await backfillCovers(fileDb, {
+      config,
+      createAbsClient: () => abs404Client as any,
+      fetch: mockFetch,
+    });
+    expect(skippedRes).toEqual({ attempted: 0, resolved: 0, notFound: 0 });
+    fileDb.close();
+
+    // 2. With CLI `covers backfill --retry-missing`, all 14 real cases resolve and 4 junk titles stay uncovered
+    const cliLines: string[] = [];
+    const exitCode = await runCli(
+      ["covers", "backfill", "--limit", "50", "--retry-missing"],
+      {
+        loadConfig: () => config,
+        createAbsClient: () => abs404Client as any,
+        fetch: mockFetch,
+        out: (l) => cliLines.push(l),
+      }
+    );
+    expect(exitCode).toBe(0);
+
+    for (const c of cases) {
+      const imgExists = existsSync(join(cDir, `${c.id}.img`));
+      expect(imgExists, `${c.id}: ${cliLines.join(" | ")}`).toBe(c.expectedFound);
+      if (c.expectedFound) {
+        expect(cliLines).toContain(`${c.title.trim()}: found (${c.expectedSource})`);
+      } else {
+        expect(
+          cliLines.some((l) =>
+            l.startsWith(`${c.title}: not found (title too generic without author)`)
+          )
+        ).toBe(true);
+      }
+    }
+    expect(cliLines[cliLines.length - 1]).toBe(
+      "covers backfill: 18 attempted, 14 resolved, 4 not found"
+    );
+  });
+
+  test("W12: rejects summaries when no real book is present, rejects Author - Title when author mismatches, and skips daily_stat rows", async () => {
+    const fileDb = openDb(dbPath);
+    const runId = startRun(fileDb, "seed-w12-extra");
+    insertEvents(fileDb, runId, [
+      {
+        source: "audiobookshelf",
+        source_kind: "daily_stat",
+        source_id: "2026-10-17",
+        media_type: "other",
+        title: null,
+        started_at: "2026-10-17T00:00:00.000Z",
+        duration_seconds: 1200,
+      },
+      {
+        source: "audiobookshelf",
+        source_kind: "media_progress",
+        source_id: "orphan_progress_id",
+        media_type: "audiobook",
+        title: "orphan_progress_id",
+        started_at: "2026-10-17T01:00:00.000Z",
+        progress: 0.2,
+      },
+      {
+        source: "audiobookshelf",
+        source_kind: "listening_session",
+        source_id: "sess-summary-only",
+        external_ids: { abs_item: "abs_summary_only" },
+        media_type: "audiobook",
+        title: "Deep Work",
+        parent_title: "Cal Newport",
+        started_at: "2026-10-17T02:00:00.000Z",
+        duration_seconds: 600,
+      },
+      {
+        source: "audiobookshelf",
+        source_kind: "listening_session",
+        source_id: "sess-wrong-embedded",
+        external_ids: { abs_item: "abs_wrong_embedded" },
+        media_type: "audiobook",
+        title: "Laura Hillenbrand - Unbroken",
+        parent_title: "",
+        started_at: "2026-10-17T03:00:00.000Z",
+        duration_seconds: 600,
+      },
+    ]);
+    finishRun(fileDb, runId, { status: "ok", rowsSeen: 4, rowsInserted: 4 });
+    fileDb.close();
+
+    const abs404Client = {
+      getAllSessions: async () => [],
+      get: async () => ({ book: [] }),
+      getBinary: async () => {
+        throw new Error("HTTP 404: Not Found");
+      },
+    };
+
+    const mockFetch = (async (input: unknown) => {
+      const u = new URL(String(input));
+      if (u.pathname.endsWith("/search.json")) {
+        return Response.json({ docs: [] });
+      }
+      if (u.pathname.endsWith("/search") && u.searchParams.get("entity") === "audiobook") {
+        const term = u.searchParams.get("term") ?? "";
+        if (term.includes("Deep Work")) {
+          return Response.json({
+            results: [
+              {
+                collectionId: 9101,
+                collectionName: "Summary of Cal Newport's Deep Work",
+                artistName: "Bright Summaries",
+                artworkUrl100: "https://itunes.invalid/img/9101/100x100bb.jpg",
+              },
+              {
+                collectionId: 9102,
+                collectionName: "Deep Work by Cal Newport (Book Analysis)",
+                artistName: "Cal Newport",
+                artworkUrl100: "https://itunes.invalid/img/9102/100x100bb.jpg",
+              },
+            ],
+          });
+        }
+        if (term.includes("Unbroken")) {
+          return Response.json({
+            results: [
+              {
+                collectionId: 9103,
+                collectionName: "Unbroken (Unabridged)",
+                artistName: "Completely Different Author",
+                artworkUrl100: "https://itunes.invalid/img/9103/100x100bb.jpg",
+              },
+            ],
+          });
+        }
+      }
+      return new Response("Not found", { status: 404 });
+    }) as typeof fetch;
+
+    const cliLines: string[] = [];
+    const exitCode = await runCli(["covers", "backfill"], {
+      loadConfig: () => config,
+      createAbsClient: () => abs404Client as any,
+      fetch: mockFetch,
+      out: (l) => cliLines.push(l),
+    });
+    expect(exitCode).toBe(0);
+    // Only the 2 real books were attempted (daily_stat and untitled orphan progress were skipped)
+    expect(cliLines).toEqual([
+      "Laura Hillenbrand - Unbroken: not found (author mismatch)",
+      "Deep Work: not found (only summary/analysis found)",
+      "covers backfill: 2 attempted, 0 resolved, 2 not found",
+    ]);
   });
 });

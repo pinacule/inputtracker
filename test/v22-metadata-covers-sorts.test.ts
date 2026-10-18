@@ -1269,7 +1269,10 @@ describe("v2.2 Section 14: Covers by title, ABS known-missing skip, iTunes audio
       out: (l) => lines1.push(l),
     });
     expect(code1).toBe(0);
-    expect(lines1[0]).toContain("covers backfill: 1 attempted");
+    expect(lines1).toEqual([
+      "Digital Love: not found (author mismatch)",
+      "covers backfill: 1 attempted, 0 resolved, 1 not found",
+    ]);
 
     // Run CLI `covers backfill` for the remaining candidate
     const lines2: string[] = [];
@@ -1279,7 +1282,10 @@ describe("v2.2 Section 14: Covers by title, ABS known-missing skip, iTunes audio
       out: (l) => lines2.push(l),
     });
     expect(code2).toBe(0);
-    expect(lines2[0]).toContain("covers backfill: 1 attempted");
+    expect(lines2).toEqual([
+      "Digital Love: found (itunes)",
+      "covers backfill: 1 attempted, 1 resolved, 0 not found",
+    ]);
 
     // Verify Daft Punk matched and cached .img, while Wrong Artist was rejected and cached .none
     const daftId = titleCoverId("music", "Digital Love", "Daft Punk");

@@ -120,7 +120,7 @@ export function usage(): string {
     "  sync audiobookshelf|simkl|activitywatch  fetch new source activity into the DB",
     "    sync activitywatch --since <date>      backfill older YouTube plays from ActivityWatch",
     "    youtube enrich [--takeout] [--limit <n>] enrich stored YouTube videos with channel, category, and length",
-    "    covers backfill [--limit <n>]          backfill missing covers by title (Open Library / iTunes)",
+    "    covers backfill [--limit <n>] [--retry-missing]  backfill missing covers by title (Open Library / iTunes)",
     "  auth simkl [--status]                    connect or inspect Simkl authorization",
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
@@ -1595,14 +1595,17 @@ async function runCovers(args: string[], ctx: SyncContext): Promise<number> {
   const [sub, ...rest] = args;
 
   if (sub !== "backfill") {
-    err("Usage: it covers backfill [--limit <n>]");
+    err("Usage: it covers backfill [--limit <n>] [--retry-missing]");
     return EXIT_USAGE;
   }
 
   let limitVal: number | undefined;
+  let retryMissing = false;
   for (let i = 0; i < rest.length; i += 1) {
     const arg = rest[i]!;
-    if (arg === "--limit" || arg.startsWith("--limit=")) {
+    if (arg === "--retry-missing") {
+      retryMissing = true;
+    } else if (arg === "--limit" || arg.startsWith("--limit=")) {
       const raw =
         arg === "--limit" ? rest[i + 1] : arg.slice("--limit=".length);
       if (arg === "--limit") {
@@ -1648,6 +1651,7 @@ async function runCovers(args: string[], ctx: SyncContext): Promise<number> {
     const nowMsFn =
       deps.nowMs ??
       (deps.now instanceof Date ? () => deps.now!.getTime() : undefined);
+    const itemLines: string[] = [];
     const result = await doBackfill(db, {
       config,
       db,
@@ -1655,7 +1659,18 @@ async function runCovers(args: string[], ctx: SyncContext): Promise<number> {
       fetch: deps.fetch as typeof fetch | undefined,
       now: nowMsFn,
       limit: limitVal,
+      retryMissing,
+      onItem: (item) => {
+        if (item.found && item.source) {
+          itemLines.push(`${item.title}: found (${item.source})`);
+        } else {
+          itemLines.push(`${item.title}: not found (${item.reason ?? "no match"})`);
+        }
+      },
     });
+    for (const line of itemLines) {
+      out(line);
+    }
     out(
       `covers backfill: ${result.attempted} attempted, ${result.resolved} resolved, ${result.notFound} not found`
     );
