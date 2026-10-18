@@ -78,3 +78,66 @@ This document records the root-cause investigation into inaccurate series runtim
 6. **Append-only metadata refresh (`POST /api/library/work/refresh-metadata?key=`, CLI `archive refresh-metadata [--dry-run]`):**
    - Re-fetches linked metadata with `bypassCache: true`, updates `work_overrides` if `meta` is linked there, and re-saves any changed archive entries through `saveArchiveEntry` with the same `entry_id` (writing new append-only unit revisions in `events` and tombstoning removed units).
    - `--dry-run` performs the provider lookups and duration math without writing to the database or cover cache, printing each changed work as `<title>: <before> h → <after> h`.
+
+---
+
+## 3. Covers by title
+
+### 3.1 Why `covers backfill` missed 21 removed Audiobookshelf items (and reported 96 not found)
+
+When Audiobookshelf items are removed from the ABS server, `GET /api/items/<id>/cover` returns `404` (cached as `<id>.abs404`) and `src/server/covers.ts` falls back to Open Library and iTunes Audiobook search by title and author. Investigation of the real failures found the following root causes:
+
+1. **Unfiltered `events_latest` query in `backfillCovers`:**
+   - `backfillCovers` queried `SELECT DISTINCT COALESCE(json_extract(external_ids, '$.abs_item'), source_id) FROM events_latest WHERE source = 'audiobookshelf'`.
+   - That query included `source_kind = 'daily_stat'` rows (whose `source_id` is a `YYYY-MM-DD` date string matching `COVER_ID_RE`) and untitled orphaned `media_progress` rows (whose fallback `title` equals the opaque `source_id`). Every such row 404'd on ABS, had no book title, wrote `<id>.none`, and inflated `attempted` and `notFound`.
+2. **Cached `.none` negative entries blocking re-runs:**
+   - Earlier lookups that failed before the iTunes fallback or title/author normalisations existed wrote `<id>.none` (7-day TTL). Both `backfillCovers` and `getCoverInternal` skipped any item with an unexpired `.none` file, so re-running `covers backfill` never retried them.
+3. **Subtitles, series suffixes, and multi-author queries (`Iron Prince: Warformed: Stormweaver, Book 1` | `Bryce O'Connor, Luke Chmilenko`; `Fire and Song: Warformed: Stormweaver, Book 2`; `One Tin Soldier: The Murder of Crows, Book 3` | `Chris Tullbane`):**
+   - `cleanTitle` only stripped leading `Series 1: Title` prefixes where the number appeared *before* the colon, leaving `Title: Series, Book N` intact and never generating the pre-colon main title (`Iron Prince`, `Fire and Song`, `One Tin Soldier`) as a search candidate.
+   - Open Library indexes these works under the short title (`Iron Prince`, `Fire and Song`) and returns `0` results when given the full subtitle/series string or a comma-separated multi-author string (`author=Bryce O'Connor, Luke Chmilenko`).
+4. **Empty author early-exit (`The Talented Mr. Ripley` | no author):**
+   - `resolveExternalBookOrAudiobookCover` had `if (!coversConfig.external || targetAuthor === "") return { cover: null, hadNetworkError: false }`, and `authorMatches("", ...)` returned `false`, aborting before any search whenever the stored author was empty.
+5. **`"Author - Title"` stored in the title field (`Laura Hillenbrand - Unbroken` | no author):**
+   - With no separate author field, the author was embedded in the title (`Laura Hillenbrand - Unbroken`), and iTunes returned the full subtitle (`Unbroken: A World War II Story of Survival, Resilience, and Redemption (Unabridged)` by `Laura Hillenbrand`). Unlike `cleanMusicTitle`, book cover lookup never split `"Author - Title"` or verified the embedded author against the result's author.
+6. **Bracketed series numbers and publisher names in the author field (`The Stormlight Archive [01] The Way Of Kings ` | `GraphicAudio`):**
+   - `cleanTitle` did not strip middle `[01]` series markers without a colon, and `GraphicAudio` (the audiobook production company, not `Brandon Sanderson`) was treated as a mandatory author match, causing every Open Library and iTunes result to be rejected.
+7. **Leading article differences and third-party summaries (`33 Strategies of War (Unabridged)` | `Robert Greene`):**
+   - Both Open Library and iTunes list the book as `The 33 Strategies of War` (with leading `The`), which failed strict normalized title equality against `33 Strategies of War`. Meanwhile, iTunes also returns `Summary of Robert Greene's The 33 Strategies of War` (`Swift Reads`, `Abbey Beathan`) and Open Library returns `Concise 33 Strategies of War`.
+8. **Mojibake in stored titles (`Sh¿gun` | `James Clavell`):**
+   - A corrupted macron (`ō` → `¿`) caused `normalizeTrackForMatch("Sh¿gun")` to split the word into `"sh gun"` (two tokens), which neither Open Library's `title=` search nor exact string comparison matched against `"Shōgun"` / `"Shogun"`.
+9. **Translator/role suffixes and given-name spelling variants (`Siddhartha` | `Herman Hesse, Paul Ansdell - translator`):**
+   - Sending `Paul Ansdell - translator` in the query string polluted store searches, and `artistMatches` required all given-name tokens (`herman` vs `Hermann`) to appear verbatim in the candidate author set.
+10. **Narrators appended to the author list (`The Sword of Kaigen: A Theonite War Story` | `M. L. Wang, Andrew Tell`; `To Engineer Is Human` | `Henry Petroski, Matthew Boston`):**
+    - Audiobook tags frequently list both the author and the narrator in the author field. Sending the narrator's name in Open Library's `author=` parameter returned `0` results because Open Library only records book authors, and Open Library / iTunes results with subtitles (`To Engineer Is Human : The Role of Failure in Successful Design`) failed strict full-title equality on Open Library.
+11. **Folder names as authors and radio-drama/adaptation suffixes (`A Wizard of Earthsea - BBC 1996 Radio Drama J…` | `Downloads`):**
+    - `Downloads` (a folder name) was treated as a required author, and the trailing `- BBC 1996 Radio Drama J…` adaptation suffix was not stripped before searching, while iTunes appends `(Earthsea Cycle)` to the collection title.
+12. **Trilogy/omnibus suffixes and author initial spacing (`The Poppy War Trilogy` | `R.F. Kuang`):**
+    - Open Library indexes the first book as `The Poppy War` by `R. F. Kuang` and iTunes lists `The Complete Poppy War Trilogy` and `The Poppy War`; without stripping trailing `Trilogy`/`Omnibus` or ignoring `Complete`, exact matching missed both.
+13. **Light-novel shorthand (`Y2` | `Syougo Kinugasa`):**
+    - `Y2` is shorthand for `Year 2` (*Classroom of the Elite: Year 2 (Light Novel) Vol. 1* by `Syougo Kinugasa & Tomoseshunsaku`), which only matches after expanding `Y2` → `Year 2` and matching the post-colon subtitle `Year 2` after stripping `(Light Novel) Vol. 1` when the author matches.
+14. **Single-word generic / junk titles (`me`, `shadow`, `Communication`, `Focus`):**
+    - Without a known author, searching a single generic word would match an unrelated book that happens to share that one-word title.
+
+### 3.2 Rules now enforced in `src/server/covers.ts` and `src/cli/index.ts`
+
+1. **Title normalisation and candidate generation (`cleanTitle`, `buildBookTitleCandidates`, `bookTitleMatches`):**
+   - Strip `(Unabridged)`, `(Abridged)`, `(1 of 5)`, `[2 of 10]`, `(Part 1)`, `(Book 2)`, `(Light Novel)`, `(Booktrack Edition)`, `[Dramatized Adaptation]`, trailing `, Part One` / `Vol. 1`, and trailing adaptation dash suffixes (`- BBC 1996 Radio Drama…`, `- Booktrack Edition`).
+   - Strip `[01]`-style bracketed series markers (`Series [01] Title` → `Title`).
+   - Split `"Author - Title"` prefixes when the left side looks like an author name, requiring the store result's author to match that embedded author.
+   - Generate fallback candidates with subtitles after `:` removed and with trailing `Trilogy` / `Omnibus` / `Box Set` / `Collection` stripped.
+   - Compare titles with optional leading article (`The `, `A `, `An `) stripped on multi-word titles, and treat mojibake (`¿`, `\uFFFD`, intra-word `?`) as a 1–2 character alphanumeric wildcard while falling back to an author-scoped query when the title token is corrupted.
+   - Expand `Y<n>` shorthand to `Year <n>` when a valid author is known.
+2. **Author list parsing and matching (`parseBookAuthors`, `bookAuthorsMatch`):**
+   - Split author lists on `,`, `&`, `;`, `/`, and ` and `.
+   - Drop role segments (`- translator`, `(narrator)`, `read by …`, etc.) and known narrators from `mediaMetadata.narrators`.
+   - Ignore obvious non-authors (publisher and folder names such as `GraphicAudio`, `Downloads`, `Audible Studios`, `Unknown`, etc.) instead of failing.
+   - Accept an author match when **any** listed person matches **any** candidate author (surname match plus compatible first initial / 1-edit given name such as `Herman` ↔ `Hermann` and `R.F. Kuang` ↔ `R. F. Kuang`).
+3. **Authorless searches and junk-title guard (`isDistinctiveTitleWithoutAuthor`):**
+   - When no valid author is known (empty or ignored non-author, and no `"Author - Title"` prefix), require a multi-word title (`>= 2` non-article words and `>= 6` characters) so single-word junk titles (`me`, `shadow`, `Communication`, `Focus`) stay uncovered without hitting the network.
+   - Require a strong (full cleaned) title match and accept only when the top non-summary result matches or there is a single clear result.
+4. **Summary and analysis rejection (`isSummaryOrAnalysis`):**
+   - Reject results whose title or author indicates a third-party summary, study guide, or analysis (`Summary of …`, `Book Analysis`, `Study Guide`, `Concise …`, `by Bright Summaries`, `Swift Reads`, `Abbey Beathan`, `Everest Media`, `SparkNotes`, `Instaread`, `Blinkist`, etc.).
+5. **CLI `covers backfill [--limit <n>] [--retry-missing]`:**
+   - Excludes `daily_stat` and untitled orphan `media_progress` rows from candidate discovery.
+   - `--retry-missing` ignores cached `.none` negative entries once so previously missed items are re-evaluated.
+   - Prints a per-work status line before the summary: `<title>: found (itunes|openlibrary|abs)` or `<title>: not found (<reason>)`.
