@@ -70,6 +70,7 @@ import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
 import { getYoutubeThumb, isValidYoutubeVideoId } from "./thumbs.ts";
 import { handleYoutubePlays } from "./ingest.ts";
+import { registerLookupRoutes } from "./lookup-routes.ts";
 import { registerV2Routes } from "./v2-routes.ts";
 
 export interface AppDeps {
@@ -963,6 +964,7 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ runs });
   });
 
+  registerLookupRoutes(app, deps);
   registerV2Routes(app, deps);
 
   // Fallback for unknown /api routes

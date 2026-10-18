@@ -40,8 +40,10 @@ is a POST by protocol):
 - **Series → TVmaze** (`https://api.tvmaze.com`): `/search/shows`, `/shows/:id/seasons`,
   `/shows/:id/episodes` (sum the real per-episode runtimes for `total_minutes`). External ids: `tvmaze`,
   `imdb`, `thetvdb`.
-- **Films → iTunes Search** (`https://itunes.apple.com/search?media=movie`, `/lookup?id=`): runtime
-  from `trackTimeMillis`, artwork from `artworkUrl100` upscaled to 600x600. External id: `itunes`.
+- **Films → Cinemeta** (`https://v3-cinemeta.strem.io`, keyless, IMDb ids; also a second source for
+  series), then **iTunes Search** as a fallback (its `media=movie` search returned nothing in October
+  2026; `/lookup?id=` works): runtime from `trackTimeMillis`, artwork from `artworkUrl100` upscaled to
+  600x600. External ids: `imdb`, `itunes`.
 - **Books → Open Library** (reuse `src/server/openlibrary.ts` helpers where it fits): `search.json`,
   works/editions for pages (`number_of_pages_median`), covers by `cover_i`. External ids: `openlibrary`,
   `isbn` when present.
