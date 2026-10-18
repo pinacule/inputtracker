@@ -15,6 +15,7 @@ import { openDb } from "../src/core/db.ts";
 import { createApp } from "../src/server/app.ts";
 import type { CalendarResult, StatsResult } from "../src/server/aggregate.ts";
 import type { SearchResult } from "../src/server/search.ts";
+import { playToEvent, YOUTUBE_MUSIC_PACKAGES } from "../src/server/ingest.ts";
 
 const TOKEN = "synthetic-ingest-token-0123456789abcdef"; // 39 chars, fake
 const NOW = Date.parse("2026-10-17T18:03:00.000Z");
@@ -490,5 +491,61 @@ describe("POST /api/ingest/youtube-plays", () => {
     expect(searchRes.status).toBe(200);
     const search = (await searchRes.json()) as SearchResult;
     expect(search.hits.some((h) => h.title === "Synthetic Video Trick" && h.source === "youtube")).toBe(true);
+  });
+
+  test("YouTube Music plays are ingested with media_type = music", async () => {
+    const { app } = appWithConfig();
+    const res = await post(
+      validBody([
+        validPlay({
+          app: "com.google.android.apps.youtube.music",
+          title: "Synthetic Song",
+          channel: "Synthetic Artist",
+        }),
+      ]),
+      { app }
+    );
+    expect(res.status).toBe(200);
+
+    const rows = db
+      .query<{ media_type: string; title: string; parent_title: string | null }, []>(
+        "SELECT media_type, title, parent_title FROM events WHERE source_kind = 'phone_play';"
+      )
+      .all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].media_type).toBe("music");
+    expect(rows[0].title).toBe("Synthetic Song");
+    expect(rows[0].parent_title).toBe("Synthetic Artist");
+  });
+});
+
+describe("playToEvent media_type mapping", () => {
+  test("YouTube Music package → music; YouTube and ReVanced → video", () => {
+    expect(YOUTUBE_MUSIC_PACKAGES.has("com.google.android.apps.youtube.music")).toBe(true);
+
+    const makePlay = (app: string) => ({
+      play_id: "0d1f6a2b-9c4e-4a1e-b2f2-5b1f5f5f5f5f",
+      app,
+      title: "Synthetic Track",
+      channel: "Synthetic Band",
+      video_id: "aaaaaaaaaaa",
+      started_at: "2026-10-17T18:02:11.000Z",
+      ended_at: "2026-10-17T18:08:23.000Z",
+      watched_seconds: 420,
+      media_duration_seconds: 900,
+      last_position_seconds: 412,
+    });
+
+    const musicEvent = playToEvent(makePlay("com.google.android.apps.youtube.music"), "phone");
+    expect(musicEvent.media_type).toBe("music");
+    expect(musicEvent.parent_title).toBe("Synthetic Band");
+
+    const ytEvent = playToEvent(makePlay("com.google.android.youtube"), "phone");
+    expect(ytEvent.media_type).toBe("video");
+    expect(ytEvent.parent_title).toBe("Synthetic Band");
+
+    const revancedEvent = playToEvent(makePlay("app.revanced.android.youtube"), "phone");
+    expect(revancedEvent.media_type).toBe("video");
+    expect(revancedEvent.parent_title).toBe("Synthetic Band");
   });
 });

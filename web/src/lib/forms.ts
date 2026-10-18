@@ -16,6 +16,7 @@ export const MEDIA_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }>
   { value: "audiobook", label: "Audiobook" },
   { value: "podcast_episode", label: "Podcast episode" },
   { value: "video", label: "Video" },
+  { value: "music", label: "Music" },
   { value: "other", label: "Other" },
 ];
 

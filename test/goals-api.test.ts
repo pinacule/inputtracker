@@ -331,4 +331,26 @@ describe("Goals API (/api/goals)", () => {
     const postJson = (await postRes.json()) as { error: string };
     expect(postJson.error).toContain("Unknown query parameter: 'extra'");
   });
+
+  test("creates a goal with media_type = music", async () => {
+    const app = createApp({ db, config });
+    const res = await app.request("/api/goals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        year: 2026,
+        metric: "items",
+        target: 50,
+        media_type: "music",
+      }),
+    });
+    expect(res.status).toBe(201);
+    const created = (await res.json()) as { inserted: boolean; goal_id: string };
+    expect(created.inserted).toBe(true);
+
+    const getRes = await app.request("/api/goals?year=2026");
+    expect(getRes.status).toBe(200);
+    const body = (await getRes.json()) as { goals: GoalWithProgress[] };
+    expect(body.goals.some((g) => g.media_type === "music" && g.target === 50)).toBe(true);
+  });
 });

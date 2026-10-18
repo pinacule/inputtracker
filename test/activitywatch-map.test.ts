@@ -435,4 +435,37 @@ describe("mapBucketEvents", () => {
       total_seconds: 181,
     });
   });
+
+  test("music.youtube.com with includeMusic maps to music, www.youtube.com to video", () => {
+    const rawEvents: AwRawEvent[] = [
+      {
+        timestamp: "2026-10-17T18:00:00.000Z",
+        duration: 120,
+        data: {
+          url: `https://music.youtube.com/watch?v=${FAKE_VID_1}`,
+          title: "Synthetic Song - YouTube Music",
+          audible: true,
+        },
+      },
+      {
+        timestamp: "2026-10-17T18:05:00.000Z",
+        duration: 120,
+        data: {
+          url: `https://www.youtube.com/watch?v=${FAKE_VID_2}`,
+          title: "Synthetic Video - YouTube",
+          audible: true,
+        },
+      },
+    ];
+
+    const mapped = mapBucketEvents(rawEvents, { ...options, includeMusic: true });
+    expect(mapped).toHaveLength(2);
+    expect(mapped[0].media_type).toBe("music");
+    expect(mapped[0].title).toBe("Synthetic Song");
+    expect(mapped[0].parent_title).toBeNull();
+
+    expect(mapped[1].media_type).toBe("video");
+    expect(mapped[1].title).toBe("Synthetic Video");
+    expect(mapped[1].parent_title).toBeNull();
+  });
 });

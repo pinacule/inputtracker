@@ -29,13 +29,14 @@ export function normalizeForSearch(s: string): string {
     .trim();
 }
 
-/** The seven media types the server accepts on `/api/search`. */
+/** The media types the server accepts on `/api/search`. */
 export const SEARCH_MEDIA_TYPES: readonly string[] = [
   "audiobook",
   "podcast_episode",
   "movie",
   "episode",
   "video",
+  "music",
   "book",
   "other",
 ];

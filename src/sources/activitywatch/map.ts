@@ -77,6 +77,20 @@ export function extractVideoId(
 }
 
 /**
+ * Checks if a URL host is music.youtube.com.
+ */
+export function isMusicUrl(urlStr: string | undefined | null): boolean {
+  if (!urlStr || typeof urlStr !== "string") {
+    return false;
+  }
+  try {
+    return new URL(urlStr).hostname.toLowerCase() === "music.youtube.com";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Cleans a tab title by removing leading notification counts like "(3) "
  * and trailing " - YouTube" or " - YouTube Music". Returns null if empty.
  */
@@ -237,11 +251,13 @@ export function mapBucketEvents(
     const audible_seconds = Math.round(audibleDuration * 1000) / 1000;
     const total_seconds = Math.round(totalDuration * 1000) / 1000;
 
+    const isMusic = play.events.some((ev) => isMusicUrl(ev.data?.url));
+
     result.push({
       source: "youtube",
       source_kind: "aw_play",
       source_id: `${play.videoId}:${started_at}`,
-      media_type: "video",
+      media_type: isMusic ? "music" : "video",
       title,
       parent_title: null,
       started_at,

@@ -38,6 +38,11 @@ const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 const ISO_MS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Android package names recognized as YouTube Music. */
+export const YOUTUBE_MUSIC_PACKAGES: ReadonlySet<string> = new Set([
+  "com.google.android.apps.youtube.music",
+]);
+
 export interface YoutubePlay {
   play_id: string;
   app: string;
@@ -309,7 +314,7 @@ export function playToEvent(play: YoutubePlay, device: string): NewEvent {
     source_kind: "phone_play",
     source_id: play.play_id,
     external_ids,
-    media_type: "video",
+    media_type: YOUTUBE_MUSIC_PACKAGES.has(play.app) ? "music" : "video",
     title: play.title,
     parent_title: play.channel,
     season: null,
@@ -332,6 +337,44 @@ export function playToEvent(play: YoutubePlay, device: string): NewEvent {
       last_position_seconds: play.last_position_seconds,
     },
   };
+}
+
+export interface RemapResult {
+  total: number;
+  remapped: number;
+}
+
+/**
+ * Re-map already stored phone plays through the current `playToEvent` rules
+ * (append-only, no UPDATE). Every `events_latest` row with
+ * `source_kind = 'phone_play'` is rebuilt from its stored `raw` — written by
+ * `playToEvent` from validated fields, so `parsePlay` accepts it unchanged —
+ * and inserted with `INSERT OR IGNORE` inside one ingest run. A play whose
+ * mapping didn't change hashes the same and inserts nothing; a changed one
+ * becomes a new row that `events_latest` then picks.
+ */
+export function remapPhonePlays(db: Database): RemapResult {
+  const rows = db
+    .query<{ raw: string | null; device: string | null }, []>(
+      "SELECT raw, device FROM events_latest WHERE source_kind = 'phone_play' ORDER BY id ASC;"
+    )
+    .all();
+  const events = rows.map((row, index) =>
+    playToEvent(parsePlay(JSON.parse(row.raw ?? "null"), index), row.device ?? "")
+  );
+
+  const runId = startRun(db, "youtube", "remap");
+  try {
+    const { inserted } = insertEvents(db, runId, events);
+    finishRun(db, runId, { status: "ok", rowsSeen: rows.length, rowsInserted: inserted });
+    return { total: rows.length, remapped: inserted };
+  } catch (error) {
+    finishRun(db, runId, {
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 export interface IngestHandlerDeps {
