@@ -16,6 +16,9 @@ LIMIT_RE='429|RESOURCE_EXHAUSTED|[Qq]uota|[Rr]ate.?limit|credits balance|[Ee]xha
 if [[ "$MODEL" == google-vertex/* ]]; then
   export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
   export VERTEX_LOCATION="${VERTEX_LOCATION:-global}"
+  # Thinking level is sent explicitly (tested: high thinks ~30x longer than low on the same question).
+  lvl="${THINKING_LEVEL:-high}"
+  export OPENCODE_CONFIG_CONTENT="{\"provider\":{\"google-vertex\":{\"models\":{\"${MODEL#google-vertex/}\":{\"options\":{\"thinkingConfig\":{\"thinkingLevel\":\"$lvl\"}}}}}}}"
 fi
 
 case "$WORKER" in
@@ -33,7 +36,7 @@ antigravity)
 opencode)
   extra=(); [ -n "$RESUME" ] && extra=(--session "$RESUME")
   out="$T/oc.jsonl"; : > "$out"
-  timeout 45m "$REPO/scripts/jail.sh" "$WT" opencode run --standalone --auto --format json \
+  timeout "${WORKER_TIMEOUT:-45m}" "$REPO/scripts/jail.sh" "$WT" opencode run --standalone --auto --format json \
     --model "$MODEL" --title "$TASK" "${extra[@]}" "$PROMPT" > "$out" 2> "$T/oc.err" &
   pid=$!
   # Stall watch: no new output for 10 minutes -> stuck.
@@ -42,7 +45,7 @@ opencode)
     sleep 30
     s=$(stat -c %s "$out" 2>/dev/null || echo 0)
     if [ "$s" != "$size" ]; then size=$s; last=$(now)
-    elif [ $(( $(now) - last )) -gt 600 ]; then stalled=1; kill $pid; sleep 5; kill -9 $pid 2>/dev/null; break; fi
+    elif [ $(( $(now) - last )) -gt "${STALL_SECONDS:-600}" ]; then stalled=1; kill $pid; sleep 5; kill -9 $pid 2>/dev/null; break; fi
   done
   wait $pid; rc=$?; echo "$rc" > "$T/exit"
   head -1 "$out" | jq -r '.sessionID // empty' 2>/dev/null > "$T/session"
