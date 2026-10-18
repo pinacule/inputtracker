@@ -200,6 +200,24 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    name: "archive_tombstones",
+    up: (db: Database) => {
+      db.run("DROP VIEW IF EXISTS events_latest;");
+      db.run(`
+        CREATE VIEW events_latest AS
+        SELECT *
+        FROM events
+        WHERE id IN (
+          SELECT MAX(id)
+          FROM events
+          GROUP BY source, source_kind, source_id
+        )
+        AND COALESCE(json_extract(raw, '$.deleted'), 0) = 0;
+      `);
+    },
+  },
 ];
 
 export function migrate(db: Database): void {
