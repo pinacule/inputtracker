@@ -1348,9 +1348,20 @@ async function refreshSingleArchiveEntry(
       ? (workObj["external_ids"] as Record<string, string>)
       : {};
 
+  // The stored page count describes the user's own edition (from the add form or an import), so
+  // a refresh keeps it; and a value the provider lacks never wipes a known one (a book whose
+  // Open Library entry has no page count must not drop to 0 h).
+  const prevPages = typeof workObj?.["pages"] === "number" ? (workObj["pages"] as number) : null;
+  const prevRuntime =
+    typeof workObj?.["runtime_minutes"] === "number" ? (workObj["runtime_minutes"] as number) : null;
   const nextWork: WorkDetails = {
     ...freshWork,
     category: existingCategory,
+    pages: prevPages !== null && prevPages > 0 ? prevPages : freshWork.pages,
+    runtime_minutes:
+      freshWork.runtime_minutes !== null && freshWork.runtime_minutes > 0
+        ? freshWork.runtime_minutes
+        : prevRuntime,
     external_ids: {
       ...existingExtIds,
       ...freshWork.external_ids,

@@ -107,3 +107,56 @@ describe("bulk archive refresh-metadata keeps going when a provider fails", () =
     expect(waits).toContain(30_000);
   });
 });
+
+describe("refresh keeps the user's book edition", () => {
+  test("a refreshed book keeps its stored page count when the provider has none", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "it-refresh-book-"));
+    const dbPath = join(dir, "inputtracker.db");
+    const db = openDb(dbPath);
+    const base = loadConfig({ env: {}, path: join(dir, "missing.toml") });
+    const config = {
+      ...base,
+      storage: { ...base.storage, db_path: dbPath },
+      metadata: { ...base.metadata, enabled: true, openlibrary_url: "https://openlibrary.invalid" },
+    } as Config;
+    try {
+      saveArchiveEntry(
+        db,
+        {
+          entry_id: "33333333-3333-4333-8333-333333333333",
+          work: {
+            provider: "openlibrary",
+            provider_id: "OL1W",
+            category: "book",
+            title: "Synthetic Short Stories",
+            original_title: null,
+            year: 1886,
+            cover_url: null,
+            creators: ["Synthetic Author"],
+            genres: [],
+            description: null,
+            seasons: [],
+            runtime_minutes: null,
+            pages: 300,
+            external_ids: {},
+          },
+          consumed: { progress: 1 },
+          when: { precision: "unknown" },
+        },
+        "Europe/Bratislava"
+      );
+      const fetchMock = (async (input: unknown) => {
+        const url = String(input);
+        if (url.includes("/works/OL1W")) return json({ key: "/works/OL1W", title: "Synthetic Short Stories" });
+        return json({}, 404);
+      }) as unknown as typeof fetch;
+      const [res] = await refreshAllArchiveMetadata(db, { config, fetch: fetchMock, dryRun: true, sleep: async () => {} });
+      expect(res?.error).toBeUndefined();
+      expect(res?.minutes_after).toBeCloseTo(res?.minutes_before ?? -1, 5);
+      expect(res?.minutes_after).toBeGreaterThan(0);
+    } finally {
+      db.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
