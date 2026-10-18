@@ -20,6 +20,7 @@ import type {
 } from "../api";
 import { isCategory } from "./categories";
 import { formatLocalDay } from "./format-date";
+import { validateRating10 } from "./rating";
 import { formatMinutes } from "./stats";
 
 const SHORT_MONTHS = [
@@ -90,8 +91,19 @@ export function formatArchiveDuration(
  */
 export function computeArchivePreview(
   work: WorkDetails | ManualWork,
-  consumed: ArchiveConsumed
+  consumed: ArchiveConsumed,
+  status?: "finished" | "in_progress" | "dropped" | "planned"
 ): ArchiveTimePreview {
+  if (status === "planned") {
+    return {
+      totalMinutes: 0,
+      estimated: false,
+      units: 0,
+      seasonsCount: 0,
+      episodesCount: 0,
+      summaryText: "Planned · 0m (Watchlist)",
+    };
+  }
   const hasOverride =
     consumed.minutes_override !== undefined &&
     consumed.minutes_override !== null &&
@@ -467,6 +479,7 @@ export interface BuildArchiveRequestInput {
   when: ArchiveWhen;
   rating?: number | null;
   note?: string | null;
+  status?: "finished" | "in_progress" | "dropped" | "planned";
 }
 
 export type BuildArchiveRequestResult =
@@ -490,10 +503,28 @@ export function buildArchiveRequest(
     errors.push("Work title is required.");
   }
 
+  const isPlanned = input.status === "planned";
+
   // Validate consumed based on category
   const consumed: ArchiveConsumed = {};
 
-  if (
+  if (isPlanned) {
+    // Planned (watchlist) works count 0 time; keep consumed minimal
+    if (
+      (work.category === "anime" || work.category === "series") &&
+      work.seasons.length > 0
+    ) {
+      consumed.seasons = [];
+    } else if (
+      work.category === "film" ||
+      work.category === "anime" ||
+      work.category === "series"
+    ) {
+      consumed.times = 1;
+    } else {
+      consumed.progress = 0;
+    }
+  } else if (
     (work.category === "anime" || work.category === "series") &&
     work.seasons.length > 0
   ) {
@@ -543,6 +574,7 @@ export function buildArchiveRequest(
   }
 
   if (
+    !isPlanned &&
     input.consumed.minutes_override !== undefined &&
     input.consumed.minutes_override !== null
   ) {
@@ -555,7 +587,7 @@ export function buildArchiveRequest(
   }
 
   // Validate When
-  const precision = input.when.precision;
+  const precision = isPlanned ? "unknown" : input.when.precision;
   const when: ArchiveWhen = { precision };
 
   if (precision !== "unknown") {
@@ -580,17 +612,14 @@ export function buildArchiveRequest(
     }
   }
 
-  // Validate optional rating & note
+  // Validate optional rating (0..10 with at most one decimal) & note
   let rating: number | null | undefined = undefined;
   if (input.rating !== undefined && input.rating !== null) {
-    if (
-      !Number.isInteger(input.rating) ||
-      input.rating < 1 ||
-      input.rating > 10
-    ) {
-      errors.push("Rating must be a whole number between 1 and 10.");
-    } else {
-      rating = input.rating;
+    const ratingCheck = validateRating10(input.rating);
+    if (!ratingCheck.ok) {
+      errors.push(ratingCheck.error);
+    } else if (ratingCheck.rating !== null) {
+      rating = ratingCheck.rating;
     }
   }
 
@@ -625,6 +654,9 @@ export function buildArchiveRequest(
   }
   if (note !== undefined) {
     request.note = note;
+  }
+  if (input.status !== undefined) {
+    request.status = input.status;
   }
 
   return { ok: true, request };

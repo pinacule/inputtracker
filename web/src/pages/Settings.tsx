@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import {
   getSettings,
   getSyncStatus,
+  importAchriom,
   importFile,
   syncNow,
   syncSimklNow,
+  type AchriomImportResult,
   type ImportResult,
+  type LibraryWork,
   type MetaProvider,
   type SettingsView,
   type SimklSyncResult,
@@ -13,36 +16,43 @@ import {
   type SyncNowResult,
   type SyncRun,
 } from "../api";
+import { categoryLabel } from "../lib/categories";
+import {
+  readIncludeYoutubeInAll,
+  saveIncludeYoutubeInAll,
+} from "../lib/category-filter";
 import { DEFAULT_TIMEZONE, formatDateTime } from "../lib/format-date";
 import { describeImport } from "../lib/forms";
 import { sourceLabel } from "../lib/sources";
+import { formatMinutes } from "../lib/stats";
 import {
+  DARK_THEMES,
   readThemePreference,
   saveThemePreference,
-  type ThemeMode,
+  type DarkThemeId,
 } from "../lib/theme";
+import {
+  fetchHiddenWorksGraceful,
+  performWorkEdit,
+  pushToast,
+  subscribeWorkEdits,
+} from "../lib/work-edits";
 import {
   Badge,
   Button,
   Card,
+  CheckIcon,
+  Cover,
   ImportExportIcon,
-  MoonIcon,
   Skeleton,
-  SunIcon,
-  Tabs,
-  type TabOption,
 } from "../ui";
 
 export interface SettingsProps {
-  theme?: ThemeMode;
-  onThemeChange?: (theme: ThemeMode) => void;
+  theme?: DarkThemeId;
+  onThemeChange?: (theme: DarkThemeId) => void;
+  includeYoutubeInAll?: boolean;
+  onIncludeYoutubeChange?: (include: boolean) => void;
 }
-
-const THEME_OPTIONS: ReadonlyArray<TabOption<ThemeMode>> = [
-  { value: "system", label: "System" },
-  { value: "light", label: "Light", icon: <SunIcon size={14} /> },
-  { value: "dark", label: "Dark", icon: <MoonIcon size={14} /> },
-];
 
 const PROVIDER_LABELS: Readonly<Record<MetaProvider, string>> = {
   anilist: "AniList (Anime)",
@@ -54,7 +64,12 @@ const PROVIDER_LABELS: Readonly<Record<MetaProvider, string>> = {
 };
 
 export function formatBytes(bytes: number | null | undefined): string {
-  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) {
+  if (
+    bytes === null ||
+    bytes === undefined ||
+    !Number.isFinite(bytes) ||
+    bytes < 0
+  ) {
     return "—";
   }
   if (bytes < 1024) {
@@ -68,15 +83,25 @@ export function formatBytes(bytes: number | null | undefined): string {
   return `${Math.round(mb * 10) / 10} MB`;
 }
 
-export function Settings({ theme, onThemeChange }: SettingsProps) {
+export function Settings({
+  theme,
+  onThemeChange,
+  includeYoutubeInAll,
+  onIncludeYoutubeChange,
+}: SettingsProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const achriomFileRef = useRef<HTMLInputElement>(null);
 
-  const [localTheme, setLocalTheme] = useState<ThemeMode>(() =>
+  const [localTheme, setLocalTheme] = useState<DarkThemeId>(() =>
     theme ?? readThemePreference()
+  );
+  const [localIncludeYt, setLocalIncludeYt] = useState<boolean>(() =>
+    includeYoutubeInAll ?? readIncludeYoutubeInAll()
   );
 
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [runs, setRuns] = useState<SyncRun[]>([]);
+  const [hiddenWorks, setHiddenWorks] = useState<LibraryWork[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusError, setStatusError] = useState<string | null>(null);
 
@@ -89,10 +114,20 @@ export function Settings({ theme, onThemeChange }: SettingsProps) {
   const [simklResult, setSimklResult] = useState<SimklSyncResult | null>(null);
   const [simklError, setSimklError] = useState<string | null>(null);
 
-  // Import state
+  // Native / Takeout Import state
   const [uploading, setUploading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // Achriom Import state (upload -> dry-run summary -> import)
+  const [achriomFile, setAchriomFile] = useState<File | null>(null);
+  const [achriomBusy, setAchriomBusy] = useState<"dry-run" | "import" | null>(
+    null
+  );
+  const [achriomResult, setAchriomResult] =
+    useState<AchriomImportResult | null>(null);
+  const [achriomError, setAchriomError] = useState<string | null>(null);
+  const [showAllSkipped, setShowAllSkipped] = useState(false);
 
   useEffect(() => {
     if (theme) {
@@ -100,17 +135,30 @@ export function Settings({ theme, onThemeChange }: SettingsProps) {
     }
   }, [theme]);
 
+  useEffect(() => {
+    if (includeYoutubeInAll !== undefined) {
+      setLocalIncludeYt(includeYoutubeInAll);
+    }
+  }, [includeYoutubeInAll]);
+
+  const loadHidden = async () => {
+    const list = await fetchHiddenWorksGraceful();
+    setHiddenWorks(list);
+  };
+
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [settingsRes, syncRes] = await Promise.all([
+      const [settingsRes, syncRes, hiddenRes] = await Promise.all([
         getSettings().catch(() => null),
         getSyncStatus().catch(() => ({ runs: [] as SyncRun[] })),
+        fetchHiddenWorksGraceful(),
       ]);
       if (settingsRes) {
         setSettings(settingsRes);
       }
       setRuns(syncRes.runs ?? []);
+      setHiddenWorks(hiddenRes);
       setStatusError(null);
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : String(err));
@@ -121,12 +169,21 @@ export function Settings({ theme, onThemeChange }: SettingsProps) {
 
   useEffect(() => {
     void loadAll();
+    return subscribeWorkEdits(() => {
+      void loadHidden();
+    });
   }, []);
 
-  const handleThemeSelect = (next: ThemeMode) => {
+  const handleThemeSelect = (next: DarkThemeId) => {
     const saved = saveThemePreference(next);
     setLocalTheme(saved);
     onThemeChange?.(saved);
+  };
+
+  const handleToggleIncludeYoutube = (next: boolean) => {
+    const saved = saveIncludeYoutubeInAll(next);
+    setLocalIncludeYt(saved);
+    onIncludeYoutubeChange?.(saved);
   };
 
   const handleSyncAbs = async () => {
@@ -184,9 +241,52 @@ export function Settings({ theme, onThemeChange }: SettingsProps) {
     }
   };
 
+  const handleAchriomRun = async (dryRun: boolean) => {
+    const file = achriomFile ?? achriomFileRef.current?.files?.[0] ?? null;
+    if (!file) {
+      setAchriomError("Choose an Achriom .zip or .csv export file first.");
+      return;
+    }
+
+    setAchriomBusy(dryRun ? "dry-run" : "import");
+    setAchriomError(null);
+    setShowAllSkipped(false);
+
+    try {
+      const res = await importAchriom(file, { dryRun });
+      setAchriomResult(res);
+      if (!dryRun) {
+        pushToast({
+          message: `Achriom import complete: ${res.created} created, ${res.updated} updated`,
+          variant: "success",
+        });
+        await loadAll();
+      }
+    } catch (err) {
+      setAchriomError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAchriomBusy(null);
+    }
+  };
+
+  const handleUnhideWork = async (work: LibraryWork) => {
+    await performWorkEdit(
+      work.key,
+      { hidden: false },
+      {
+        title: work.title,
+        category: work.category,
+      }
+    );
+    setHiddenWorks((prev) => prev.filter((w) => w.key !== work.key));
+    pushToast({
+      message: `Restored “${work.title}” to your library`,
+      variant: "success",
+    });
+  };
+
   const tz = settings?.timezone ?? DEFAULT_TIMEZONE;
 
-  // Build effective sources list combining `settings.sources` with default known sources
   const effectiveSources: SourceStatus[] = settings?.sources?.length
     ? settings.sources
     : [
@@ -216,7 +316,8 @@ export function Settings({ theme, onThemeChange }: SettingsProps) {
           enabled: true,
           host: null,
           last_sync_at:
-            runs.find((r) => r.source === "youtube-takeout")?.started_at ?? null,
+            runs.find((r) => r.source === "youtube-takeout")?.started_at ??
+            null,
           last_status: null,
           last_error: null,
           can_sync_now: false,
@@ -227,38 +328,332 @@ export function Settings({ theme, onThemeChange }: SettingsProps) {
     <section class="page-container settings-page" aria-label="Settings">
       <header class="page-header">
         <div class="page-header-titles">
-          <span class="page-eyebrow">Configuration & Data</span>
           <h1>Settings</h1>
           <p class="page-subtitle">
-            Appearance, connected sources, manual sync triggers, backups, and
-            metadata lookup providers.
+            Dark themes, YouTube filtering, Achriom & Takeout imports, hidden
+            works, connected sources, and backups.
           </p>
         </div>
       </header>
 
-      {/* 1. Appearance */}
+      {/* 1. Appearance (Dark Theme Swatch Cards + Include YouTube in All) */}
       <Card
         padding="md"
-        title="Appearance"
-        subtitle="Warm linen light paper or deep espresso charcoal dark study"
+        title="Appearance & Preferences"
+        subtitle="Five WCAG-AA dark themes applied before first paint"
       >
-        <div class="settings-row-between">
-          <div>
-            <strong>Colour Theme</strong>
-            <p class="ui-text-muted">
-              Stored in this browser&apos;s local storage (`inputtracker.theme`).
-            </p>
+        <div class="ui-form-stack">
+          <div
+            class="theme-swatches-grid"
+            role="radiogroup"
+            aria-label="Dark colour theme"
+          >
+            {DARK_THEMES.map((t) => {
+              const isSelected = localTheme === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  class={
+                    isSelected
+                      ? "theme-swatch-card theme-swatch-card--active"
+                      : "theme-swatch-card"
+                  }
+                  onClick={() => handleThemeSelect(t.id)}
+                >
+                  <div
+                    class="theme-swatch-preview"
+                    style={{
+                      backgroundColor: t.swatches.canvas,
+                      borderColor: t.swatches.border,
+                    }}
+                    aria-hidden="true"
+                  >
+                    <div
+                      class="theme-swatch-surface"
+                      style={{
+                        backgroundColor: t.swatches.surface,
+                        borderColor: t.swatches.border,
+                      }}
+                    >
+                      <span
+                        class="theme-swatch-text"
+                        style={{ color: t.swatches.textPrimary }}
+                      >
+                        Aa
+                      </span>
+                      <span
+                        class="theme-swatch-pill"
+                        style={{
+                          backgroundColor: t.swatches.accent,
+                          color: t.swatches.canvas,
+                        }}
+                      />
+                    </div>
+                    <div class="theme-swatch-dots">
+                      <span
+                        style={{ backgroundColor: t.categories.anime.solid }}
+                      />
+                      <span
+                        style={{ backgroundColor: t.categories.series.solid }}
+                      />
+                      <span
+                        style={{ backgroundColor: t.categories.film.solid }}
+                      />
+                      <span
+                        style={{ backgroundColor: t.categories.book.solid }}
+                      />
+                    </div>
+                  </div>
+
+                  <div class="theme-swatch-info">
+                    <div class="theme-swatch-title-row">
+                      <strong>{t.label}</strong>
+                      {isSelected && (
+                        <span class="theme-swatch-check" aria-hidden="true">
+                          <CheckIcon size={14} />
+                        </span>
+                      )}
+                    </div>
+                    <span class="theme-swatch-desc">{t.description}</span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-          <Tabs
-            ariaLabel="Theme preference"
-            options={THEME_OPTIONS}
-            value={localTheme}
-            onChange={handleThemeSelect}
-          />
+
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <label
+                class="settings-toggle-title"
+                for="settings-include-youtube"
+              >
+                Include YouTube in &ldquo;All&rdquo; views
+              </label>
+              <p class="ui-text-muted">
+                When off (default), &ldquo;All&rdquo; in Calendar, Library,
+                Insights, and Review leaves out YouTube so video plays don&apos;t
+                crowd out books, films, series, and anime. YouTube always has
+                its own view by topic and channel.
+              </p>
+            </div>
+            <label class="ui-switch">
+              <input
+                id="settings-include-youtube"
+                type="checkbox"
+                checked={localIncludeYt}
+                onChange={(e) =>
+                  handleToggleIncludeYoutube(
+                    (e.currentTarget as HTMLInputElement).checked
+                  )
+                }
+              />
+              <span class="ui-switch-track" />
+            </label>
+          </div>
         </div>
       </Card>
 
-      {/* 2. Connected Sources & Sync */}
+      {/* 2. Achriom Library Import (upload -> dry-run summary -> import) */}
+      <Card
+        padding="md"
+        title="Import Achriom Library"
+        subtitle="Upload an achriom-library-YYYY-MM-DD.zip export or individual CSV (anime.csv, movies.csv, shows.csv, books.csv)"
+      >
+        <div class="ui-form-stack">
+          <div class="ui-form-field">
+            <label class="ui-form-label" for="settings-achriom-file">
+              Achriom export file (.zip or .csv)
+            </label>
+            <input
+              id="settings-achriom-file"
+              ref={achriomFileRef}
+              type="file"
+              accept=".zip,.csv"
+              class="ui-input"
+              onChange={(e) => {
+                const f =
+                  (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
+                setAchriomFile(f);
+                setAchriomResult(null);
+                setAchriomError(null);
+              }}
+            />
+          </div>
+
+          <div class="ui-form-actions">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={achriomBusy !== null}
+              leadingIcon={<ImportExportIcon size={15} />}
+              onClick={() => void handleAchriomRun(true)}
+            >
+              {achriomBusy === "dry-run"
+                ? "Checking Dry Run…"
+                : "1. Preview (Dry Run)"}
+            </Button>
+
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={achriomBusy !== null}
+              leadingIcon={<ImportExportIcon size={15} />}
+              onClick={() => void handleAchriomRun(false)}
+            >
+              {achriomBusy === "import"
+                ? "Importing…"
+                : "2. Import Achriom Archive"}
+            </Button>
+          </div>
+
+          {achriomError && (
+            <p class="ui-form-error" role="alert">
+              {achriomError}
+            </p>
+          )}
+
+          {achriomResult && (
+            <div class="achriom-result-box" role="status" aria-live="polite">
+              <div class="settings-row-between">
+                <strong>
+                  {achriomResult.dry_run
+                    ? "Dry-Run Preview Summary"
+                    : "Achriom Import Complete"}
+                </strong>
+                <Badge
+                  size="sm"
+                  variant={achriomResult.dry_run ? "warning" : "success"}
+                >
+                  {achriomResult.dry_run
+                    ? "Dry run — nothing written yet"
+                    : "Saved to archive"}
+                </Badge>
+              </div>
+
+              <div class="achriom-stats-grid tabular-nums">
+                <div class="achriom-stat-cell">
+                  <span class="ui-text-muted">New entries</span>
+                  <strong>{achriomResult.created}</strong>
+                </div>
+                <div class="achriom-stat-cell">
+                  <span class="ui-text-muted">Updated</span>
+                  <strong>{achriomResult.updated}</strong>
+                </div>
+                <div class="achriom-stat-cell">
+                  <span class="ui-text-muted">Unchanged</span>
+                  <strong>{achriomResult.unchanged}</strong>
+                </div>
+                <div class="achriom-stat-cell">
+                  <span class="ui-text-muted">Planned (Watchlist)</span>
+                  <strong>{achriomResult.planned}</strong>
+                </div>
+                <div class="achriom-stat-cell">
+                  <span class="ui-text-muted">Metadata matched</span>
+                  <strong>{achriomResult.matched}</strong>
+                </div>
+                <div class="achriom-stat-cell">
+                  <span class="ui-text-muted">Total time</span>
+                  <strong>{formatMinutes(achriomResult.total_minutes)}</strong>
+                </div>
+              </div>
+
+              {Object.keys(achriomResult.rows ?? {}).length > 0 && (
+                <div class="achriom-files-row tabular-nums">
+                  <span class="ui-text-muted">Rows per file:</span>
+                  {Object.entries(achriomResult.rows).map(([file, count]) => (
+                    <Badge key={file} size="sm" variant="neutral">
+                      {file}: {count}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {achriomResult.skipped && achriomResult.skipped.length > 0 && (
+                <div class="achriom-skipped-section">
+                  <div class="settings-row-between">
+                    <span class="ui-text-muted tabular-nums">
+                      Skipped rows ({achriomResult.skipped.length})
+                    </span>
+                    {achriomResult.skipped.length > 6 && (
+                      <button
+                        type="button"
+                        class="ui-inline-link"
+                        onClick={() => setShowAllSkipped((v) => !v)}
+                      >
+                        {showAllSkipped
+                          ? "Show fewer"
+                          : `Show all ${achriomResult.skipped.length}`}
+                      </button>
+                    )}
+                  </div>
+                  <ul class="achriom-skipped-list">
+                    {(showAllSkipped
+                      ? achriomResult.skipped
+                      : achriomResult.skipped.slice(0, 6)
+                    ).map((s, idx) => (
+                      <li key={`${s.file}-${s.title}-${idx}`}>
+                        <strong>{s.title || "(Untitled)"}</strong>{" "}
+                        <span class="ui-text-muted">
+                          ({s.file}) — {s.reason}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* 3. Hidden Works (Unhide) */}
+      <Card
+        padding="md"
+        title={`Hidden Works (${hiddenWorks.length})`}
+        subtitle="Hidden works are excluded from library, calendar, charts, and totals"
+      >
+        {hiddenWorks.length === 0 ? (
+          <p class="ui-text-muted">
+            No works are currently hidden. You can hide any work from its page
+            or right-click context menu.
+          </p>
+        ) : (
+          <ul class="library-archive-entries-list">
+            {hiddenWorks.map((work) => (
+              <li key={work.key} class="library-archive-entry-row">
+                <Cover
+                  src={work.cover_url}
+                  title={work.title}
+                  category={work.category}
+                  size="sm"
+                  aspect="square"
+                />
+                <div class="library-archive-entry-info">
+                  <strong>{work.title}</strong>
+                  <span class="ui-text-muted tabular-nums">
+                    {categoryLabel(work.category)}
+                    {work.total_minutes > 0
+                      ? ` · ${formatMinutes(work.total_minutes)}`
+                      : ""}
+                  </span>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void handleUnhideWork(work)}
+                >
+                  Unhide
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* 4. Connected Sources & Sync */}
       <Card
         padding="md"
         title="Sources & Sync"
@@ -398,11 +793,11 @@ export function Settings({ theme, onThemeChange }: SettingsProps) {
         )}
       </Card>
 
-      {/* 3. Import & Export */}
+      {/* 5. Native Backup & YouTube Takeout Import / Export */}
       <div class="insights-two-col">
         <Card
           padding="md"
-          title="Import Data"
+          title="Import Backup or YouTube Takeout"
           subtitle="Upload a native InputTracker backup (.json / .csv) or YouTube Takeout watch-history.json"
         >
           <div class="ui-form-stack">
@@ -447,7 +842,8 @@ export function Settings({ theme, onThemeChange }: SettingsProps) {
                       importResult.seen
                     } seen, ${importResult.inserted} inserted`}
                 {importResult.kind === "native" &&
-                (importResult.goals?.seen || importResult.annotations?.seen) ? (
+                (importResult.goals?.seen ||
+                  importResult.annotations?.seen) ? (
                   <>
                     {" "}
                     — goals{" "}
@@ -507,7 +903,7 @@ export function Settings({ theme, onThemeChange }: SettingsProps) {
         </Card>
       </div>
 
-      {/* 4. Metadata Providers & System Info */}
+      {/* 6. Metadata Providers & System Info */}
       <div class="insights-two-col">
         <Card
           padding="md"

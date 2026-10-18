@@ -345,7 +345,7 @@ describe("v2 router & legacy redirects (web/src/lib/router.ts)", () => {
 });
 
 describe("v2 theme storage & calendar cell summaries", () => {
-  test("readThemePreference and saveThemePreference persist theme modes", () => {
+  test("readThemePreference and saveThemePreference persist dark theme ids and fallback on legacy values", () => {
     const map = new Map<string, string>();
     const storage: ThemeStorageLike = {
       getItem: (k) => map.get(k) ?? null,
@@ -354,9 +354,12 @@ describe("v2 theme storage & calendar cell summaries", () => {
       },
     };
 
-    expect(readThemePreference(storage)).toBe("system");
-    saveThemePreference("dark", storage);
-    expect(readThemePreference(storage)).toBe("dark");
+    expect(readThemePreference(storage)).toBe("espresso");
+    saveThemePreference("midnight", storage);
+    expect(readThemePreference(storage)).toBe("midnight");
+    // Legacy "light" or "system" falls back to "espresso"
+    saveThemePreference("light", storage);
+    expect(readThemePreference(storage)).toBe("espresso");
   });
 
   test("summarizeDayCellV2 handles a day with 40 YouTube videos and 120-char titles without bloat", () => {

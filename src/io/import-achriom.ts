@@ -634,8 +634,10 @@ function parseDateValueToWhen(raw: string | undefined): ArchiveWhen | null {
 }
 
 /**
- * Extract `when` from `finished_at` / `last_watched_at` / `last_listened_at`
- * (day precision when present, else `unknown`). Never uses `created_at`.
+ * Extract `when` from `finished_at` / `last_watched_at` / `last_listened_at`, else `unknown`.
+ * Never uses `created_at`. A finish date says when a whole work ended, not that all of its
+ * hours happened that day, so a day is widened to its month: the time counts in that month's
+ * review and totals instead of piling onto one calendar day.
  */
 export function parseAchriomWhen(
   file: AchriomFileName,
@@ -658,7 +660,14 @@ export function parseAchriomWhen(
       break;
   }
 
-  return parseDateValueToWhen(rawDate) ?? { precision: "unknown" };
+  const when = parseDateValueToWhen(rawDate);
+  if (!when) {
+    return { precision: "unknown" };
+  }
+  if (when.precision === "day" && when.date) {
+    return { precision: "month", date: when.date.slice(0, 7) };
+  }
+  return when;
 }
 
 function extractCsvCoverUrl(row: Record<string, string>): string | null {

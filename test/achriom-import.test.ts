@@ -170,7 +170,7 @@ describe("Pure Achriom row → ArchiveRequest mapping", () => {
         finished_at: "2024-03-15T20:11:00Z",
         created_at: "2026-10-18T10:00:00Z",
       })
-    ).toEqual({ precision: "day", date: "2024-03-15" });
+    ).toEqual({ precision: "month", date: "2024-03" });
 
     expect(
       parseAchriomWhen("movies.csv", {
@@ -178,7 +178,7 @@ describe("Pure Achriom row → ArchiveRequest mapping", () => {
         last_watched_at: "2023-11-04",
         created_at: "2026-10-18",
       })
-    ).toEqual({ precision: "day", date: "2023-11-04" });
+    ).toEqual({ precision: "month", date: "2023-11" });
   });
 
   test("anime.csv: ignores airing status FINISHED, treats episodes_watched=0 on completed row as all episodes, and maps plan_to_watch to planned", () => {
@@ -279,8 +279,8 @@ describe("Pure Achriom row → ArchiveRequest mapping", () => {
       expect(finishedBook.request.rating).toBe(10);
       expect(finishedBook.request.note).toBe("Spice must flow");
       expect(finishedBook.request.when).toEqual({
-        precision: "day",
-        date: "2025-08-20",
+        precision: "month",
+        date: "2025-08",
       });
       expect(finishedBook.request.consumed).toEqual({ progress: 1 });
       expect(finishedBook.request.work.pages).toBe(412);
@@ -334,8 +334,8 @@ describe("Pure Achriom row → ArchiveRequest mapping", () => {
       expect(watchedMovie.request.status).toBe("finished");
       expect(watchedMovie.request.rating).toBe(9);
       expect(watchedMovie.request.when).toEqual({
-        precision: "day",
-        date: "2024-02-10",
+        precision: "month",
+        date: "2024-02",
       });
       expect(watchedMovie.request.consumed).toEqual({ times: 1 });
       expect(watchedMovie.request.work.runtime_minutes).toBe(164);

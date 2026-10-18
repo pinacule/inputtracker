@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   addEvent,
   deleteArchiveEntry,
+  editWork,
   getCalendar,
   getHeatmapDays,
   getHeatmapHours,
+  getHiddenWorks,
   getInProgress,
   getJson,
   getLibrary,
@@ -14,12 +16,17 @@ import {
   getSettings,
   getStats,
   getYearReviewV2,
+  getYoutubeOverview,
+  getYoutubeVideos,
+  importAchriom,
   importFile,
   listArchive,
   lookupSearch,
   lookupWork,
   postJson,
   saveArchiveEntry,
+  search,
+  setChannelTopic,
 } from "../web/src/api.ts";
 
 interface FetchCall {
@@ -377,5 +384,168 @@ describe("api.ts v2 endpoints (lookup, archive, library, series, review, setting
     expect(calls[1]?.url).toBe("/api/review/month?month=2026-10");
     expect(calls[2]?.url).toBe("/api/review/year?year=2026");
     expect(calls[3]?.url).toBe("/api/settings");
+  });
+
+  test("v2.1 endpoints: editWork, getHiddenWorks, getYoutubeOverview, getYoutubeVideos, setChannelTopic, importAchriom, and multi-category/exclude params", async () => {
+    mockFetch(() =>
+      jsonResponse({
+        key: "anime:synthetic-saga",
+        category: "anime",
+        title: "Synthetic Saga Renamed",
+        cover_url: null,
+        total_minutes: 1152,
+        units: 2,
+        first_at: "2021-01-01T12:00:00.000Z",
+        last_at: "2021-12-01T12:00:00.000Z",
+        status: "finished",
+        rating: 8.5,
+        sources: ["manual"],
+        edited: true,
+        channel: null,
+        topic: null,
+        seasons: [],
+        history: [],
+        note: "Synthetic note",
+      })
+    );
+
+    const edited = await editWork("anime:synthetic-saga", {
+      title: "Synthetic Saga Renamed",
+      rating: 8.5,
+      status: "finished",
+    });
+    expect(calls[0]?.url).toBe(
+      "/api/library/work/edit?key=anime%3Asynthetic-saga"
+    );
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(edited.rating).toBe(8.5);
+    expect(edited.edited).toBe(true);
+
+    mockFetch(() => jsonResponse({ works: [] }));
+    await getHiddenWorks();
+    expect(calls[1]?.url).toBe("/api/library/hidden");
+
+    mockFetch(() =>
+      jsonResponse({
+        from: "2026-10-01",
+        to: "2026-10-18",
+        total_minutes: 120,
+        videos: 5,
+        topics: [],
+        channels: [],
+        days: [],
+        short_plays_hidden: 2,
+        min_watch_minutes: 5,
+      })
+    );
+    await getYoutubeOverview();
+    await getYoutubeOverview({ from: "2026-10-01", to: "2026-10-18" });
+    expect(calls[2]?.url).toBe("/api/youtube");
+    expect(calls[3]?.url).toBe("/api/youtube?from=2026-10-01&to=2026-10-18");
+
+    mockFetch(() => jsonResponse({ videos: [], total: 0 }));
+    await getYoutubeVideos({
+      channel: "Synthetic Science",
+      topic: "Science & Technology",
+      q: "optics",
+      limit: 25,
+      offset: 0,
+    });
+    expect(calls[4]?.url).toBe(
+      "/api/youtube/videos?channel=Synthetic+Science&topic=Science+%26+Technology&q=optics&limit=25&offset=0"
+    );
+
+    mockFetch(() =>
+      jsonResponse({
+        ok: true,
+        channel: "Synthetic Science",
+        topic: "Education",
+      })
+    );
+    await setChannelTopic("Synthetic Science", "Education");
+    expect(calls[5]?.url).toBe("/api/youtube/channel-topic");
+    expect(calls[5]?.init?.method).toBe("POST");
+    expect(calls[5]?.init?.body).toBe(
+      JSON.stringify({ channel: "Synthetic Science", topic: "Education" })
+    );
+
+    mockFetch(() =>
+      jsonResponse({
+        dry_run: true,
+        rows: { "anime.csv": 12 },
+        created: 10,
+        unchanged: 2,
+        updated: 0,
+        planned: 3,
+        matched: 9,
+        skipped: [],
+        total_minutes: 4200,
+      })
+    );
+    const zipFile = new File(["PK..."], "achriom-library-2026-10-18.zip", {
+      type: "application/zip",
+    });
+    const dryRes = await importAchriom(zipFile, { dryRun: true });
+    expect(calls[6]?.url).toBe("/api/import/achriom?dry_run=1");
+    expect(calls[6]?.init?.method).toBe("POST");
+    expect(dryRes.dry_run).toBe(true);
+    expect(dryRes.created).toBe(10);
+
+    await importAchriom(zipFile, { dryRun: false });
+    expect(calls[7]?.url).toBe("/api/import/achriom");
+
+    // Multi-select category & exclude parameters across existing endpoints
+    mockFetch(() => jsonResponse({}));
+    await getLibrary({ category: ["anime", "film"], exclude: "youtube" });
+    await getCalendar("2026-10", {
+      category: ["anime", "series"],
+      exclude: "youtube",
+    });
+    await getSeries({
+      bucket: "week",
+      category: ["book", "audiobook"],
+      exclude: "youtube",
+    });
+    await getMonthReview("2026-10", {
+      category: "anime,film",
+      exclude: "youtube",
+    });
+    await getYearReviewV2(2026, { exclude: "youtube" });
+    await search({
+      q: "synthetic",
+      category: ["anime", "film"],
+      exclude: "youtube",
+    });
+    await getHeatmapDays("2026", { category: "anime,film" });
+    await getHeatmapHours("2026", { exclude: "youtube" });
+    await getStats({ category: ["film", "series"], exclude: "youtube" });
+
+    expect(calls[8]?.url).toBe(
+      "/api/library?category=anime%2Cfilm&exclude=youtube"
+    );
+    expect(calls[9]?.url).toBe(
+      "/api/calendar?month=2026-10&category=anime%2Cseries&exclude=youtube"
+    );
+    expect(calls[10]?.url).toBe(
+      "/api/series?bucket=week&category=book%2Caudiobook&exclude=youtube"
+    );
+    expect(calls[11]?.url).toBe(
+      "/api/review/month?month=2026-10&category=anime%2Cfilm&exclude=youtube"
+    );
+    expect(calls[12]?.url).toBe(
+      "/api/review/year?year=2026&exclude=youtube"
+    );
+    expect(calls[13]?.url).toBe(
+      "/api/search?q=synthetic&category=anime%2Cfilm&exclude=youtube"
+    );
+    expect(calls[14]?.url).toBe(
+      "/api/heatmap/days?year=2026&category=anime%2Cfilm"
+    );
+    expect(calls[15]?.url).toBe(
+      "/api/heatmap/hours?year=2026&exclude=youtube"
+    );
+    expect(calls[16]?.url).toBe(
+      "/api/stats?category=film%2Cseries&exclude=youtube"
+    );
   });
 });

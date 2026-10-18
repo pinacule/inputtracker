@@ -1,22 +1,31 @@
 # InputTracker Web UI — Design System & Information Architecture (`web/DESIGN.md`)
 
-## Aesthetic Direction: Calm Reading Room & Personal Archive
+## Aesthetic Direction: Calm Nocturnal Reading Room & Personal Archive (v2.1)
 
-InputTracker is both a daily media log and a **long-term personal archive** of everything watched, read, and listened to. Design A v2 refines the calm, warm reading-room aesthetic around four core principles:
+InputTracker is both a daily media log and a **long-term personal archive** of everything watched, read, and listened to. Design A v2.1 refines the calm reading-room aesthetic around six core principles:
 
-1. **Intentional Covers (Zero Cover Bloat):**
-   - Covers appear **only where they carry meaning**: the **Library** grid, a **Work's detail page**, the **Selected Day's detail panel**, the **Add to Archive** lookup results/preview, and **Review / On This Day** highlights.
-   - Surfaces that show high-density structure—such as **Calendar month cells**—never render cover thumbnails or redundant top shelves. Instead, each calendar cell shows the day number, total duration, up to 2 deduplicated work titles with 6px category colour dots (on desktop), and a proportional **horizontal stacked category time bar** at the bottom of the cell.
-2. **Category-First Colour System:**
-   - Every visual indicator (badges, calendar bars, tabs, stacked charts, donut rings, and cover fallback tiles) is coloured by the 9 canonical `Category` values from `src/core/category.ts`:
-     `anime`, `series`, `film`, `book`, `audiobook`, `youtube`, `podcast`, `music`, `other`.
-3. **Graphs Over Numbers (`web/src/ui/charts/`):**
-   - Rows of oversized stat cards are replaced by compact pulse strips (with inline `<Sparkline>` trends) and hand-crafted, dependency-free, accessible SVG charts with interactive hover/tap/focus tooltips and `.sr-only` data tables.
-4. **Progressive Disclosure & Focused Navigation:**
-   - Primary navigation focuses on the four daily/weekly habits (**Calendar**, **Library**, **Insights**, **Review**) plus the prominent **Add to Archive** trigger and **Search** (`/` shortcut).
-   - **Settings** (connected sources, "Sync now", import/export, metadata providers, database status, and theme switcher) lives behind a gear icon rather than cluttering the main navigation.
-   - **Review** defaults to **Month in Review** (with a month stepper), and offers a **Year View** toggle that combines the twelve months.
-   - The **52-week streak/activity heatmap** is an integrated chart inside **Insights** rather than a separate top-level page.
+1. **Dark Themes Only (`web/src/lib/theme.ts`, `web/src/styles/tokens.css`):**
+   - Light and system modes are removed. The app offers 5 named dark themes (**Warm Study** `espresso`, **Midnight Ink** `midnight`, **Pine & Moss** `forest`, **Obsidian Archive** `obsidian`, and **Velvet Nocturne** `plum`), picked via live swatch cards in **Settings › Appearance** and applied before first paint from `localStorage` (`inputtracker.theme`) with zero flash.
+   - All 9 category colour families (`anime`, `series`, `film`, `book`, `audiobook`, `youtube`, `podcast`, `music`, `other`) remain distinct and WCAG AA compliant (>= 4.5:1) on every theme.
+2. **Home Page Clarity (`web/src/pages/Calendar.tsx`):**
+   - One glance answers: what did I do **Today** and **This week**, how does **This month** look, and what am I in the middle of (**Continue** shelf of `in_progress` works).
+   - Calendar month cells contain no truncated title rows or cover bloat: each cell shows the day number, total duration, active category dots, and a proportional horizontal stacked category bar.
+   - Selected day panel header is a single clean line (`Today`, `Yesterday`, or `Saturday 17 October`) with no duplicated numeric date eyebrow.
+   - Day panel items are compact, grouped by work (`groupDayPanelItems`), omit heavy letter tiles when no cover art exists, and collapse a day's YouTube plays into one expandable summary line (`12 videos · 48 min`).
+3. **YouTube by Topic & Channel (`web/src/lib/youtube.ts`):**
+   - By default, `"All"` excludes YouTube (`exclude=youtube`) so video plays do not drown out books, films, series, and anime (a toggle in Settings can include YouTube in `"All"`).
+   - **Library › YouTube (`#/library?cat=youtube`):** Organises YouTube as **Topics → Channels → Videos** with proportional time bars, a dedicated **Channel Page**, quick **"Set topic"** for any channel, and search within YouTube.
+   - **Insights › YouTube:** Shows YouTube topics over time and top channels with proportional bars.
+4. **Multi-Select Category Chips (`web/src/lib/category-filter.ts`, `web/src/ui/CategoryChips.tsx`):**
+   - Category filter chips are multi-select toggles across **Calendar**, **Library**, **Insights**, **Search**, and **Review**. Clicking **All** clears the selection.
+   - Selection is reflected in the URL (`?cat=anime,film`) and sent as `category=` / `exclude=` query parameters to API endpoints.
+5. **Ratings 0–10 with One Decimal & Quick Rating Popover (`web/src/lib/rating.ts`, `web/src/ui/QuickRating.tsx`):**
+   - Ratings are `0..10` with at most one decimal (`8.5`, `10`, `0`), computed in integer tenths (`0..100`) to avoid float drift.
+   - A compact `<QuickRatingPill />` on Library cards/rows, Day panel rows, Review showcases, Search results, and Work pages opens a viewport-clamped popover (0–10 slider in 0.5 steps + number field accepting one decimal + keyboard `±0.1`/`±0.5` + Clear) without opening the work. Saves optimistically via `WorkEdit.rating` with a 1-click **Undo** toast.
+   - The Add to Archive form and Work page use the same `<RatingInput10 />` control.
+6. **Accessible Context Menu & Edit Any Work (`web/src/ui/ContextMenu.tsx`, `web/src/ui/EditWorkSheet.tsx`):**
+   - Right-click, touch long-press, or keyboard `Shift+F10` / `ContextMenu` key opens a viewport-clamped `role="menu"` with arrow-key navigation, `Escape`, and focus restoration.
+   - Contextual actions include: **Rate…**, **Edit work…** (title, category, status incl. `planned`, metadata provider match link, rating, note), **Change category…**, **Set topic…** (YouTube), **Add more seasons / Log again**, **Mark as finished / in progress / planned**, **Hide**, **Open**, and **Edit / Delete archive entry** (with confirmation).
 
 ---
 
@@ -25,52 +34,28 @@ InputTracker is both a daily media log and a **long-term personal archive** of e
 Routes are hash-based and parsed by `parseAppRoute(hash)`:
 
 - **`#/calendar` (Home / Today):**
-  - Compact monthly pulse card with total time, `<Sparkline>`, active days, and interactive `<CategoryShareChart compact />`.
-  - 7-column cover-free month grid with category time bars and desktop work-title previews.
-  - Selected day detail: sticky side panel on desktop (`>= 1024px`), inline card below the grid on tablet/phone, and bottom `<Sheet>` on phone tap. Opening `#/calendar?date=YYYY-MM-DD` on desktop selects the day in the side panel without opening a modal over the page. High-volume days (e.g., 40 YouTube videos) include a category bar and collapsible item list.
-- **`#/library` (Library & Work Detail):**
-  - Category tabs with hours and work counts (`All`, `Anime`, `Series`, `Films`, `Books`, `Audiobooks`, `YouTube`, `Podcasts`, `Music`, `Other`).
-  - Status filter (`All Works`, `In Progress`, `Finished`), search filter, sort (`recent`, `time`, `title`), and Cover Grid / Compact List toggle.
-  - **Work Detail (`#/library?work=<key>`):** Hero cover, category & source badges, season-by-season progress bars (`SeasonInfo & { watched_episodes }`), personal rating & note editor (`RatingEditor`), chronological session & archive history, **"Add more seasons"**, and **Edit / Delete** actions for archive entries.
+  - At-a-glance strip (**Today**, **This week** with 7-day sparkline, **Month** with `<CategoryShareChart compact />`, and **Continue** shelf).
+  - Multi-select `<CategoryChips />` (`?cat=anime,film`).
+  - 7-column month grid with category dots and proportional time bars.
+  - Selected day detail panel with single-line clean date heading, compact work-grouped rows with `<QuickRatingPill />`, and single-line expandable YouTube summary.
+- **`#/library` (Library, Watchlist & YouTube View):**
+  - Multi-select `<CategoryChips />` + **YouTube by Topic & Channel** toggle.
+  - Status filter (`All Works`, `In Progress`, `Finished`, `Planned`, `Dropped`), search filter, sort (`recent`, `time`, `title`), and Covers / List toggle.
+  - **Library › YouTube (`#/library?cat=youtube`):** Topics → Channels → Videos hierarchy with proportional bars, Channel Page (`#/library?cat=youtube&channel=`), inline channel topic setter, and YouTube search.
+  - **Work Detail (`#/library?work=<key>`):** Hero cover, badges, quick rating pill, **Edit Work** sheet trigger, **Add more seasons / Log again**, **Edit Entry / Delete Entry** (with confirmation) for archive/imported entries, season progress bars, 0–10 `RatingEditor`, and activity history.
 - **`#/insights` (Insights):**
-  - Time range selector (`30d` = 30 days / daily, `12w` = 12 weeks / weekly, `12m` = 12 months / monthly, `all` = all time / monthly) + category filter pills.
-  - Compact 3-stat pulse strip with `<Sparkline>` trends + current/longest streak.
-  - `<StackedSeriesChart />`: Stacked minutes per category over time.
-  - `<CategoryShareChart />`: Donut ring + ranked horizontal share bars.
-  - `<PunchCardChart />`: 7 weekdays × 24 hours consumption rhythm matrix.
-  - `<HeatmapCalendarChart />`: 52-week activity and streak calendar with year stepper.
-  - "On This Day" memories and Annual Goals tracker.
+  - Time range selector (`30d`, `12w`, `12m`, `all`) + multi-select `<CategoryChips />`.
+  - KPI strip with `<Sparkline>` trends and daily streak.
+  - `<StackedSeriesChart />`, `<CategoryShareChart />`, `<PunchCardChart />`, **YouTube Topics & Top Channels**, `<HeatmapCalendarChart />` (52-week calendar), "On This Day", and Annual Goals.
 - **`#/review` (Month & Year in Review):**
-  - **Month in Review (default):** Month stepper (`‹ October 2026 ›`), total time with `%` comparison vs previous month, daily stacked chart, category share, monthly punch card, and cover showcases for Top Works, Finished Works, and Started Works.
-  - **Year View (`#/review?view=year&year=YYYY`):** Combines the twelve months into a 12-month stacked category chart (clicking any month bar opens that Month in Review), annual category share, and top/finished works of the year.
+  - Month in Review (default) and Year View (`#/review?view=year&year=YYYY`) with multi-select `<CategoryChips />`, stacked charts, category share, punch card, and cover showcases with `<QuickRatingPill />` and context menus.
 - **`#/add` (Lookup-First Add to Archive + Offline Quick Log):**
-  - Opens as a full page on phone (`#/add`) and as a large `<Sheet size="lg">` dialog from the desktop header/sidebar.
-  - **Step 1 (Lookup):** Searches `/api/lookup/search?q=&category=` across AniList, TVmaze, iTunes, Open Library, and TMDB; or lets the user build a `ManualWork` by hand when no provider knows the title.
-  - **Step 2 (Configure & Preview):** Tick watched seasons (with per-season episode counts and partial episode adjuster), film viewings (`times`), book progress (`0..1` + page-based estimate or hours override), or audiobook hours; pick `when` precision (`day`, `month`, `year`, or `unknown` with optional `end_date` range); optional half-star rating & note. Displays the live computed summary (e.g., `2 seasons · 48 episodes · ≈ 19 h`) before saving to `POST /api/archive`.
-  - **Quick Session tab:** Preserves offline-ready single-event logging via `POST /api/events` and `lib/offline-queue.ts`.
+  - Step 1: Metadata lookup (`/api/lookup/search`) or manual work builder.
+  - Step 2: Status (`Finished`, `In Progress`, `Planned (Watchlist)`, `Dropped`), seasons/viewings/progress, `when` precision, and 0–10 `<RatingInput10 />` & note, with live computed duration preview.
 - **`#/search` (Global Search):**
-  - Reachable from the sidebar search box, `/` keyboard shortcut on desktop, or mobile top bar icon. Highlights query matches (`highlightParts`), opens full title history (`getTitleHistory`), and links directly to `Add to Archive` when a title is not yet in the library.
+  - Query input (`/` shortcut), source/media-type selectors, multi-select `<CategoryChips />`, highlighted hits with `<QuickRatingPill />` and context menus, and full title history.
 - **`#/settings` (Settings & Sync):**
-  - Reachable via the gear icon in the sidebar footer and mobile top bar.
-  - Houses **Appearance** (`system` / `light` / `dark` stored in `localStorage` under `inputtracker.theme`), **Sources & Sync** (`GET /api/settings`, `GET /api/sync/status`, "Sync now" for Audiobookshelf and Simkl), **Import / Export** (`.json`, `.csv`, YouTube Takeout `watch-history.json`), and **Metadata Providers & Database Diagnostics**.
-
-### Legacy Route Redirects
-Old deep links redirect automatically via `resolveLegacyRedirect`:
-- `#/stats` → `#/insights`
-- `#/heatmap` → `#/insights`
-- `#/year` (and `#/year?year=YYYY`) → `#/review?view=year`
-- `#/progress` → `#/library?status=in_progress`
-- `#/importexport` → `#/settings`
-
----
-
-## 2. CSS Tokens & Category Palette (`web/src/styles/`)
-
-Styles are modular and imported in `web/src/styles/index.css`:
-- `tokens.css`: Surfaces, typography, spacing, shadows, heat scale, and the 9 category colour families (`--cat-<category>-{fg|bg|border|solid|tile-start|tile-end}`) in both light mode (`:root`, `:root[data-theme="light"]`) and dark mode (`@media (prefers-color-scheme: dark)`, `:root[data-theme="dark"]`).
-- `base.css`: Reset, typography, `:focus-visible` ring, `.tabular-nums`, `.sr-only`, `.page-container`, `.page-header`.
-- `ui.css`: Shared UI primitives (`Button`, `IconButton`, `Card`, `Tabs`, `Stat`, `ProgressBar`, `Cover`, `Badge`, `EmptyState`, `Skeleton`, `Sheet`, `Toast`).
-- `charts.css`: Hand-made SVG charts (`Sparkline`, `StackedSeriesChart`, `CategoryShareChart`, `PunchCardChart`, `HeatmapCalendarChart`) and `RatingEditor`.
-- `shell.css`: Desktop sidebar, mobile top bar, mobile 5-tab bottom bar, and offline banner.
-- `calendar.css`: Calendar pulse card, 7-column cover-free grid, and day detail panel.
-- `pages.css`: Library, Work detail, Insights, Review, Add to Archive, Search, Settings, and `.ui-form-*` controls.
+  - **Appearance & Preferences:** 5 dark theme swatch cards (`espresso`, `midnight`, `forest`, `obsidian`, `plum`) + **"Include YouTube in All"** toggle.
+  - **Import Achriom Library:** Upload `.zip`/`.csv` → **1. Preview (Dry Run)** → **2. Import Achriom Archive**, rendering `AchriomImportResult` (created, updated, unchanged, planned, matched, total time, per-file rows, and skipped reasons).
+  - **Hidden Works:** Lists hidden works (`GET /api/library/hidden`) with one-click **Unhide**.
+  - **Sources & Sync, Native/Takeout Import & Export, Metadata Providers & Database Diagnostics.**

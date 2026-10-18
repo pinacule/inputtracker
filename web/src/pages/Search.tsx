@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   getTitleHistory,
   search,
+  type Category,
   type SearchHit,
   type SearchResult,
   type TitleHistory,
@@ -11,6 +12,10 @@ import {
   categoryLabel,
   resolveItemCategory,
 } from "../lib/categories";
+import {
+  buildCategoryFilterParams,
+  matchesCategorySelection,
+} from "../lib/category-filter";
 import { formatLocalDay } from "../lib/format-date";
 import {
   MIN_QUERY_LENGTH,
@@ -28,12 +33,15 @@ import {
   Badge,
   Button,
   Card,
+  CategoryChips,
   CategoryIcon,
   Cover,
   EmptyState,
+  QuickRatingPill,
   RatingEditor,
   SearchIcon,
   Skeleton,
+  bindContextMenu,
 } from "../ui";
 
 const PAGE_SIZE = 30;
@@ -42,6 +50,9 @@ const DEBOUNCE_MS = 240;
 export interface SearchProps {
   qParam?: string;
   hitKeyParam?: string;
+  initialCategory?: Category;
+  initialCategories?: readonly Category[];
+  includeYoutubeInAll?: boolean;
 }
 
 function HighlightedTitle({ title, query }: { title: string; query: string }) {
@@ -61,11 +72,28 @@ function HighlightedTitle({ title, query }: { title: string; query: string }) {
   );
 }
 
-export function Search({ qParam, hitKeyParam }: SearchProps) {
+export function Search({
+  qParam,
+  hitKeyParam,
+  initialCategory,
+  initialCategories,
+  includeYoutubeInAll = false,
+}: SearchProps) {
   const [inputValue, setInputValue] = useState(qParam ?? "");
   const [query, setQuery] = useState(qParam ?? "");
   const [source, setSource] = useState("");
   const [mediaType, setMediaType] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>(
+    () => {
+      if (initialCategories && initialCategories.length > 0) {
+        return [...initialCategories];
+      }
+      if (initialCategory) {
+        return [initialCategory];
+      }
+      return [];
+    }
+  );
   const [result, setResult] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -84,12 +112,24 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
   }, [qParam]);
 
   useEffect(() => {
+    if (initialCategories !== undefined) {
+      setSelectedCategories([...initialCategories]);
+    } else if (initialCategory !== undefined) {
+      setSelectedCategories(initialCategory ? [initialCategory] : []);
+    }
+  }, [initialCategory, initialCategories]);
+
+  useEffect(() => {
     if (hitKeyParam) return;
-    if (query === (qParam ?? "")) return;
-    const hash =
-      query !== "" ? `#/search?q=${encodeURIComponent(query)}` : "#/search";
+    const params = new URLSearchParams();
+    if (query !== "") params.set("q", query);
+    if (selectedCategories.length > 0) {
+      params.set("cat", selectedCategories.join(","));
+    }
+    const qs = params.toString();
+    const hash = qs ? `#/search?${qs}` : "#/search";
     window.history.replaceState(null, "", hash);
-  }, [query, hitKeyParam, qParam]);
+  }, [query, selectedCategories, hitKeyParam]);
 
   useEffect(() => {
     const seq = ++seqRef.current;
@@ -103,13 +143,30 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
 
     setLoading(true);
     setError(null);
+
+    const filterParams = buildCategoryFilterParams(
+      selectedCategories,
+      includeYoutubeInAll
+    );
+
     search({
       q: query,
       source: source !== "" ? source : undefined,
       media_type: mediaType !== "" ? mediaType : undefined,
+      category: filterParams.category,
+      exclude: filterParams.exclude,
       limit: PAGE_SIZE,
       offset: 0,
     })
+      .catch(() =>
+        search({
+          q: query,
+          source: source !== "" ? source : undefined,
+          media_type: mediaType !== "" ? mediaType : undefined,
+          limit: PAGE_SIZE,
+          offset: 0,
+        })
+      )
       .then((res) => {
         if (seqRef.current === seq) {
           setResult(res);
@@ -124,7 +181,7 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
           setLoadingMore(false);
         }
       });
-  }, [query, source, mediaType]);
+  }, [query, source, mediaType, selectedCategories, includeYoutubeInAll]);
 
   useEffect(() => {
     if (!hitKeyParam) {
@@ -164,17 +221,44 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
     []
   );
 
+  const filteredHits = useMemo(() => {
+    const rawHits = result?.hits ?? [];
+    return rawHits.filter((hit) => {
+      const cat = resolveItemCategory(hit);
+      return matchesCategorySelection(
+        cat,
+        selectedCategories,
+        includeYoutubeInAll
+      );
+    });
+  }, [result, selectedCategories, includeYoutubeInAll]);
+
   const handleLoadMore = () => {
     if (!result || loadingMore || result.hits.length >= result.total) return;
     const seq = ++seqRef.current;
     setLoadingMore(true);
+    const filterParams = buildCategoryFilterParams(
+      selectedCategories,
+      includeYoutubeInAll
+    );
     search({
       q: query,
       source: source !== "" ? source : undefined,
       media_type: mediaType !== "" ? mediaType : undefined,
+      category: filterParams.category,
+      exclude: filterParams.exclude,
       limit: PAGE_SIZE,
       offset: result.hits.length,
     })
+      .catch(() =>
+        search({
+          q: query,
+          source: source !== "" ? source : undefined,
+          media_type: mediaType !== "" ? mediaType : undefined,
+          limit: PAGE_SIZE,
+          offset: result.hits.length,
+        })
+      )
       .then((res) => {
         if (seqRef.current === seq) {
           setResult((prev) =>
@@ -250,6 +334,18 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
                     <Badge size="sm" variant="neutral">
                       {sourceLabel(history.source)}
                     </Badge>
+                    <QuickRatingPill
+                      workKey={history.key}
+                      title={history.title}
+                      category={histCat}
+                      rating={history.rating}
+                      source={history.source}
+                      onRated={(next) =>
+                        setHistory((prev) =>
+                          prev ? { ...prev, rating: next } : prev
+                        )
+                      }
+                    />
                   </div>
                   <h1 class="library-work-title">{history.title}</h1>
                   {history.subtitle && (
@@ -266,6 +362,7 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
             <div class="library-work-two-col">
               <Card padding="md" title="Rating & Note">
                 <RatingEditor
+                  workKey={history.key}
                   source={history.source}
                   title={history.title}
                   initialRating={history.rating}
@@ -326,7 +423,6 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
     <section class="page-container search-page" aria-label="Search">
       <header class="page-header">
         <div class="page-header-titles">
-          <span class="page-eyebrow">Global Archive Search</span>
           <h1>Search</h1>
           <p class="page-subtitle">
             Find any title, series, author, or YouTube channel across your
@@ -350,68 +446,78 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
       </header>
 
       <Card padding="md">
-        <div class="search-controls-grid">
-          <div class="add-lookup-input-wrap">
-            <span class="add-lookup-icon" aria-hidden="true">
-              <SearchIcon size={18} />
-            </span>
-            <input
-              type="search"
-              class="ui-input add-lookup-input"
-              placeholder="Search titles, authors, series, or channels…"
-              aria-label="Search query"
-              value={inputValue}
-              onInput={(e) => {
-                const val = (e.currentTarget as HTMLInputElement).value;
-                setInputValue(val);
-                window.clearTimeout(debounceRef.current);
-                debounceRef.current = window.setTimeout(
-                  () => setQuery(val),
-                  DEBOUNCE_MS
-                );
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
+        <div class="ui-form-stack">
+          <div class="search-controls-grid">
+            <div class="add-lookup-input-wrap">
+              <span class="add-lookup-icon" aria-hidden="true">
+                <SearchIcon size={18} />
+              </span>
+              <input
+                type="search"
+                class="ui-input add-lookup-input"
+                placeholder="Search titles, authors, series, or channels…"
+                aria-label="Search query"
+                value={inputValue}
+                onInput={(e) => {
+                  const val = (e.currentTarget as HTMLInputElement).value;
+                  setInputValue(val);
                   window.clearTimeout(debounceRef.current);
-                  setQuery(inputValue);
+                  debounceRef.current = window.setTimeout(
+                    () => setQuery(val),
+                    DEBOUNCE_MS
+                  );
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    window.clearTimeout(debounceRef.current);
+                    setQuery(inputValue);
+                  }
+                }}
+                autofocus
+              />
+            </div>
+
+            <div class="search-filter-selects">
+              <select
+                class="ui-input"
+                aria-label="Filter by source"
+                value={source}
+                onChange={(e) =>
+                  setSource((e.currentTarget as HTMLSelectElement).value)
                 }
-              }}
-              autofocus
-            />
+              >
+                {STATS_SOURCES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                class="ui-input"
+                aria-label="Filter by media type"
+                value={mediaType}
+                onChange={(e) =>
+                  setMediaType((e.currentTarget as HTMLSelectElement).value)
+                }
+              >
+                <option value="">All media types</option>
+                {SEARCH_MEDIA_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div class="search-filter-selects">
-            <select
-              class="ui-input"
-              aria-label="Filter by source"
-              value={source}
-              onChange={(e) =>
-                setSource((e.currentTarget as HTMLSelectElement).value)
-              }
-            >
-              {STATS_SOURCES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-
-            <select
-              class="ui-input"
-              aria-label="Filter by media type"
-              value={mediaType}
-              onChange={(e) =>
-                setMediaType((e.currentTarget as HTMLSelectElement).value)
-              }
-            >
-              <option value="">All media types</option>
-              {SEARCH_MEDIA_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
+          <CategoryChips
+            selected={selectedCategories}
+            onChange={setSelectedCategories}
+            includeYoutubeInAll={includeYoutubeInAll}
+            ariaLabel="Filter search by category"
+            syncUrl={false}
+          />
         </div>
       </Card>
 
@@ -436,7 +542,7 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
           <Skeleton height={68} />
           <Skeleton height={68} />
         </div>
-      ) : result && result.hits.length === 0 ? (
+      ) : result && filteredHits.length === 0 ? (
         <EmptyState
           title={`No matches in your history for “${query}”`}
           description="Want to add this work from the past to your archive?"
@@ -454,20 +560,33 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
       ) : result ? (
         <>
           <div class="search-results-count tabular-nums" aria-live="polite">
-            {result.total} {result.total === 1 ? "result" : "results"} for “
-            {query}”
+            {filteredHits.length}{" "}
+            {filteredHits.length === 1 ? "result" : "results"} for “{query}”
           </div>
 
           <Card padding="none">
             <ul class="library-works-list">
-              {result.hits.map((hit: SearchHit) => {
+              {filteredHits.map((hit: SearchHit) => {
                 const cat = resolveItemCategory(hit);
                 const hitHref = `#/search?q=${encodeURIComponent(
                   query
                 )}&key=${encodeURIComponent(hit.key)}`;
+                const menuTarget = {
+                  kind: "work" as const,
+                  workKey: hit.key,
+                  title: hit.title,
+                  category: cat,
+                  href: hitHref,
+                  source: hit.source,
+                };
                 return (
-                  <li key={hit.key}>
-                    <a href={hitHref} class="library-work-list-row">
+                  <li
+                    key={hit.key}
+                    class="library-work-list-row"
+                    tabIndex={0}
+                    {...bindContextMenu(menuTarget)}
+                  >
+                    <a href={hitHref} class="library-work-list-main">
                       <Cover
                         src={hit.cover_url}
                         title={hit.title}
@@ -498,6 +617,16 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
                         </span>
                       </div>
                     </a>
+                    <div class="library-work-list-right">
+                      <QuickRatingPill
+                        workKey={hit.key}
+                        title={hit.title}
+                        category={cat}
+                        rating={null}
+                        source={hit.source}
+                        variant="inline"
+                      />
+                    </div>
                   </li>
                 );
               })}

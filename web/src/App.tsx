@@ -5,10 +5,7 @@ import type {
   Category,
   ManualWork,
 } from "./api";
-import {
-  CATEGORY_META,
-  type Category as CategoryType,
-} from "./lib/categories";
+import { readIncludeYoutubeInAll } from "./lib/category-filter";
 import { getDefaultStore, subscribeQueue } from "./lib/offline-queue";
 import {
   APP_ROUTES,
@@ -21,8 +18,13 @@ import {
 import {
   applyThemeToDocument,
   readThemePreference,
-  type ThemeMode,
+  type DarkThemeId,
 } from "./lib/theme";
+import {
+  dismissToast,
+  subscribeToasts,
+  type AppToast,
+} from "./lib/work-edits";
 import { Add } from "./pages/Add";
 import { Calendar } from "./pages/Calendar";
 import { Insights } from "./pages/Insights";
@@ -34,22 +36,18 @@ import {
   AddIcon,
   BookIcon,
   Button,
+  ContextMenuHost,
+  EditWorkSheet,
   IconButton,
   OfflineIcon,
   RouteIcon,
   SearchIcon,
   SettingsIcon,
   Sheet,
+  ToastViewport,
+  YoutubeIcon,
+  type EditableWorkTarget,
 } from "./ui";
-
-const LEGEND_CATEGORIES: ReadonlyArray<CategoryType> = [
-  "anime",
-  "series",
-  "film",
-  "book",
-  "audiobook",
-  "youtube",
-];
 
 function OfflineBanner() {
   const [online, setOnline] = useState(() =>
@@ -104,17 +102,29 @@ export function App() {
   const [loc, setLoc] = useState<ParsedAppLocation>(() =>
     parseAppRoute(window.location.hash)
   );
-  const [theme, setTheme] = useState<ThemeMode>(() => readThemePreference());
+  const [theme, setTheme] = useState<DarkThemeId>(() => readThemePreference());
+  const [includeYoutubeInAll, setIncludeYoutubeInAll] = useState<boolean>(() =>
+    readIncludeYoutubeInAll()
+  );
   const [queueCount, setQueueCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState(loc.q ?? "");
   const [addSheet, setAddSheet] = useState<AddSheetContext>({ open: false });
+  const [editingWork, setEditingWork] = useState<EditableWorkTarget | null>(
+    null
+  );
+  const [toasts, setToasts] = useState<readonly AppToast[]>([]);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Apply stored theme preference on mount
+  // Apply stored dark theme preference on mount & change
   useEffect(() => {
     applyThemeToDocument(theme);
   }, [theme]);
+
+  // Subscribe to global Undo toasts
+  useEffect(() => {
+    return subscribeToasts(setToasts);
+  }, []);
 
   // Listen to hash changes & perform legacy route redirects
   useEffect(() => {
@@ -200,7 +210,11 @@ export function App() {
     work?: ManualWork;
     editingEntry?: AddSheetContext["editingEntry"];
   }) => {
-    if (typeof window !== "undefined" && window.innerWidth >= 768 && !opts?.editingEntry) {
+    if (
+      typeof window !== "undefined" &&
+      window.innerWidth >= 768 &&
+      !opts?.editingEntry
+    ) {
       setAddSheet({
         open: true,
         date: opts?.date,
@@ -230,7 +244,13 @@ export function App() {
   const renderSidebarLink = (id: AppRoute) => {
     const def = APP_ROUTES.find((r) => r.id === id);
     if (!def) return null;
-    const isActive = loc.route === id;
+    const isActive =
+      loc.route === id &&
+      !(
+        id === "library" &&
+        loc.categories?.length === 1 &&
+        loc.categories[0] === "youtube"
+      );
 
     return (
       <a
@@ -252,6 +272,11 @@ export function App() {
       </a>
     );
   };
+
+  const isYoutubeActive =
+    loc.route === "library" &&
+    loc.categories?.length === 1 &&
+    loc.categories[0] === "youtube";
 
   return (
     <div class="app-shell">
@@ -307,47 +332,42 @@ export function App() {
           />
         </form>
 
-        {/* Primary Navigation (4 core views) */}
+        {/* Primary Navigation (4 core views + dedicated YouTube view) */}
         <nav class="sidebar-nav-section" aria-label="Primary">
           <span class="sidebar-nav-heading">Views</span>
           {PRIMARY_NAV_ROUTES.map(renderSidebarLink)}
+          <a
+            href="#/library?cat=youtube"
+            class={
+              isYoutubeActive
+                ? "sidebar-nav-link sidebar-nav-link--active"
+                : "sidebar-nav-link"
+            }
+            aria-current={isYoutubeActive ? "page" : undefined}
+          >
+            <span class="sidebar-nav-link-main">
+              <span class="sidebar-nav-icon">
+                <YoutubeIcon size={18} />
+              </span>
+              <span>YouTube</span>
+            </span>
+          </a>
         </nav>
 
-        {/* Category Colour Legend + Settings Gear Footer */}
+        {/* Clean Sidebar Footer (Settings & Sync) */}
         <div class="sidebar-footer">
-          <div aria-label="Category colour legend">
-            <span class="sidebar-legend-title">Categories</span>
-            <div class="sidebar-legend-grid">
-              {LEGEND_CATEGORIES.map((cat) => (
-                <a
-                  key={cat}
-                  href={`#/library?category=${cat}`}
-                  class="sidebar-legend-item"
-                >
-                  <span
-                    class={`ui-tab-dot ui-tab-dot--${cat}`}
-                    aria-hidden="true"
-                  />
-                  <span>{CATEGORY_META[cat].pluralLabel}</span>
-                </a>
-              ))}
-            </div>
-          </div>
-
-          <div class="sidebar-settings-row">
-            <a
-              href="#/settings"
-              class={
-                loc.route === "settings"
-                  ? "sidebar-settings-link sidebar-settings-link--active"
-                  : "sidebar-settings-link"
-              }
-              aria-current={loc.route === "settings" ? "page" : undefined}
-            >
-              <SettingsIcon size={16} />
-              <span>Settings & Sync</span>
-            </a>
-          </div>
+          <a
+            href="#/settings"
+            class={
+              loc.route === "settings"
+                ? "sidebar-settings-link sidebar-settings-link--active"
+                : "sidebar-settings-link"
+            }
+            aria-current={loc.route === "settings" ? "page" : undefined}
+          >
+            <SettingsIcon size={16} />
+            <span>Settings & Sync</span>
+          </a>
         </div>
       </aside>
 
@@ -366,6 +386,15 @@ export function App() {
             </span>
           </a>
           <div class="mobile-topbar-actions">
+            <IconButton
+              label="YouTube by Topic & Channel"
+              variant="subtle"
+              size="sm"
+              href="#/library?cat=youtube"
+              active={isYoutubeActive}
+            >
+              <YoutubeIcon size={17} />
+            </IconButton>
             <IconButton
               label="Search library"
               variant="subtle"
@@ -393,24 +422,43 @@ export function App() {
               date={loc.date}
               initialMonth={loc.month}
               initialCategory={loc.category}
+              initialCategories={loc.categories}
+              includeYoutubeInAll={includeYoutubeInAll}
               onOpenAdd={handleOpenAdd}
+              onOpenEditWork={(w) => setEditingWork(w)}
             />
           )}
           {loc.route === "library" && (
             <Library
+              // Remount when a link changes the filters while the Library is open
+              // (in-page chip changes use replaceState and do not reach here).
+              key={[
+                loc.category ?? "",
+                (loc.categories ?? []).join(","),
+                loc.status ?? "",
+                loc.channel ?? "",
+                loc.topic ?? "",
+              ].join("|")}
               initialCategory={loc.category}
+              initialCategories={loc.categories}
               initialStatus={loc.status}
               initialSort={loc.sort}
               initialQuery={loc.q}
+              initialChannel={loc.channel}
+              initialTopic={loc.topic}
               workKey={loc.workKey}
+              includeYoutubeInAll={includeYoutubeInAll}
               onOpenAdd={handleOpenAdd}
+              onOpenEditWork={(w) => setEditingWork(w)}
             />
           )}
           {loc.route === "insights" && (
             <Insights
               initialRange={loc.range}
               initialCategory={loc.category}
+              initialCategories={loc.categories}
               initialYear={loc.year}
+              includeYoutubeInAll={includeYoutubeInAll}
             />
           )}
           {loc.route === "review" && (
@@ -418,6 +466,9 @@ export function App() {
               initialView={loc.reviewView ?? (loc.year ? "year" : "month")}
               initialMonth={loc.month}
               initialYear={loc.year}
+              initialCategory={loc.category}
+              initialCategories={loc.categories}
+              includeYoutubeInAll={includeYoutubeInAll}
             />
           )}
           {loc.route === "add" && (
@@ -428,10 +479,21 @@ export function App() {
             />
           )}
           {loc.route === "search" && (
-            <Search qParam={loc.q} hitKeyParam={loc.hitKey} />
+            <Search
+              qParam={loc.q}
+              hitKeyParam={loc.hitKey}
+              initialCategory={loc.category}
+              initialCategories={loc.categories}
+              includeYoutubeInAll={includeYoutubeInAll}
+            />
           )}
           {loc.route === "settings" && (
-            <Settings theme={theme} onThemeChange={setTheme} />
+            <Settings
+              theme={theme}
+              onThemeChange={setTheme}
+              includeYoutubeInAll={includeYoutubeInAll}
+              onIncludeYoutubeChange={setIncludeYoutubeInAll}
+            />
           )}
         </main>
       </div>
@@ -498,6 +560,22 @@ export function App() {
           }}
         />
       </Sheet>
+
+      {/* Global Edit Any Work Sheet Dialog */}
+      <EditWorkSheet
+        open={editingWork !== null}
+        work={editingWork}
+        onClose={() => setEditingWork(null)}
+      />
+
+      {/* Global Accessible Context Menu Host */}
+      <ContextMenuHost
+        onOpenEditWork={(w) => setEditingWork(w)}
+        onOpenAdd={(opts) => handleOpenAdd(opts)}
+      />
+
+      {/* Global Toast Viewport (with Undo) */}
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

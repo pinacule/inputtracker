@@ -73,3 +73,86 @@ export function formatLocalDay(dateStr: string): string {
   }
   return `${match[3]}.${match[2]}.${match[1]}`;
 }
+
+const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+function shiftLocalDate(dateStr: string, deltaDays: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) {
+    return dateStr;
+  }
+  const y = Number.parseInt(match[1]!, 10);
+  const m = Number.parseInt(match[2]!, 10);
+  const d = Number.parseInt(match[3]!, 10);
+  const dt = new Date(Date.UTC(y, m - 1, d + deltaDays));
+  const yOut = String(dt.getUTCFullYear()).padStart(4, "0");
+  const mOut = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dOut = String(dt.getUTCDate()).padStart(2, "0");
+  return `${yOut}-${mOut}-${dOut}`;
+}
+
+/**
+ * Formats a selected calendar day as a single clean heading line:
+ * - `"Today"` when `dateStr === todayStr`
+ * - `"Yesterday"` when `dateStr` is the day before `todayStr`
+ * - `"Saturday 17 October"` when in the same year as `todayStr`
+ * - `"Saturday 17 October 2025"` when in a different year
+ */
+export function formatCleanDayHeading(
+  dateStr: string,
+  todayStr?: string
+): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) {
+    return dateStr;
+  }
+
+  if (todayStr) {
+    if (dateStr === todayStr) {
+      return "Today";
+    }
+    if (dateStr === shiftLocalDate(todayStr, -1)) {
+      return "Yesterday";
+    }
+  }
+
+  const year = Number.parseInt(match[1]!, 10);
+  const monthIdx = Number.parseInt(match[2]!, 10) - 1;
+  const day = Number.parseInt(match[3]!, 10);
+  const dt = new Date(Date.UTC(year, monthIdx, day));
+  const weekday = WEEKDAY_NAMES[dt.getUTCDay()] ?? "";
+  const monthName = MONTH_NAMES[monthIdx] ?? "";
+
+  const todayYear =
+    todayStr && /^\d{4}/.test(todayStr)
+      ? Number.parseInt(todayStr.slice(0, 4), 10)
+      : year;
+
+  if (year === todayYear) {
+    return `${weekday} ${day} ${monthName}`;
+  }
+  return `${weekday} ${day} ${monthName} ${year}`;
+}
