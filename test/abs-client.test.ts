@@ -73,6 +73,12 @@ describe("Audiobookshelf client", () => {
       "/api/items/item.name/cover",
       "/api/items/123/cover/more",
       "/api/items/123",
+      "/api/libraries/lib123",
+      "/api/libraries/lib123/items",
+      "/api/libraries/lib123/search/extra",
+      "/api/libraries//search",
+      "/api/libraries/lib.with.dots/search",
+      "/api/libraries/123/books",
     ];
 
     for (const forbidden of forbiddenPaths) {
@@ -90,11 +96,14 @@ describe("Audiobookshelf client", () => {
       });
     }
 
-    test("allows valid exact endpoints and cover paths", async () => {
+    test("allows valid exact endpoints, library endpoints and cover paths", async () => {
       const allowedPaths = [
         "/api/me",
         "/api/me/listening-sessions",
         "/api/me/listening-stats",
+        "/api/libraries",
+        "/api/libraries/lib-123_abc/search",
+        "/api/libraries/main-lib_01/search?q=test&limit=5",
         "/api/items/book-123_abc/cover",
         "/api/items/item_ABC-999/cover",
       ];
@@ -128,8 +137,14 @@ describe("Audiobookshelf client", () => {
 
       const client = createAbsClient(baseCfg, { fetch: mockFetch });
 
-      // /api/me is allow-listed for JSON, but forbidden for binary
+      // /api/me and library paths are allow-listed for JSON, but forbidden for binary
       await expect(client.getBinary("/api/me")).rejects.toThrow(/binary/i);
+      expect(fetchCalled).toBe(false);
+
+      await expect(client.getBinary("/api/libraries")).rejects.toThrow(/binary/i);
+      expect(fetchCalled).toBe(false);
+
+      await expect(client.getBinary("/api/libraries/lib1/search")).rejects.toThrow(/binary/i);
       expect(fetchCalled).toBe(false);
 
       // Non-allow-listed path throws

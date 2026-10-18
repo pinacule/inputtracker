@@ -59,9 +59,11 @@ const EXACT_PATHS = new Set([
   "/api/me",
   "/api/me/listening-sessions",
   "/api/me/listening-stats",
+  "/api/libraries",
 ]);
 
 const ITEM_COVER_RE = /^\/api\/items\/[A-Za-z0-9_-]+\/cover$/;
+const LIBRARY_SEARCH_RE = /^\/api\/libraries\/[A-Za-z0-9_-]+\/search$/;
 
 interface ParsedPath {
   cleanPath: string;
@@ -77,6 +79,7 @@ function validatePath(path: string, token: string, coverOnly = false): ParsedPat
   // Check exact path before query parameters
   const [cleanPath, inlineQuery] = path.split("?");
   const isCover = ITEM_COVER_RE.test(cleanPath);
+  const isLibrarySearch = LIBRARY_SEARCH_RE.test(cleanPath);
 
   if (coverOnly) {
     if (!isCover) {
@@ -86,7 +89,7 @@ function validatePath(path: string, token: string, coverOnly = false): ParsedPat
     return { cleanPath, inlineQuery };
   }
 
-  if (!EXACT_PATHS.has(cleanPath) && !isCover) {
+  if (!EXACT_PATHS.has(cleanPath) && !isCover && !isLibrarySearch) {
     const safePath = maskSecret(cleanPath, token);
     throw new Error(`Path "${safePath}" is not in the allow-list`);
   }
