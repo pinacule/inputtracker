@@ -268,6 +268,8 @@ activity into `youtube` events:
 - Only issues read-only `GET` requests to the local ActivityWatch API.
 - When the server moves to a cloud VM, this sync will need to run on the PC (where the browser runs).
 
+To import older browser history that predates the initial 7-day sync window, run a backfill with `it sync activitywatch --since YYYY-MM-DD` (for example, `bun run it sync activitywatch --since 2026-01-01`). This queries past plays in 7-day chunks up to the oldest stored play in the configured timezone, leaves the regular sync cursor untouched, and is safe to repeat.
+
 ## Phone install (PWA)
 
 Reach the server over a private network. With Tailscale, serve the server port on
