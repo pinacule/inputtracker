@@ -582,11 +582,16 @@ export function Calendar({
     return map;
   }, [effectiveWorks]);
 
-  // Continue / In Progress works (excluding YouTube)
+  // Continue / In Progress works (not YouTube or single music tracks: nothing to continue)
   const continueWorks = useMemo(
     () =>
       effectiveWorks
-        .filter((w) => w.status === "in_progress" && w.category !== "youtube")
+        .filter(
+          (w) =>
+            w.status === "in_progress" &&
+            w.category !== "youtube" &&
+            w.category !== "music"
+        )
         .slice(0, 4),
     [effectiveWorks]
   );

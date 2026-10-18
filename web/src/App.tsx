@@ -430,6 +430,15 @@ export function App() {
           )}
           {loc.route === "library" && (
             <Library
+              // Remount when a link changes the filters while the Library is open
+              // (in-page chip changes use replaceState and do not reach here).
+              key={[
+                loc.category ?? "",
+                (loc.categories ?? []).join(","),
+                loc.status ?? "",
+                loc.channel ?? "",
+                loc.topic ?? "",
+              ].join("|")}
               initialCategory={loc.category}
               initialCategories={loc.categories}
               initialStatus={loc.status}

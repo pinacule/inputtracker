@@ -1,3 +1,4 @@
+import { createPortal } from "preact/compat";
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import type { Category } from "../api";
 import { computeContextMenuPlacement } from "../lib/context-menu";
@@ -41,13 +42,13 @@ export function RatingInput10({
   const sliderId = useId();
 
   const [textVal, setTextVal] = useState<string>(() =>
-    rating !== null && rating !== undefined ? formatRating10(rating) : ""
+    rating !== null && rating !== undefined ? formatRating10(rating) : "",
   );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setTextVal(
-      rating !== null && rating !== undefined ? formatRating10(rating) : ""
+      rating !== null && rating !== undefined ? formatRating10(rating) : "",
     );
     setError(null);
   }, [rating]);
@@ -120,11 +121,7 @@ export function RatingInput10({
 
   return (
     <div
-      class={
-        compact
-          ? "ui-rating10 ui-rating10--compact"
-          : "ui-rating10"
-      }
+      class={compact ? "ui-rating10 ui-rating10--compact" : "ui-rating10"}
       onKeyDown={handleKeyDown}
     >
       <div class="ui-rating10-main">
@@ -179,7 +176,11 @@ export function RatingInput10({
       </div>
 
       <div class="ui-rating10-controls">
-        <div class="ui-rating10-steppers" role="group" aria-label="Adjust rating">
+        <div
+          class="ui-rating10-steppers"
+          role="group"
+          aria-label="Adjust rating"
+        >
           <button
             type="button"
             class="ui-rating10-step-btn tabular-nums"
@@ -274,7 +275,9 @@ export function QuickRatingPill({
   }, []);
 
   const effectiveRating = getWorkRatingOverride(workKey, propRating ?? null);
-  const [draftRating, setDraftRating] = useState<number | null>(effectiveRating);
+  const [draftRating, setDraftRating] = useState<number | null>(
+    effectiveRating,
+  );
   const [coords, setCoords] = useState<{ left: number; top: number }>({
     left: 16,
     top: 16,
@@ -299,7 +302,7 @@ export function QuickRatingPill({
       anchor,
       { width: 280, height: 190 },
       { width: vw, height: vh },
-      12
+      12,
     );
     setCoords({ left: placed.left, top: placed.top });
     setOpen(true);
@@ -354,7 +357,7 @@ export function QuickRatingPill({
         category,
         rating: prevRating,
         source,
-      }
+      },
     );
 
     pushToast({
@@ -402,64 +405,70 @@ export function QuickRatingPill({
         {hasRating ? `★ ${formatRating10(effectiveRating)}` : "☆ Rate"}
       </button>
 
-      {open && (
-        <div
-          ref={popoverRef}
-          class="ui-quick-rate-popover"
-          role="dialog"
-          aria-label={`Rate ${title}`}
-          style={{
-            left: `${coords.left}px`,
-            top: `${coords.top}px`,
-          }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        >
-          <div class="ui-quick-rate-popover-header">
-            <strong class="ui-quick-rate-popover-title" title={title}>
-              {title}
-            </strong>
-            <span class="ui-quick-rate-popover-score tabular-nums">
-              {draftRating !== null ? `★ ${formatRating10(draftRating)}` : "Unrated"}
-            </span>
-          </div>
+      {/* Portalled to <body>: a transformed ancestor (hover lift on cards) would otherwise
+          become the containing block of this position:fixed popover and shift it away. */}
+      {open &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            class="ui-quick-rate-popover"
+            role="dialog"
+            aria-label={`Rate ${title}`}
+            style={{
+              left: `${coords.left}px`,
+              top: `${coords.top}px`,
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <div class="ui-quick-rate-popover-header">
+              <strong class="ui-quick-rate-popover-title" title={title}>
+                {title}
+              </strong>
+              <span class="ui-quick-rate-popover-score tabular-nums">
+                {draftRating !== null
+                  ? `★ ${formatRating10(draftRating)}`
+                  : "Unrated"}
+              </span>
+            </div>
 
-          <RatingInput10
-            rating={draftRating}
-            onChange={setDraftRating}
-            compact
-            onCommit={(val) => void commitRating(val)}
-          />
+            <RatingInput10
+              rating={draftRating}
+              onChange={setDraftRating}
+              compact
+              onCommit={(val) => void commitRating(val)}
+            />
 
-          <div class="ui-quick-rate-popover-actions">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => void commitRating(draftRating)}
-            >
-              Save
-            </Button>
-            {hasRating && (
+            <div class="ui-quick-rate-popover-actions">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void commitRating(draftRating)}
+              >
+                Save
+              </Button>
+              {hasRating && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void commitRating(null)}
+                >
+                  Clear
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => void commitRating(null)}
+                onClick={() => closePopover(true)}
               >
-                Clear
+                Cancel
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => closePopover(true)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </span>
   );
 }
