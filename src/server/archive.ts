@@ -50,6 +50,11 @@ import {
   parseRating,
   saveAnnotation,
 } from "./annotations.ts";
+import {
+  type CategoryFilterInput,
+  matchesCategoryFilter,
+  parseCategoryFilter,
+} from "./overrides.ts";
 
 export const ARCHIVE_SOURCE = "manual";
 export const ARCHIVE_SOURCE_KIND = "archive";
@@ -422,10 +427,34 @@ function validateWhen(raw: unknown): ArchiveWhen {
   return result;
 }
 
+type ArchiveStatus = NonNullable<ArchiveRequest["status"]>;
+
+function validateArchiveStatus(raw: unknown): ArchiveStatus | undefined {
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+  if (
+    raw === "finished" ||
+    raw === "in_progress" ||
+    raw === "dropped" ||
+    raw === "planned"
+  ) {
+    return raw;
+  }
+  throw new ArchiveValidationError(
+    `Invalid status: '${String(raw)}' (expected finished, in_progress, dropped or planned)`
+  );
+}
+
 function validateConsumed(
   raw: unknown,
-  work: WorkDetails | ManualWork
+  work: WorkDetails | ManualWork,
+  status?: ArchiveStatus
 ): ArchiveConsumed {
+  const allowEmpty = status === "planned" || status === "dropped";
+  if ((raw === undefined || raw === null) && allowEmpty) {
+    return {};
+  }
   if (!isObject(raw)) {
     throw new ArchiveValidationError("Field 'consumed' must be an object");
   }
@@ -433,53 +462,57 @@ function validateConsumed(
   const result: ArchiveConsumed = {};
 
   if (raw.seasons !== undefined && raw.seasons !== null) {
-    if (!Array.isArray(raw.seasons) || raw.seasons.length === 0) {
+    if (!Array.isArray(raw.seasons) || (raw.seasons.length === 0 && !allowEmpty)) {
       throw new ArchiveValidationError(
         "Field 'consumed.seasons' must be a non-empty array"
       );
     }
-    const seenSeasons = new Set<number>();
-    const seasons: Array<{ number: number; episodes?: number }> = [];
-    for (let i = 0; i < raw.seasons.length; i++) {
-      const item = raw.seasons[i];
-      if (!isObject(item)) {
-        throw new ArchiveValidationError(
-          `consumed.seasons[${i}] must be an object`
-        );
-      }
-      const num = item.number;
-      if (typeof num !== "number" || !Number.isInteger(num) || num < 1) {
-        throw new ArchiveValidationError(
-          `consumed.seasons[${i}].number must be a positive integer`
-        );
-      }
-      if (seenSeasons.has(num)) {
-        throw new ArchiveValidationError(
-          `Duplicate season number ${num} in consumed.seasons`
-        );
-      }
-      seenSeasons.add(num);
-
-      if (item.episodes !== undefined && item.episodes !== null) {
-        if (
-          typeof item.episodes !== "number" ||
-          !Number.isInteger(item.episodes) ||
-          item.episodes < 1
-        ) {
+    if (raw.seasons.length > 0) {
+      const seenSeasons = new Set<number>();
+      const seasons: Array<{ number: number; episodes?: number }> = [];
+      for (let i = 0; i < raw.seasons.length; i++) {
+        const item = raw.seasons[i];
+        if (!isObject(item)) {
           throw new ArchiveValidationError(
-            `consumed.seasons[${i}].episodes must be a positive integer`
+            `consumed.seasons[${i}] must be an object`
           );
         }
-        seasons.push({ number: num, episodes: item.episodes });
-      } else {
-        seasons.push({ number: num });
+        const num = item.number;
+        if (typeof num !== "number" || !Number.isInteger(num) || num < 1) {
+          throw new ArchiveValidationError(
+            `consumed.seasons[${i}].number must be a positive integer`
+          );
+        }
+        if (seenSeasons.has(num)) {
+          throw new ArchiveValidationError(
+            `Duplicate season number ${num} in consumed.seasons`
+          );
+        }
+        seenSeasons.add(num);
+
+        if (item.episodes !== undefined && item.episodes !== null) {
+          const minEp = allowEmpty ? 0 : 1;
+          if (
+            typeof item.episodes !== "number" ||
+            !Number.isInteger(item.episodes) ||
+            item.episodes < minEp
+          ) {
+            throw new ArchiveValidationError(
+              `consumed.seasons[${i}].episodes must be a positive integer`
+            );
+          }
+          seasons.push({ number: num, episodes: item.episodes });
+        } else {
+          seasons.push({ number: num });
+        }
       }
+      seasons.sort((a, b) => a.number - b.number);
+      result.seasons = seasons;
     }
-    seasons.sort((a, b) => a.number - b.number);
-    result.seasons = seasons;
   } else if (
-    work.category === "series" ||
-    (work.category === "anime" && work.seasons.length > 0)
+    !allowEmpty &&
+    (work.category === "series" ||
+      (work.category === "anime" && work.seasons.length > 0))
   ) {
     throw new ArchiveValidationError(
       "Field 'consumed.seasons' is required for series/seasonal anime"
@@ -487,10 +520,11 @@ function validateConsumed(
   }
 
   if (raw.times !== undefined && raw.times !== null) {
+    const minTimes = allowEmpty ? 0 : 1;
     if (
       typeof raw.times !== "number" ||
       !Number.isInteger(raw.times) ||
-      raw.times < 1 ||
+      raw.times < minTimes ||
       raw.times > 1000
     ) {
       throw new ArchiveValidationError(
@@ -609,12 +643,59 @@ function computeSeasonNaturalMinutes(
   return null;
 }
 
+function defaultMediaTypeForCategory(
+  work: WorkDetails | ManualWork
+): MediaType {
+  if (
+    work.category === "series" ||
+    (work.category === "anime" && work.seasons.length > 0)
+  ) {
+    return "episode";
+  }
+  if (work.category === "film" || work.category === "anime") {
+    return "movie";
+  }
+  if (work.category === "book") {
+    return "book";
+  }
+  if (work.category === "audiobook") {
+    return "audiobook";
+  }
+  if (work.category === "youtube") {
+    return "video";
+  }
+  return "other";
+}
+
 function buildUnits(
   entryId: string,
   work: WorkDetails | ManualWork,
-  consumed: ArchiveConsumed
+  consumed: ArchiveConsumed,
+  status?: ArchiveStatus
 ): BuiltUnit[] {
   const units: BuiltUnit[] = [];
+
+  if (status === "planned") {
+    const mediaType = defaultMediaTypeForCategory(work);
+    const parentTitle =
+      mediaType === "book" || mediaType === "audiobook" || mediaType === "other"
+        ? work.creators.length > 0
+          ? work.creators.join(", ")
+          : null
+        : null;
+    units.push({
+      unit: "b",
+      source_id: `archive:${entryId}:b`,
+      media_type: mediaType,
+      title: work.title,
+      parent_title: parentTitle,
+      season: null,
+      episode: null,
+      progress: 0,
+      naturalMinutes: 0,
+    });
+    return units;
+  }
 
   if (consumed.seasons && consumed.seasons.length > 0) {
     const seasonMap = new Map<number, SeasonInfo>();
@@ -633,12 +714,13 @@ function buildUnits(
         ? 1
         : seasonInfo && seasonInfo.episodes > 0 && s.episodes !== undefined
           ? Math.min(1, Math.max(0, s.episodes / seasonInfo.episodes))
-          : null;
-      const naturalMinutes = computeSeasonNaturalMinutes(
-        s,
-        seasonInfo,
-        work.runtime_minutes
-      );
+          : s.episodes === 0
+            ? 0
+            : null;
+      const naturalMinutes =
+        s.episodes === 0
+          ? 0
+          : computeSeasonNaturalMinutes(s, seasonInfo, work.runtime_minutes);
       const unit = `s${s.number}`;
       units.push({
         unit,
@@ -655,12 +737,59 @@ function buildUnits(
     return units;
   }
 
+  if (
+    status === "dropped" &&
+    (work.category === "series" ||
+      (work.category === "anime" && work.seasons.length > 0))
+  ) {
+    const progress = consumed.progress ?? 0;
+    const totalSeriesMinutes = work.seasons.reduce(
+      (sum, s) => sum + (s.total_minutes ?? 0),
+      0
+    );
+    const naturalMinutes =
+      progress > 0 && totalSeriesMinutes > 0
+        ? totalSeriesMinutes * progress
+        : 0;
+    units.push({
+      unit: "b",
+      source_id: `archive:${entryId}:b`,
+      media_type: "episode",
+      title: work.title,
+      parent_title: null,
+      season: null,
+      episode: null,
+      progress,
+      naturalMinutes,
+    });
+    return units;
+  }
+
   const isFilmLike =
     work.category === "film" ||
     (work.category === "anime" && work.seasons.length === 0) ||
     consumed.times !== undefined;
 
   if (isFilmLike) {
+    if (status === "dropped" && consumed.times === 0) {
+      const prog = consumed.progress ?? 0;
+      const naturalMinutes =
+        prog > 0 && work.runtime_minutes !== null && work.runtime_minutes > 0
+          ? work.runtime_minutes * prog
+          : 0;
+      units.push({
+        unit: "v1",
+        source_id: `archive:${entryId}:v1`,
+        media_type: "movie",
+        title: work.title,
+        parent_title: null,
+        season: null,
+        episode: null,
+        progress: prog,
+        naturalMinutes,
+      });
+      return units;
+    }
     const times = consumed.times ?? 1;
     const perViewingMinutes =
       work.runtime_minutes !== null && work.runtime_minutes > 0
@@ -692,7 +821,12 @@ function buildUnits(
     mediaType = "video";
   }
 
-  const progress = consumed.progress ?? 1;
+  const progress =
+    consumed.progress !== undefined
+      ? consumed.progress
+      : status === "dropped"
+        ? 0
+        : 1;
   let naturalMinutes: number | null = null;
   if (work.category === "book" && work.pages !== null && work.pages > 0) {
     naturalMinutes = work.pages * 1.5 * progress;
@@ -803,8 +937,9 @@ export function saveArchiveEntry(
   }
   const entryId = entryIdRaw.toLowerCase();
 
+  const status = validateArchiveStatus(input.status);
   const work = validateWork(input.work);
-  const consumed = validateConsumed(input.consumed, work);
+  const consumed = validateConsumed(input.consumed, work, status);
   const when = validateWhen(input.when);
 
   let rating: number | null | undefined = undefined;
@@ -862,7 +997,7 @@ export function saveArchiveEntry(
     }
   }
 
-  const builtUnits = buildUnits(entryId, work, consumed);
+  const builtUnits = buildUnits(entryId, work, consumed, status);
   const timestamps = computeUnitTimestamps(
     builtUnits.length,
     when,
@@ -874,7 +1009,10 @@ export function saveArchiveEntry(
   let unitSeconds: Array<number | null>;
   let estimated: boolean;
 
-  if (
+  if (status === "planned") {
+    unitSeconds = builtUnits.map(() => 0);
+    estimated = false;
+  } else if (
     consumed.minutes_override !== undefined &&
     consumed.minutes_override !== null
   ) {
@@ -921,7 +1059,7 @@ export function saveArchiveEntry(
 
   const baseExternalIds = buildExternalIdsForWork(work);
 
-  const rawPayload = {
+  const rawPayload: Record<string, unknown> = {
     category: work.category,
     entry_id: entryId,
     work,
@@ -929,6 +1067,9 @@ export function saveArchiveEntry(
     when,
     estimated,
   };
+  if (status !== undefined) {
+    rawPayload.status = status;
+  }
   const rawPayloadJson = JSON.stringify(rawPayload);
 
   const eventsToInsert: NewEvent[] = [];
@@ -1174,8 +1315,10 @@ export function deleteArchiveEntry(
  */
 export function listArchiveEntries(
   db: Database,
-  categoryFilter?: Category
+  categoryFilter?: CategoryFilterInput,
+  excludeFilter?: CategoryFilterInput
 ): ArchiveEntrySummary[] {
+  const filter = parseCategoryFilter(categoryFilter, excludeFilter);
   const latestRows = db
     .query<EventRow, []>(
       `SELECT * FROM events_latest
@@ -1251,7 +1394,7 @@ export function listArchiveEntries(
   for (const [entryId, group] of byEntryId.entries()) {
     const newestRow = group.rows[group.rows.length - 1]!;
     const cat = categoryOf(newestRow);
-    if (categoryFilter !== undefined && cat !== categoryFilter) {
+    if (!matchesCategoryFilter(cat, filter)) {
       continue;
     }
 

@@ -45,6 +45,8 @@ Every key, its default and what it means:
 | `simkl.poster_base_url` | `https://simkl.in/posters` | Base URL for Simkl poster images. |
 | `simkl.timeout_s` | `20` | Per-request timeout, in seconds. |
 | `youtube.thumb_base_url` | `https://i.ytimg.com/vi` | Base URL for YouTube video thumbnails. |
+| `youtube.min_watch_minutes` | `5` | Minimum watched minutes per video on one local day to count (0 disables). |
+| `youtube.enrich_per_sync` | `50` | Maximum videos enriched (channel + category via GET oEmbed/watch page) per sync run (0 disables). |
 | `ingest.token` | empty | Shared bearer token for `POST /api/ingest/youtube-plays` (phone); empty disables ingest, a non-empty value must be at least 32 characters. Never logged. |
 | `activitywatch.url` | `http://127.0.0.1:5600` | ActivityWatch server URL. |
 | `activitywatch.timeout_s` | `20` | Per-request timeout, in seconds. |
@@ -182,6 +184,7 @@ Run commands with `bun run it <command>`.
 | `backup` | none | `bun run it backup` |
 | `notify test\|weekly` | none | `bun run it notify test` |
 | `ingest token\|status\|remap` | none | `bun run it ingest token` |
+| `youtube enrich` | `[--limit <n>]` | `bun run it youtube enrich --limit 100` |
 | `doctor` | none | `bun run it doctor` |
 | `verify-copy <copy.db>` | none | `bun run it verify-copy copies/2026-10-18.db` |
 

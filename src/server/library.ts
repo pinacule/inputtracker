@@ -1,48 +1,67 @@
 /**
- * Library aggregation (v2 section 3): works joined across all sources, grouped
- * by category (`GET /api/library`, `GET /api/library/work`).
+ * Library aggregation (v2 section 3, v2.1 sections 7–9): works joined across
+ * all sources, grouped by category (`GET /api/library`, `GET /api/library/work`,
+ * `POST /api/library/work/edit`, `GET /api/library/hidden`).
  *
  * Rules:
- * - Reads `events_latest` via `getDisplayConsumptionEvents` (deduped with
- *   `dedupeConsumption`, tombstones hidden by migration v4).
+ * - Reads `events_latest` (deduped with `dedupeConsumption`, tombstones hidden
+ *   by migration v4).
  * - A work joins events in the same category that share a normalized
  *   series-or-title (`getSeriesOrTitle` + `normalizeForSearch`) or an external
  *   id (`anilist`, `mal`, `imdb`, `tvmaze`, `abs_item`, `meta_id`).
- * - YouTube works are channels (`LibraryWork.title` = channel name,
- *   `units` = videos); the work detail lists the videos in `history`.
+ * - Work keys are derived deterministically from canonical identity, never from
+ *   list order.
+ * - Overrides from `work_overrides_latest` apply on every read.
  */
 
 import type { Database } from "bun:sqlite";
 import { CATEGORIES, categoryOf, type Category } from "../core/category.ts";
+import type { Config } from "../core/config.ts";
 import type {
   CategoryTotal,
   DatePrecision,
+  HiddenWorksResult,
   LibraryResult,
   LibraryWork,
   LibraryWorkDetail,
   SeasonInfo,
+  WorkDetails,
   WorkStatus,
 } from "../core/contract.ts";
 import {
   coverUrlFor,
   eventPrecision,
-  getDisplayConsumptionEvents,
-  getSeriesOrTitle,
+  getLatestConsumptionEvents,
   parseExternalIds,
   parseJsonObject,
   type ConsumptionEvent,
 } from "./aggregate.ts";
-import type { DedupedEvent } from "./dedup.ts";
+import { saveAnnotation } from "./annotations.ts";
+import { dedupeConsumption, type DedupedEvent } from "./dedup.ts";
+import { filterShortYoutubeEvents } from "./youtube-filter.ts";
+import { readWorkCache } from "./metadata/cache.ts";
+import { lookupWork } from "./metadata/index.ts";
+import {
+  type CategoryFilterInput,
+  eventWorkTitleForGrouping,
+  getWorkOverrides,
+  groupEventsIntoWorkComponents,
+  isPlannedArchiveEvent,
+  isValidWorkStatus,
+  isWorkPlanned,
+  matchesCategoryFilter,
+  parseCategoryFilter,
+  parseWorkEdit,
+  saveWorkOverride,
+  WorkOverrideNotFoundError,
+  WorkOverrideValidationError,
+} from "./overrides.ts";
+import { tenthsToRating } from "./ratings.ts";
 import { normalizeForSearch } from "./search.ts";
-
-const EXTERNAL_JOIN_KEYS = [
-  "anilist",
-  "mal",
-  "imdb",
-  "tvmaze",
-  "abs_item",
-  "meta_id",
-] as const;
+import {
+  getYoutubeVideoWorkDetail,
+  resolveYoutubeLibraryWorkFields,
+} from "./youtube-routes.ts";
 
 export interface InternalLibraryWork {
   work: LibraryWork;
@@ -52,120 +71,12 @@ export interface InternalLibraryWork {
   originalTitle: string | null;
 }
 
-class DisjointSet {
-  private parent: number[];
-
-  constructor(size: number) {
-    this.parent = Array.from({ length: size }, (_, i) => i);
-  }
-
-  find(i: number): number {
-    let root = i;
-    while (this.parent[root] !== root) {
-      root = this.parent[root]!;
-    }
-    let curr = i;
-    while (curr !== root) {
-      const nxt = this.parent[curr]!;
-      this.parent[curr] = root;
-      curr = nxt;
-    }
-    return root;
-  }
-
-  union(i: number, j: number): void {
-    const rootI = this.find(i);
-    const rootJ = this.find(j);
-    if (rootI !== rootJ) {
-      if (rootI < rootJ) {
-        this.parent[rootJ] = rootI;
-      } else {
-        this.parent[rootI] = rootJ;
-      }
-    }
-  }
-}
-
 /** Title of the work an event belongs to (channel name for YouTube). */
 export function eventWorkTitle(
   event: ConsumptionEvent,
   category: Category
 ): string {
-  if (category === "youtube") {
-    const channel = event.parent_title?.trim();
-    if (channel && channel !== "") {
-      return channel;
-    }
-    const raw = parseJsonObject(event.raw);
-    const work = parseJsonObject(raw?.["work"]);
-    if (typeof work?.["title"] === "string" && work["title"].trim() !== "") {
-      return work["title"].trim();
-    }
-    return event.title?.trim() || "Unknown channel";
-  }
-
-  if (event.source_kind === "archive") {
-    const raw = parseJsonObject(event.raw);
-    const work = parseJsonObject(raw?.["work"]);
-    if (typeof work?.["title"] === "string" && work["title"].trim() !== "") {
-      return work["title"].trim();
-    }
-  }
-
-  return getSeriesOrTitle(event);
-}
-
-/** Join tokens for an event within its category. */
-function eventJoinTokens(
-  event: ConsumptionEvent,
-  category: Category,
-  workTitle: string
-): string[] {
-  const tokens: string[] = [];
-  const normTitle = normalizeForSearch(workTitle);
-  if (normTitle !== "") {
-    tokens.push(`title:${normTitle}`);
-  }
-
-  const ext = parseExternalIds(event.external_ids);
-  if (!ext) {
-    return tokens;
-  }
-
-  if (category === "youtube") {
-    const ytChannel = ext["youtube_channel"];
-    if (typeof ytChannel === "string" && ytChannel.trim() !== "") {
-      tokens.push(`ext:youtube_channel:${ytChannel.trim()}`);
-    }
-    return tokens;
-  }
-
-  for (const key of EXTERNAL_JOIN_KEYS) {
-    const val = ext[key];
-    const strVal =
-      typeof val === "string"
-        ? val.trim()
-        : typeof val === "number" && Number.isFinite(val)
-          ? String(val)
-          : "";
-    if (!strVal) {
-      continue;
-    }
-    if (key === "meta_id") {
-      const provider =
-        typeof ext["meta_provider"] === "string"
-          ? ext["meta_provider"].trim()
-          : "";
-      if (provider) {
-        tokens.push(`ext:${provider}:${strVal}`);
-      }
-      tokens.push(`ext:meta_id:${strVal}`);
-    } else {
-      tokens.push(`ext:${key}:${strVal}`);
-    }
-  }
-
-  return tokens;
+  return eventWorkTitleForGrouping(event, category);
 }
 
 interface MediaProgressSignal {
@@ -213,17 +124,23 @@ interface AnnotationRecord {
   source: string;
   title: string;
   rating: number | null;
+  rating_tenths?: number | null;
   note: string | null;
+  created_at: string;
 }
 
 function readAllLatestAnnotations(db: Database): AnnotationRecord[] {
-  return db
+  const rows = db
     .query<AnnotationRecord, []>(
-      `SELECT id, source, title, rating, note
+      `SELECT id, source, title, rating, rating_tenths, note, created_at
        FROM annotations_latest
        ORDER BY id DESC;`
     )
     .all();
+  return rows.map((r) => ({
+    ...r,
+    rating: tenthsToRating(r.rating_tenths, r.rating),
+  }));
 }
 
 function buildHistoryLabel(
@@ -277,17 +194,29 @@ function buildHistoryLabel(
   return event.title?.trim() || workTitle;
 }
 
+export interface BuildLibraryWorksOptions {
+  includeHidden?: boolean;
+  onlyHidden?: boolean;
+  config?: Config;
+}
+
 /**
- * Build all library works from `events_latest` (deduped via `dedupeConsumption`).
+ * Build all library works from `events_latest` (deduped via `dedupeConsumption`),
+ * applying any overrides from `work_overrides_latest`.
  */
 export function buildAllLibraryWorks(
   db: Database,
-  tz: string = "Europe/Bratislava"
+  tz: string = "Europe/Bratislava",
+  opts: BuildLibraryWorksOptions = {}
 ): InternalLibraryWork[] {
-  const events = getDisplayConsumptionEvents(db, undefined, tz);
+  // Short YouTube video-days (below [youtube] min_watch_minutes) are left out, as in every read.
+  const rawEvents = filterShortYoutubeEvents(getLatestConsumptionEvents(db), tz, db);
+  const events = dedupeConsumption(rawEvents, tz);
   if (events.length === 0) {
     return [];
   }
+
+  const overrides = getWorkOverrides(db);
 
   const progressSignals = readMediaProgressSignals(db);
   const progressByAbsId = new Map<string, MediaProgressSignal>();
@@ -315,118 +244,109 @@ export function buildAllLibraryWorks(
     list.push(ann);
   }
 
-  // Group events by category first, then union-find within each category.
-  const eventsByCategory = new Map<Category, DedupedEvent[]>();
-  for (const ev of events) {
-    const cat = categoryOf(ev);
-    let list = eventsByCategory.get(cat);
-    if (!list) {
-      list = [];
-      eventsByCategory.set(cat, list);
-    }
-    list.push(ev);
-  }
-
+  const components = groupEventsIntoWorkComponents(events);
   const allWorks: InternalLibraryWork[] = [];
-  const usedKeys = new Set<string>();
 
-  for (const cat of CATEGORIES) {
-    const catEvents = eventsByCategory.get(cat);
-    if (!catEvents || catEvents.length === 0) {
+  for (const comp of components) {
+    const {
+      sourceCategory: cat,
+      key,
+      sourceCanonicalTitle,
+      events: workEvents,
+      eventTitles,
+    } = comp;
+
+    const override = overrides.get(key);
+    const isHidden = override?.hidden === true;
+    if (opts.onlyHidden) {
+      if (!isHidden) {
+        continue;
+      }
+    } else if (!opts.includeHidden && isHidden) {
       continue;
     }
 
-    const dsu = new DisjointSet(catEvents.length);
-    const tokenToIndex = new Map<string, number>();
-    const eventTitles: string[] = [];
+    // Extract metadata from archive snapshot if present.
+    let canonicalTitle = sourceCanonicalTitle;
+    let baseSeasons: SeasonInfo[] = [];
+    let creators: string[] = [];
+    let originalTitle: string | null = null;
+    let archiveCoverUrl: string | null = null;
+    let archiveExplicitStatus: WorkStatus | null = null;
 
-    for (let i = 0; i < catEvents.length; i++) {
-      const ev = catEvents[i]!;
-      const wTitle = eventWorkTitle(ev, cat);
-      eventTitles.push(wTitle);
-      const tokens = eventJoinTokens(ev, cat, wTitle);
-      for (const token of tokens) {
-        const prev = tokenToIndex.get(token);
-        if (prev !== undefined) {
-          dsu.union(i, prev);
-        } else {
-          tokenToIndex.set(token, i);
+    for (let i = workEvents.length - 1; i >= 0; i--) {
+      const ev = workEvents[i]!;
+      if (ev.source_kind === "archive") {
+        const raw = parseJsonObject(ev.raw);
+        if (archiveExplicitStatus === null && isValidWorkStatus(raw?.["status"])) {
+          archiveExplicitStatus = raw["status"];
         }
-      }
-    }
-
-    const components = new Map<number, number[]>();
-    for (let i = 0; i < catEvents.length; i++) {
-      const root = dsu.find(i);
-      let comp = components.get(root);
-      if (!comp) {
-        comp = [];
-        components.set(root, comp);
-      }
-      comp.push(i);
-    }
-
-    for (const indices of components.values()) {
-      const workEvents = indices.map((idx) => catEvents[idx]!);
-
-      // Sort workEvents chronologically ascending by (started_at, id).
-      workEvents.sort(
-        (a, b) => a.started_at.localeCompare(b.started_at) || a.id - b.id
-      );
-
-      // Choose canonical title, creators, originalTitle, baseSeasons from archive snapshot or newest event.
-      let canonicalTitle = eventTitles[indices[indices.length - 1]!]!;
-      let baseSeasons: SeasonInfo[] = [];
-      let creators: string[] = [];
-      let originalTitle: string | null = null;
-      let archiveCoverUrl: string | null = null;
-
-      for (let i = workEvents.length - 1; i >= 0; i--) {
-        const ev = workEvents[i]!;
-        if (ev.source_kind === "archive") {
-          const raw = parseJsonObject(ev.raw);
-          const workSnap = parseJsonObject(raw?.["work"]);
-          if (workSnap) {
-            if (
-              typeof workSnap["title"] === "string" &&
-              workSnap["title"].trim() !== ""
-            ) {
-              canonicalTitle = workSnap["title"].trim();
-            }
-            if (
-              Array.isArray(workSnap["seasons"]) &&
-              workSnap["seasons"].length > 0 &&
-              baseSeasons.length === 0
-            ) {
-              baseSeasons = workSnap["seasons"] as SeasonInfo[];
-            }
-            if (
-              Array.isArray(workSnap["creators"]) &&
-              creators.length === 0
-            ) {
-              creators = (workSnap["creators"] as unknown[]).filter(
-                (c): c is string => typeof c === "string" && c.trim() !== ""
-              );
-            }
-            if (
-              typeof workSnap["original_title"] === "string" &&
-              originalTitle === null
-            ) {
-              originalTitle = workSnap["original_title"];
-            }
-            if (
-              typeof workSnap["cover_url"] === "string" &&
-              archiveCoverUrl === null
-            ) {
-              archiveCoverUrl = workSnap["cover_url"];
-            }
+        const workSnap = parseJsonObject(raw?.["work"]);
+        if (workSnap) {
+          if (
+            typeof workSnap["title"] === "string" &&
+            workSnap["title"].trim() !== ""
+          ) {
+            canonicalTitle = workSnap["title"].trim();
           }
-          break;
+          if (
+            Array.isArray(workSnap["seasons"]) &&
+            workSnap["seasons"].length > 0 &&
+            baseSeasons.length === 0
+          ) {
+            baseSeasons = workSnap["seasons"] as SeasonInfo[];
+          }
+          if (Array.isArray(workSnap["creators"]) && creators.length === 0) {
+            creators = (workSnap["creators"] as unknown[]).filter(
+              (c): c is string => typeof c === "string" && c.trim() !== ""
+            );
+          }
+          if (
+            typeof workSnap["original_title"] === "string" &&
+            originalTitle === null
+          ) {
+            originalTitle = workSnap["original_title"];
+          }
+          if (
+            typeof workSnap["cover_url"] === "string" &&
+            archiveCoverUrl === null
+          ) {
+            archiveCoverUrl = workSnap["cover_url"];
+          }
+        }
+        break;
+      }
+    }
+
+    // Apply linked metadata override (`override.meta`).
+    if (override?.meta !== null && override?.meta !== undefined) {
+      let metaWork: WorkDetails | null = override.meta_work;
+      if (metaWork === null && opts.config) {
+        metaWork = readWorkCache(
+          opts.config,
+          override.meta.provider,
+          override.meta.provider_id,
+          Date.now()
+        );
+      }
+      if (metaWork !== null) {
+        if (Array.isArray(metaWork.seasons) && metaWork.seasons.length > 0) {
+          baseSeasons = metaWork.seasons;
+        }
+        if (Array.isArray(metaWork.creators) && metaWork.creators.length > 0) {
+          creators = metaWork.creators;
+        }
+        if (metaWork.original_title) {
+          originalTitle = metaWork.original_title;
         }
       }
+    }
 
-      // Cover URL: prefer coverUrlFor from newest event that has one, else archiveCoverUrl.
-      let coverUrl: string | null = null;
+    // Cover URL: override.meta wins, else coverUrlFor from newest event, else archiveCoverUrl.
+    let coverUrl: string | null = null;
+    if (override?.meta !== null && override?.meta !== undefined) {
+      coverUrl = `/api/meta-cover/${override.meta.provider}/${override.meta.provider_id}`;
+    } else {
       for (let i = workEvents.length - 1; i >= 0; i--) {
         const c = coverUrlFor(workEvents[i]!);
         if (c !== null) {
@@ -437,296 +357,320 @@ export function buildAllLibraryWorks(
       if (coverUrl === null) {
         coverUrl = archiveCoverUrl;
       }
+    }
 
-      // Unique key for this work.
-      const baseKey = `${cat}:${normalizeForSearch(canonicalTitle) || "untitled"}`;
-      let key = baseKey;
-      let suffix = 2;
-      while (usedKeys.has(key)) {
-        key = `${baseKey}#${suffix++}`;
-      }
-      usedKeys.add(key);
+    const effectiveCategory: Category = override?.category ?? cat;
+    const effectiveTitle: string = override?.title ?? canonicalTitle;
 
-      // Total minutes, units, first_at, last_at, sources.
-      let totalSeconds = 0;
-      const sourceSet = new Set<string>();
-      for (const ev of workEvents) {
-        totalSeconds += ev.duration_seconds ?? 0;
-        sourceSet.add(ev.source);
-        if (ev.also_from) {
-          for (const s of ev.also_from) {
-            sourceSet.add(s);
-          }
+    // Total minutes, units, first_at, last_at, sources.
+    let totalSeconds = 0;
+    const sourceSet = new Set<string>();
+    for (const ev of workEvents) {
+      totalSeconds += ev.duration_seconds ?? 0;
+      sourceSet.add(ev.source);
+      if (ev.also_from) {
+        for (const s of ev.also_from) {
+          sourceSet.add(s);
         }
       }
-      const totalMinutes = totalSeconds / 60;
-      const units = workEvents.length;
-      const firstAt = workEvents[0]?.started_at ?? null;
-      const lastAt = workEvents[workEvents.length - 1]?.started_at ?? null;
-      const sources = Array.from(sourceSet).sort((a, b) => a.localeCompare(b));
+    }
+    const units = workEvents.length;
+    const firstAt = workEvents[0]?.started_at ?? null;
+    const lastAt = workEvents[workEvents.length - 1]?.started_at ?? null;
+    const sources = Array.from(sourceSet).sort((a, b) => a.localeCompare(b));
 
-      // Seasons & watched episode counts.
-      const syncedEpisodesBySeason = new Map<number, Set<number>>();
-      const syncedNoEpCountBySeason = new Map<number, number>();
-      const archiveEpisodesBySeason = new Map<number, number>();
-      const archiveWholeSeasons = new Set<number>();
+    // Seasons & watched episode counts.
+    const syncedEpisodesBySeason = new Map<number, Set<number>>();
+    const syncedNoEpCountBySeason = new Map<number, number>();
+    const archiveEpisodesBySeason = new Map<number, number>();
+    const archiveWholeSeasons = new Set<number>();
 
-      for (const ev of workEvents) {
-        if (ev.season === null || ev.season === undefined) {
-          continue;
-        }
-        const sNum = ev.season;
-        if (ev.source_kind === "archive") {
-          const raw = parseJsonObject(ev.raw);
-          const consumed = parseJsonObject(raw?.["consumed"]);
-          const seasonsArr = Array.isArray(consumed?.["seasons"])
-            ? (consumed["seasons"] as Array<{
-                number?: unknown;
-                episodes?: unknown;
-              }>)
-            : [];
-          const match = seasonsArr.find((s) => s?.number === sNum);
-          if (match && typeof match.episodes === "number") {
-            const prev = archiveEpisodesBySeason.get(sNum) ?? 0;
-            if (match.episodes > prev) {
-              archiveEpisodesBySeason.set(sNum, match.episodes);
-            }
-          } else {
-            archiveWholeSeasons.add(sNum);
+    for (const ev of workEvents) {
+      if (isPlannedArchiveEvent(ev)) {
+        continue;
+      }
+      if (ev.season === null || ev.season === undefined) {
+        continue;
+      }
+      const sNum = ev.season;
+      if (ev.source_kind === "archive") {
+        const raw = parseJsonObject(ev.raw);
+        const consumed = parseJsonObject(raw?.["consumed"]);
+        const seasonsArr = Array.isArray(consumed?.["seasons"])
+          ? (consumed["seasons"] as Array<{
+              number?: unknown;
+              episodes?: unknown;
+            }>)
+          : [];
+        const match = seasonsArr.find((s) => s?.number === sNum);
+        if (match && typeof match.episodes === "number") {
+          const prev = archiveEpisodesBySeason.get(sNum) ?? 0;
+          if (match.episodes > prev) {
+            archiveEpisodesBySeason.set(sNum, match.episodes);
           }
         } else {
-          if (ev.episode !== null && ev.episode !== undefined) {
-            let epSet = syncedEpisodesBySeason.get(sNum);
-            if (!epSet) {
-              epSet = new Set<number>();
-              syncedEpisodesBySeason.set(sNum, epSet);
-            }
-            epSet.add(ev.episode);
-          } else {
-            syncedNoEpCountBySeason.set(
-              sNum,
-              (syncedNoEpCountBySeason.get(sNum) ?? 0) + 1
-            );
+          archiveWholeSeasons.add(sNum);
+        }
+      } else {
+        if (ev.episode !== null && ev.episode !== undefined) {
+          let epSet = syncedEpisodesBySeason.get(sNum);
+          if (!epSet) {
+            epSet = new Set<number>();
+            syncedEpisodesBySeason.set(sNum, epSet);
           }
-        }
-      }
-
-      const detailSeasons: Array<SeasonInfo & { watched_episodes: number }> = [];
-      if (baseSeasons.length > 0) {
-        for (const sInfo of baseSeasons) {
-          const syncedCount =
-            (syncedEpisodesBySeason.get(sInfo.number)?.size ?? 0) +
-            (syncedNoEpCountBySeason.get(sInfo.number) ?? 0);
-          const archCount = archiveWholeSeasons.has(sInfo.number)
-            ? sInfo.episodes
-            : (archiveEpisodesBySeason.get(sInfo.number) ?? 0);
-          const watched =
-            sInfo.episodes > 0
-              ? Math.min(sInfo.episodes, Math.max(syncedCount, archCount))
-              : Math.max(syncedCount, archCount);
-          detailSeasons.push({
-            ...sInfo,
-            watched_episodes: watched,
-          });
-        }
-      } else if (cat === "anime" || cat === "series") {
-        const allSeasonNums = new Set<number>([
-          ...syncedEpisodesBySeason.keys(),
-          ...syncedNoEpCountBySeason.keys(),
-          ...archiveEpisodesBySeason.keys(),
-          ...archiveWholeSeasons,
-        ]);
-        for (const sNum of Array.from(allSeasonNums).sort((a, b) => a - b)) {
-          const syncedCount =
-            (syncedEpisodesBySeason.get(sNum)?.size ?? 0) +
-            (syncedNoEpCountBySeason.get(sNum) ?? 0);
-          const archCount = archiveEpisodesBySeason.get(sNum) ?? 0;
-          const watched = Math.max(
-            syncedCount,
-            archCount,
-            archiveWholeSeasons.has(sNum) ? 1 : 0
+          epSet.add(ev.episode);
+        } else {
+          syncedNoEpCountBySeason.set(
+            sNum,
+            (syncedNoEpCountBySeason.get(sNum) ?? 0) + 1
           );
-          detailSeasons.push({
-            number: sNum,
-            title: null,
-            year: null,
-            episodes: watched,
-            episode_minutes: null,
-            total_minutes: null,
-            provider_id: null,
-            watched_episodes: watched,
-          });
         }
       }
+    }
 
-      // Status computation.
-      let maxProgress: number | null = null;
-      let hasFinishedSignal = false;
-
-      for (const ev of workEvents) {
-        if (ev.season === null || ev.season === undefined) {
-          if (ev.progress !== null && ev.progress !== undefined) {
-            if (maxProgress === null || ev.progress > maxProgress) {
-              maxProgress = ev.progress;
-            }
-          }
-        }
-        const ext = parseExternalIds(ev.external_ids);
-        const absItem = ext?.["abs_item"];
-        if (typeof absItem === "string") {
-          const sig = progressByAbsId.get(absItem);
-          if (sig) {
-            if (sig.is_finished) hasFinishedSignal = true;
-            if (
-              sig.progress !== null &&
-              (maxProgress === null || sig.progress > maxProgress)
-            ) {
-              maxProgress = sig.progress;
-            }
-          }
-        }
+    const detailSeasons: Array<SeasonInfo & { watched_episodes: number }> = [];
+    if (baseSeasons.length > 0) {
+      for (const sInfo of baseSeasons) {
+        const syncedCount =
+          (syncedEpisodesBySeason.get(sInfo.number)?.size ?? 0) +
+          (syncedNoEpCountBySeason.get(sInfo.number) ?? 0);
+        const archCount = archiveWholeSeasons.has(sInfo.number)
+          ? sInfo.episodes
+          : (archiveEpisodesBySeason.get(sInfo.number) ?? 0);
+        const watched =
+          sInfo.episodes > 0
+            ? Math.min(sInfo.episodes, Math.max(syncedCount, archCount))
+            : Math.max(syncedCount, archCount);
+        detailSeasons.push({
+          ...sInfo,
+          watched_episodes: watched,
+        });
       }
-
-      const normCanonical = normalizeForSearch(canonicalTitle);
-      const titleSig = progressByNormTitle.get(normCanonical);
-      if (titleSig) {
-        if (titleSig.is_finished) hasFinishedSignal = true;
-        if (
-          titleSig.progress !== null &&
-          (maxProgress === null || titleSig.progress > maxProgress)
-        ) {
-          maxProgress = titleSig.progress;
-        }
-      }
-
-      let status: WorkStatus = "unknown";
-      if (hasFinishedSignal || (maxProgress !== null && maxProgress >= 0.95)) {
-        status = "finished";
-      } else if (baseSeasons.length > 0) {
-        const allSeasonsFinished = detailSeasons.every((s) =>
-          s.episodes > 0
-            ? s.watched_episodes >= s.episodes
-            : archiveWholeSeasons.has(s.number)
+    } else if (
+      effectiveCategory === "anime" ||
+      effectiveCategory === "series"
+    ) {
+      const allSeasonNums = new Set<number>([
+        ...syncedEpisodesBySeason.keys(),
+        ...syncedNoEpCountBySeason.keys(),
+        ...archiveEpisodesBySeason.keys(),
+        ...archiveWholeSeasons,
+      ]);
+      for (const sNum of Array.from(allSeasonNums).sort((a, b) => a - b)) {
+        const syncedCount =
+          (syncedEpisodesBySeason.get(sNum)?.size ?? 0) +
+          (syncedNoEpCountBySeason.get(sNum) ?? 0);
+        const archCount = archiveEpisodesBySeason.get(sNum) ?? 0;
+        const watched = Math.max(
+          syncedCount,
+          archCount,
+          archiveWholeSeasons.has(sNum) ? 1 : 0
         );
-        if (allSeasonsFinished) {
+        detailSeasons.push({
+          number: sNum,
+          title: null,
+          year: null,
+          episodes: watched,
+          episode_minutes: null,
+          total_minutes: null,
+          provider_id: null,
+          watched_episodes: watched,
+        });
+      }
+    }
+
+    // Status computation.
+    let maxProgress: number | null = null;
+    let hasFinishedSignal = false;
+
+    for (const ev of workEvents) {
+      if (isPlannedArchiveEvent(ev)) {
+        continue;
+      }
+      if (ev.season === null || ev.season === undefined) {
+        if (ev.progress !== null && ev.progress !== undefined) {
+          if (maxProgress === null || ev.progress > maxProgress) {
+            maxProgress = ev.progress;
+          }
+        }
+      }
+      const ext = parseExternalIds(ev.external_ids);
+      const absItem = ext?.["abs_item"];
+      if (typeof absItem === "string") {
+        const sig = progressByAbsId.get(absItem);
+        if (sig) {
+          if (sig.is_finished) hasFinishedSignal = true;
+          if (
+            sig.progress !== null &&
+            (maxProgress === null || sig.progress > maxProgress)
+          ) {
+            maxProgress = sig.progress;
+          }
+        }
+      }
+    }
+
+    const normCanonical = normalizeForSearch(canonicalTitle);
+    const titleSig = progressByNormTitle.get(normCanonical);
+    if (titleSig) {
+      if (titleSig.is_finished) hasFinishedSignal = true;
+      if (
+        titleSig.progress !== null &&
+        (maxProgress === null || titleSig.progress > maxProgress)
+      ) {
+        maxProgress = titleSig.progress;
+      }
+    }
+
+    let status: WorkStatus = "unknown";
+    if (isWorkPlanned(workEvents, undefined)) {
+      status = "planned";
+    } else if (archiveExplicitStatus === "dropped" && !hasFinishedSignal) {
+      status = "dropped";
+    } else if (archiveExplicitStatus === "in_progress" && !hasFinishedSignal) {
+      status = "in_progress";
+    } else if (archiveExplicitStatus === "finished") {
+      status = "finished";
+    } else if (hasFinishedSignal || (maxProgress !== null && maxProgress >= 0.95)) {
+      status = "finished";
+    } else if (baseSeasons.length > 0) {
+      const allSeasonsFinished = detailSeasons.every((s) =>
+        s.episodes > 0
+          ? s.watched_episodes >= s.episodes
+          : archiveWholeSeasons.has(s.number)
+      );
+      if (allSeasonsFinished) {
+        status = "finished";
+      } else {
+        status = "in_progress";
+      }
+    } else {
+      const hasSeasonArchive =
+        archiveWholeSeasons.size > 0 || archiveEpisodesBySeason.size > 0;
+      if (hasSeasonArchive) {
+        if (
+          archiveWholeSeasons.size > 0 &&
+          archiveEpisodesBySeason.size === 0
+        ) {
           status = "finished";
         } else {
           status = "in_progress";
         }
-      } else {
-        const hasSeasonArchive =
-          archiveWholeSeasons.size > 0 || archiveEpisodesBySeason.size > 0;
-        if (hasSeasonArchive) {
-          if (
-            archiveWholeSeasons.size > 0 &&
-            archiveEpisodesBySeason.size === 0
-          ) {
-            status = "finished";
-          } else {
-            status = "in_progress";
-          }
-        } else if (
-          cat === "film" ||
-          workEvents.some((e) => e.media_type === "movie")
-        ) {
-          status =
-            maxProgress !== null && maxProgress < 0.95
-              ? "in_progress"
-              : "finished";
-        } else if (cat === "youtube" || cat === "music" || cat === "podcast") {
-          status =
-            maxProgress !== null && maxProgress > 0 ? "in_progress" : "unknown";
-        } else if (
-          cat === "anime" ||
-          cat === "series" ||
-          cat === "book" ||
-          cat === "audiobook" ||
-          cat === "other"
-        ) {
-          status = workEvents.length > 0 ? "in_progress" : "unknown";
-        }
+      } else if (
+        cat === "film" ||
+        workEvents.some((e) => e.media_type === "movie")
+      ) {
+        status =
+          maxProgress !== null && maxProgress < 0.95
+            ? "in_progress"
+            : "finished";
+      } else if (cat === "youtube" || cat === "music" || cat === "podcast") {
+        status =
+          maxProgress !== null && maxProgress > 0 ? "in_progress" : "unknown";
+      } else if (
+        cat === "anime" ||
+        cat === "series" ||
+        cat === "book" ||
+        cat === "audiobook" ||
+        cat === "other"
+      ) {
+        status = workEvents.length > 0 ? "in_progress" : "unknown";
       }
-
-      // Rating and note lookup across all normalized titles of the work's events.
-      const candidateNormTitles = new Set<string>([normCanonical]);
-      for (let i = 0; i < indices.length; i++) {
-        const t = normalizeForSearch(eventTitles[indices[i]!]!);
-        if (t) candidateNormTitles.add(t);
-      }
-
-      let bestAnnotation: AnnotationRecord | null = null;
-      for (const nt of candidateNormTitles) {
-        const list = annotationsByNormTitle.get(nt);
-        if (!list) continue;
-        for (const ann of list) {
-          if (bestAnnotation === null || ann.id > bestAnnotation.id) {
-            bestAnnotation = ann;
-          }
-        }
-      }
-
-      const rating = bestAnnotation?.rating ?? null;
-      const note = bestAnnotation?.note ?? null;
-
-      // History items (newest first).
-      const history = [...workEvents]
-        .sort(
-          (a, b) => b.started_at.localeCompare(a.started_at) || b.id - a.id
-        )
-        .map((ev) => {
-          const precision: DatePrecision = eventPrecision(ev);
-          let entryId: string | null = null;
-          if (ev.source_kind === "archive") {
-            const raw = parseJsonObject(ev.raw);
-            if (typeof raw?.["entry_id"] === "string") {
-              entryId = raw["entry_id"];
-            } else if (typeof ev.source_id === "string") {
-              entryId = ev.source_id.split(":")[1] ?? null;
-            }
-          }
-          return {
-            started_at: ev.started_at,
-            precision,
-            label: buildHistoryLabel(ev, cat, canonicalTitle),
-            minutes: (ev.duration_seconds ?? 0) / 60,
-            source: ev.source,
-            entry_id: entryId,
-          };
-        });
-
-      const work: LibraryWork = {
-        key,
-        category: cat,
-        title: canonicalTitle,
-        cover_url: coverUrl,
-        total_minutes: totalMinutes,
-        units,
-        first_at: firstAt,
-        last_at: lastAt,
-        status,
-        rating,
-        sources,
-        // v2.1 fields; filled by the edit and YouTube work.
-        edited: false,
-        channel: null,
-        topic: null,
-      };
-
-      const detail: LibraryWorkDetail = {
-        ...work,
-        seasons: detailSeasons,
-        history,
-        note,
-      };
-
-      allWorks.push({
-        work,
-        detail,
-        events: workEvents,
-        creators,
-        originalTitle,
-      });
     }
+
+    if (override?.status !== null && override?.status !== undefined) {
+      status = override.status;
+    }
+
+    const totalMinutes = status === "planned" ? 0 : totalSeconds / 60;
+
+    // Rating and note lookup across all normalized titles of the work's events
+    // and any overridden title.
+    const candidateNormTitles = new Set<string>();
+    if (normCanonical) candidateNormTitles.add(normCanonical);
+    const normEffective = normalizeForSearch(effectiveTitle);
+    if (normEffective) candidateNormTitles.add(normEffective);
+    for (const t of eventTitles) {
+      const nt = normalizeForSearch(t);
+      if (nt) candidateNormTitles.add(nt);
+    }
+
+    let bestAnnotation: AnnotationRecord | null = null;
+    for (const nt of candidateNormTitles) {
+      const list = annotationsByNormTitle.get(nt);
+      if (!list) continue;
+      for (const ann of list) {
+        if (bestAnnotation === null || ann.id > bestAnnotation.id) {
+          bestAnnotation = ann;
+        }
+      }
+    }
+
+    const rating = bestAnnotation ? bestAnnotation.rating : (override?.rating ?? null);
+    const note = bestAnnotation ? bestAnnotation.note : (override?.note ?? null);
+
+    // History items (newest first).
+    const history = [...workEvents]
+      .sort(
+        (a, b) => b.started_at.localeCompare(a.started_at) || b.id - a.id
+      )
+      .map((ev) => {
+        const precision: DatePrecision = eventPrecision(ev);
+        let entryId: string | null = null;
+        if (ev.source_kind === "archive") {
+          const raw = parseJsonObject(ev.raw);
+          if (typeof raw?.["entry_id"] === "string") {
+            entryId = raw["entry_id"];
+          } else if (typeof ev.source_id === "string") {
+            entryId = ev.source_id.split(":")[1] ?? null;
+          }
+        }
+        return {
+          started_at: ev.started_at,
+          precision,
+          label: buildHistoryLabel(ev, effectiveCategory, effectiveTitle),
+          minutes: status === "planned" ? 0 : (ev.duration_seconds ?? 0) / 60,
+          source: ev.source,
+          entry_id: entryId,
+        };
+      });
+
+    const ytFields =
+      effectiveCategory === "youtube"
+        ? resolveYoutubeLibraryWorkFields(db, workEvents, effectiveTitle, key)
+        : { channel: null, topic: override?.topic ?? null };
+
+    const work: LibraryWork = {
+      key,
+      category: effectiveCategory,
+      title: effectiveTitle,
+      cover_url: coverUrl,
+      total_minutes: totalMinutes,
+      units,
+      first_at: firstAt,
+      last_at: lastAt,
+      status,
+      rating,
+      sources,
+      edited: override?.edited ?? false,
+      channel: ytFields.channel,
+      topic: ytFields.topic,
+    };
+
+    const detail: LibraryWorkDetail = {
+      ...work,
+      seasons: detailSeasons,
+      history,
+      note,
+    };
+
+    allWorks.push({
+      work,
+      detail,
+      events: workEvents,
+      creators,
+      originalTitle,
+    });
   }
 
   return allWorks;
@@ -735,10 +679,12 @@ export function buildAllLibraryWorks(
 export type LibrarySort = "recent" | "time" | "title";
 
 export interface GetLibraryOptions {
-  category?: Category;
+  category?: CategoryFilterInput;
+  exclude?: CategoryFilterInput;
   q?: string;
   sort?: LibrarySort;
   tz?: string;
+  config?: Config;
 }
 
 export function getLibrary(
@@ -746,9 +692,10 @@ export function getLibrary(
   opts: GetLibraryOptions = {}
 ): LibraryResult {
   const tz = opts.tz ?? "Europe/Bratislava";
-  const allWorks = buildAllLibraryWorks(db, tz);
+  const categoryFilter = parseCategoryFilter(opts.category, opts.exclude);
+  const allWorks = buildAllLibraryWorks(db, tz, { config: opts.config });
 
-  // `categories` always lists every category that has data (for the tabs).
+  // `categories` always lists every category that has data (for the tabs/chips).
   const byCat = new Map<
     Category,
     { total_minutes: number; works: number; units: number }
@@ -779,8 +726,10 @@ export function getLibrary(
   }
 
   let filtered = allWorks;
-  if (opts.category !== undefined) {
-    filtered = filtered.filter((w) => w.work.category === opts.category);
+  if (categoryFilter !== undefined) {
+    filtered = filtered.filter((w) =>
+      matchesCategoryFilter(w.work.category, categoryFilter)
+    );
   }
 
   if (opts.q !== undefined && opts.q.trim() !== "") {
@@ -834,9 +783,160 @@ export function getLibrary(
 export function getLibraryWorkDetail(
   db: Database,
   key: string,
-  tz: string = "Europe/Bratislava"
+  tz: string = "Europe/Bratislava",
+  config?: Config
 ): LibraryWorkDetail | null {
-  const allWorks = buildAllLibraryWorks(db, tz);
+  if (key.startsWith("youtube:video:")) {
+    return getYoutubeVideoWorkDetail(db, key, tz);
+  }
+  const allWorks = buildAllLibraryWorks(db, tz, { config });
   const found = allWorks.find((item) => item.work.key === key);
   return found ? found.detail : null;
+}
+
+export function getHiddenLibraryWorks(
+  db: Database,
+  tz: string = "Europe/Bratislava",
+  config?: Config
+): HiddenWorksResult {
+  const hiddenWorks = buildAllLibraryWorks(db, tz, {
+    onlyHidden: true,
+    config,
+  }).map((item) => item.work);
+
+  hiddenWorks.sort((a, b) => a.title.localeCompare(b.title));
+  return { works: hiddenWorks };
+}
+
+export interface EditLibraryWorkOptions {
+  tz?: string;
+  config?: Config;
+  fetch?: typeof fetch;
+  nowIso?: string;
+}
+
+/**
+ * Apply a partial `WorkEdit` to the library work identified by `key`
+ * (`POST /api/library/work/edit?key=`). Returns the updated `LibraryWorkDetail`.
+ */
+export async function editLibraryWork(
+  db: Database,
+  key: string,
+  input: unknown,
+  opts: EditLibraryWorkOptions = {}
+): Promise<LibraryWorkDetail> {
+  if (typeof key !== "string" || key.trim() === "") {
+    throw new WorkOverrideValidationError(
+      "Missing required query parameter: key"
+    );
+  }
+  if (key.length > 500) {
+    throw new WorkOverrideValidationError(
+      `Invalid key: too long (${key.length} characters, max 500)`
+    );
+  }
+
+  const parsed = parseWorkEdit(input);
+  const tz = opts.tz ?? "Europe/Bratislava";
+  const nowIso = opts.nowIso ?? new Date().toISOString();
+
+  const allWorks = buildAllLibraryWorks(db, tz, {
+    includeHidden: true,
+    config: opts.config,
+  });
+  const target = allWorks.find((item) => item.work.key === key);
+  // Single YouTube videos are not library works (those are per channel) but can be edited
+  // (topic, rating, note) through their `youtube:video:<id>` key from /api/youtube/videos.
+  if (
+    !target &&
+    !(key.startsWith("youtube:video:") && getYoutubeVideoWorkDetail(db, key, tz) !== null)
+  ) {
+    throw new WorkOverrideNotFoundError(key);
+  }
+
+  const currentOverrides = getWorkOverrides(db);
+  const current = currentOverrides.get(key) ?? null;
+
+  let metaWork: WorkDetails | null = null;
+  if (parsed.hasMeta && parsed.meta !== null && opts.config) {
+    metaWork = readWorkCache(
+      opts.config,
+      parsed.meta.provider,
+      parsed.meta.provider_id,
+      Date.now()
+    );
+    if (metaWork === null && opts.fetch) {
+      try {
+        metaWork = await lookupWork(
+          parsed.meta.provider,
+          parsed.meta.provider_id,
+          { config: opts.config, fetch: opts.fetch }
+        );
+      } catch {
+        // Best-effort metadata lookup when linking.
+      }
+    }
+  }
+
+  saveWorkOverride(db, key, parsed, current, metaWork, nowIso);
+
+  // Sync rating / note into the append-only annotations table so every read
+  // path (library, reviews, search, title-history, progress, /api/annotations)
+  // returns the exact same rating and note.
+  if (
+    target &&
+    (parsed.hasRating ||
+      parsed.hasNote ||
+      (parsed.hasTitle &&
+        (target.detail.rating !== null || target.detail.note !== null)))
+  ) {
+    const nextRating = parsed.hasRating
+      ? parsed.ratingTenths === null
+        ? null
+        : parsed.ratingTenths / 10
+      : target.detail.rating;
+    const nextNote = parsed.hasNote ? parsed.note : target.detail.note;
+    const primarySource = target.work.sources[0] ?? "manual";
+
+    const titlesToSync = new Set<string>([target.work.title]);
+    if (parsed.hasTitle && parsed.title !== null) {
+      titlesToSync.add(parsed.title);
+    }
+    for (const ev of target.events) {
+      const wTitle = eventWorkTitleForGrouping(ev, categoryOf(ev));
+      if (wTitle.trim() !== "") {
+        titlesToSync.add(wTitle.trim());
+      }
+    }
+
+    for (const t of titlesToSync) {
+      if (t && t.trim() !== "") {
+        saveAnnotation(
+          db,
+          {
+            source: primarySource,
+            title: t.trim(),
+            rating: nextRating,
+            note: nextNote,
+          },
+          nowIso
+        );
+      }
+    }
+  }
+
+  if (!target) {
+    // A single YouTube video (checked above).
+    return getYoutubeVideoWorkDetail(db, key, tz)!;
+  }
+
+  const updatedWorks = buildAllLibraryWorks(db, tz, {
+    includeHidden: true,
+    config: opts.config,
+  });
+  const updated = updatedWorks.find((item) => item.work.key === key);
+  if (!updated) {
+    throw new WorkOverrideNotFoundError(key);
+  }
+  return updated.detail;
 }

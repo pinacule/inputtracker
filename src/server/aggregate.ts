@@ -24,6 +24,14 @@ import {
   getAnnotationsFor,
   type AnnotationKey,
 } from "./annotations.ts";
+import {
+  applyWorkOverridesToEvents,
+  type CategoryFilter,
+  type CategoryFilterInput,
+  matchesCategoryFilter,
+  parseCategoryFilter,
+} from "./overrides.ts";
+import { filterShortYoutubeEvents } from "./youtube-filter.ts";
 
 export const CONSUMPTION_KINDS = new Set([
   "listening_session",
@@ -310,6 +318,19 @@ export function coverUrlFor(event: {
   source_id?: string;
   external_ids?: unknown;
 }): string | null {
+  const topIds = parseExternalIds(event.external_ids);
+  if (topIds?.["meta_override"] === "1") {
+    const metaProvider = topIds["meta_provider"];
+    const metaId = topIds["meta_id"];
+    if (
+      typeof metaProvider === "string" &&
+      VALID_META_PROVIDERS.has(metaProvider) &&
+      typeof metaId === "string" &&
+      META_ID_RE.test(metaId)
+    ) {
+      return `/api/meta-cover/${metaProvider}/${metaId}`;
+    }
+  }
   if (event.source === "simkl") {
     const ids = parseExternalIds(event.external_ids);
     const poster = ids?.["simkl_poster"];
@@ -1019,17 +1040,28 @@ export function getDisplayConsumptionEvents(
   source?: string,
   tz: string = "Europe/Bratislava"
 ): DedupedEvent[] {
-  const events = getLatestConsumptionEvents(db, source);
-  return dedupeConsumption(events, tz);
+  const events = filterShortYoutubeEvents(
+    getLatestConsumptionEvents(db, source),
+    tz,
+    db
+  );
+  const deduped = dedupeConsumption(events, tz);
+  return applyWorkOverridesToEvents(db, deduped);
 }
 
 export function getCalendar(
   db: Database,
   month: string,
   tz: string,
-  source?: string
+  source?: string,
+  categoryFilter?: CategoryFilter
 ): CalendarResult {
-  const events = getDisplayConsumptionEvents(db, source, tz);
+  let events = getDisplayConsumptionEvents(db, source, tz);
+  if (categoryFilter) {
+    events = events.filter((e) =>
+      matchesCategoryFilter(categoryOf(e), categoryFilter)
+    );
+  }
   return aggregateCalendar(events, month, tz);
 }
 
@@ -1037,9 +1069,15 @@ export function getHeatmapDays(
   db: Database,
   year: string | number,
   tz: string,
-  source?: string
+  source?: string,
+  categoryFilter?: CategoryFilter
 ): HeatmapDaysResult {
-  const events = getDisplayConsumptionEvents(db, source, tz);
+  let events = getDisplayConsumptionEvents(db, source, tz);
+  if (categoryFilter) {
+    events = events.filter((e) =>
+      matchesCategoryFilter(categoryOf(e), categoryFilter)
+    );
+  }
   return aggregateHeatmapDays(events, year, tz);
 }
 
@@ -1047,9 +1085,15 @@ export function getHeatmapHours(
   db: Database,
   year: string | number | undefined,
   tz: string,
-  source?: string
+  source?: string,
+  categoryFilter?: CategoryFilter
 ): HeatmapHoursResult {
-  const events = getDisplayConsumptionEvents(db, source, tz);
+  let events = getDisplayConsumptionEvents(db, source, tz);
+  if (categoryFilter) {
+    events = events.filter((e) =>
+      matchesCategoryFilter(categoryOf(e), categoryFilter)
+    );
+  }
   return aggregateHeatmapHours(events, year, tz);
 }
 
@@ -1057,6 +1101,8 @@ export interface GetStatsOptions {
   from?: string;
   to?: string;
   source?: string;
+  category?: CategoryFilterInput;
+  exclude?: CategoryFilterInput;
   tz?: string;
 }
 
@@ -1068,6 +1114,8 @@ export function getStats(
   let source: string | undefined;
   let from: string | undefined;
   let to: string | undefined;
+  let category: CategoryFilterInput;
+  let exclude: CategoryFilterInput;
   let tz = "Europe/Bratislava";
 
   if (typeof optsOrSource === "string") {
@@ -1079,6 +1127,8 @@ export function getStats(
     source = optsOrSource.source;
     from = optsOrSource.from;
     to = optsOrSource.to;
+    category = optsOrSource.category;
+    exclude = optsOrSource.exclude;
     if (optsOrSource.tz) {
       tz = optsOrSource.tz;
     }
@@ -1087,7 +1137,13 @@ export function getStats(
     tz = tzParam;
   }
 
-  const events = getDisplayConsumptionEvents(db, source, tz);
+  let events = getDisplayConsumptionEvents(db, source, tz);
+  const filter = parseCategoryFilter(category, exclude);
+  if (filter) {
+    events = events.filter((e) =>
+      matchesCategoryFilter(categoryOf(e), filter)
+    );
+  }
   return aggregateStats(events, { from, to, source, tz });
 }
 
