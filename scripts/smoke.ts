@@ -13,7 +13,15 @@
  * 9. Archive export and round-trip import (JSON and CSV)
  * 10. Web application root HTML and PWA manifest serving
  * 11. CLI export and backup commands against the real database
- * 12. Guaranteed cleanup of temporary directories and background processes
+ * 12. Simkl auth, sync, posters and idempotency against a fake Simkl server
+ * 13. YouTube Takeout import, calendar/stats views and thumbnail caching
+ * 14. Cross-source duplicate display (manual + Simkl pair shown once,
+ *     both raw rows kept in the export)
+ * 15. Goals: create, progress counting, and edit as a new latest revision
+ * 16. Ratings and notes: annotations create/edit with latest-wins reads
+ * 17. Export v2: version, goals + annotations revisions, and a second
+ *     import that reports 0 new rows
+ * 18. Guaranteed cleanup of temporary directories and background processes
  */
 
 import {
@@ -1956,6 +1964,444 @@ async function main(): Promise<void> {
           "GET /api/thumb/youtube/bad",
           `status=${resBad.status}`,
           resBad.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 14–17. Phase 3: cross-source duplicates, goals and annotations
+
+    // 14a. Add the same movie by hand that Simkl already synced. The Simkl
+    // fixture contains "Synthetic Movie 1", last watched 2026-05-01T20:15:00Z
+    // (= local date 2026-05-01 in Europe/Bratislava), so a manual movie with
+    // the same title on the same local date is the classic duplicate pair.
+    {
+      const res = await fetch(`${baseUrl}/api/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          media_type: "movie",
+          title: "Synthetic Movie 1",
+          started_at: "2026-05-01 21:30",
+          duration_seconds: 7200,
+        }),
+      });
+      const body = (await res.json()) as {
+        id?: string;
+        inserted?: number;
+      } | null;
+      if (res.status === 201 && body?.inserted === 1 && typeof body?.id === "string") {
+        recordPass("POST /api/events (duplicate movie entry)");
+      } else {
+        recordFail(
+          "POST /api/events (duplicate movie entry)",
+          JSON.stringify(body),
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 14b. The calendar shows the pair once: the Simkl row wins and reports
+    // "also from manual". Both rows stay in the archive (checked in 17).
+    {
+      const res = await fetch(`${baseUrl}/api/calendar?month=2026-05`);
+      const body = (await res.json()) as {
+        month?: string;
+        days?: {
+          date: string;
+          items: { title: string | null; source: string; also_from?: string[] }[];
+        }[];
+      } | null;
+      const day = body?.days?.find((d) => d.date === "2026-05-01");
+      const movieItems = (day?.items ?? []).filter(
+        (it) => it.title === "Synthetic Movie 1"
+      );
+      const shownOnce =
+        movieItems.length === 1 &&
+        movieItems[0]!.source === "simkl" &&
+        Array.isArray(movieItems[0]!.also_from) &&
+        movieItems[0]!.also_from!.includes("manual");
+      if (res.status === 200 && day && shownOnce) {
+        recordPass("GET /api/calendar?month=2026-05 (duplicate shown once)");
+      } else {
+        recordFail(
+          "GET /api/calendar?month=2026-05 (duplicate shown once)",
+          `day=${JSON.stringify(day).slice(0, 200)}`,
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 14c. Stats over the same local day also count the pair once.
+    {
+      const res = await fetch(
+        `${baseUrl}/api/stats?from=2026-05-01&to=2026-05-01`
+      );
+      const body = (await res.json()) as {
+        total_items?: number;
+        by_source?: Record<string, { count: number }>;
+      } | null;
+      const ok =
+        res.status === 200 &&
+        body?.total_items === 1 &&
+        body.by_source?.simkl?.count === 1 &&
+        body.by_source?.manual === undefined;
+      if (ok) {
+        recordPass("GET /api/stats?from&to (duplicate shown once)");
+      } else {
+        recordFail(
+          "GET /api/stats?from&to (duplicate shown once)",
+          JSON.stringify(body).slice(0, 200),
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // The current local year in the configured timezone (Europe/Bratislava),
+    // matching how the server computes "today" for GET /api/goals.
+    const currentLocalYear = Number(
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Bratislava",
+        year: "numeric",
+      }).format(new Date())
+    );
+
+    // 15d. Create a goal for the current year: 2 Simkl items. The Simkl
+    // fixture contributes exactly 4 events in 2026 (Synthetic Show 1 S01E01,
+    // Synthetic Movie 1, Synthetic Anime TV S01E01 and Synthetic Anime
+    // Movie), so progress must count them (deduplicated).
+    let goalId: string | null = null;
+    {
+      const res = await fetch(`${baseUrl}/api/goals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year: currentLocalYear,
+          metric: "items",
+          source: "simkl",
+          target: 2,
+        }),
+      });
+      const body = (await res.json()) as {
+        goal_id?: string;
+        rev_id?: string;
+        inserted?: boolean;
+      } | null;
+      if (
+        res.status === 201 &&
+        body?.inserted === true &&
+        typeof body?.goal_id === "string" &&
+        typeof body?.rev_id === "string"
+      ) {
+        goalId = body.goal_id;
+        recordPass("POST /api/goals (create goal)");
+      } else {
+        recordFail(
+          "POST /api/goals (create goal)",
+          JSON.stringify(body),
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 15e. GET /api/goals returns the goal with progress counted from the
+    // synced events (4 items → 200 % of the target 2 → done).
+    {
+      const res = await fetch(`${baseUrl}/api/goals?year=${currentLocalYear}`);
+      const body = (await res.json()) as {
+        year?: number;
+        goals?: {
+          goal_id: string;
+          target: number;
+          progress: {
+            current: number;
+            target: number;
+            percent: number;
+            status: string;
+          };
+        }[];
+      } | null;
+      const goal = body?.goals?.[0];
+      const ok =
+        res.status === 200 &&
+        body?.year === currentLocalYear &&
+        goal !== undefined &&
+        goal.goal_id === goalId &&
+        goal.progress.current === 4 &&
+        goal.progress.target === 2 &&
+        Math.abs(goal.progress.percent - 200) < 0.01 &&
+        goal.progress.status === "done";
+      if (ok) {
+        recordPass("GET /api/goals (progress counts synced events)");
+      } else {
+        recordFail(
+          "GET /api/goals (progress counts synced events)",
+          JSON.stringify(body).slice(0, 300),
+          res.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 15f. Editing the goal (same goal_id, new target) is a new revision:
+    // POST succeeds again and the read path still shows exactly one goal,
+    // now with the new target.
+    if (goalId !== null) {
+      const res = await fetch(`${baseUrl}/api/goals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          goal_id: goalId,
+          year: currentLocalYear,
+          metric: "items",
+          source: "simkl",
+          target: 5,
+        }),
+      });
+      const body = (await res.json()) as {
+        goal_id?: string;
+        rev_id?: string;
+        inserted?: boolean;
+      } | null;
+
+      const editOk =
+        res.status === 201 &&
+        body?.inserted === true &&
+        body.goal_id === goalId &&
+        typeof body.rev_id === "string";
+
+      if (!editOk) {
+        recordFail(
+          "POST /api/goals (edit as new revision)",
+          JSON.stringify(body),
+          res.status,
+          tmpDir
+        );
+      } else {
+        const getRes = await fetch(
+          `${baseUrl}/api/goals?year=${currentLocalYear}`
+        );
+        const getBody = (await getRes.json()) as {
+          year?: number;
+          goals?: {
+            goal_id: string;
+            target: number;
+            progress: { current: number; percent: number };
+          }[];
+        } | null;
+        const goal = getBody?.goals?.[0];
+        const readOk =
+          getRes.status === 200 &&
+          getBody?.goals?.length === 1 &&
+          goal !== undefined &&
+          goal.goal_id === goalId &&
+          goal.target === 5 &&
+          goal.progress.current === 4 &&
+          Math.abs(goal.progress.percent - 80) < 0.01;
+        if (readOk) {
+          recordPass("POST + GET /api/goals (edit keeps one latest revision)");
+        } else {
+          recordFail(
+            "POST + GET /api/goals (edit keeps one latest revision)",
+            JSON.stringify(getBody).slice(0, 300),
+            getRes.status,
+            tmpDir
+          );
+        }
+      }
+    }
+
+    // 15g. Ratings and notes: annotate an item that exists (the manual
+    // "Smoke Test Book" added earlier), then change it — latest wins.
+    {
+      const post = (rating: number, note: string) =>
+        fetch(`${baseUrl}/api/annotations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: "manual",
+            title: "Smoke Test Book",
+            rating,
+            note,
+          }),
+        });
+
+      const res1 = await post(8, "Smoke note one");
+      const body1 = (await res1.json()) as {
+        rev_id?: string;
+        inserted?: boolean;
+        annotation?: { rating?: number | null; note?: string | null };
+      } | null;
+      const firstOk =
+        res1.status === 201 &&
+        body1?.inserted === true &&
+        typeof body1?.rev_id === "string" &&
+        body1.annotation?.rating === 8 &&
+        body1.annotation?.note === "Smoke note one";
+      if (firstOk) {
+        recordPass("POST /api/annotations (rating + note)");
+      } else {
+        recordFail(
+          "POST /api/annotations (rating + note)",
+          JSON.stringify(body1),
+          res1.status,
+          tmpDir
+        );
+      }
+
+      const getRes = await fetch(
+        `${baseUrl}/api/annotations?source=manual&title=${encodeURIComponent(
+          "Smoke Test Book"
+        )}`
+      );
+      const getBody = (await getRes.json()) as {
+        rating?: number | null;
+        note?: string | null;
+      } | null;
+      const getOk =
+        getRes.status === 200 &&
+        getBody?.rating === 8 &&
+        getBody?.note === "Smoke note one";
+      if (getOk) {
+        recordPass("GET /api/annotations (returns rating + note)");
+      } else {
+        recordFail(
+          "GET /api/annotations (returns rating + note)",
+          JSON.stringify(getBody),
+          getRes.status,
+          tmpDir
+        );
+      }
+
+      const res2 = await post(9, "Smoke note two");
+      const body2 = (await res2.json()) as {
+        inserted?: boolean;
+        annotation?: { rating?: number | null; note?: string | null };
+      } | null;
+      const edited =
+        res2.status === 201 &&
+        body2?.inserted === true &&
+        body2.annotation?.rating === 9;
+
+      const getRes2 = await fetch(
+        `${baseUrl}/api/annotations?source=manual&title=${encodeURIComponent(
+          "Smoke Test Book"
+        )}`
+      );
+      const getBody2 = (await getRes2.json()) as {
+        rating?: number | null;
+        note?: string | null;
+      } | null;
+      const latestWins =
+        getRes2.status === 200 &&
+        getBody2?.rating === 9 &&
+        getBody2?.note === "Smoke note two";
+      if (edited && latestWins) {
+        recordPass("POST + GET /api/annotations (latest revision wins)");
+      } else {
+        recordFail(
+          "POST + GET /api/annotations (latest revision wins)",
+          `post2=${JSON.stringify(body2)}, get2=${JSON.stringify(getBody2)}`,
+          getRes2.status,
+          tmpDir
+        );
+      }
+    }
+
+    // 15h. Export v2: version 2, containing both goal revisions, both
+    // annotation revisions and both raw rows of the duplicate movie pair.
+    {
+      const res = await fetch(`${baseUrl}/api/export.json`);
+      const text = await res.text();
+      let parsed: {
+        format?: string;
+        version?: number;
+        events?: { title?: string | null }[];
+        goals?: { goal_id?: string; target?: number }[];
+        annotations?: {
+          source?: string;
+          title?: string;
+          rating?: number | null;
+        }[];
+      } | null = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        // invalid json
+      }
+
+      const goalRevisions = (parsed?.goals ?? []).filter(
+        (g) => g.goal_id === goalId
+      );
+      const annotationRows = (parsed?.annotations ?? []).filter(
+        (a) => a.source === "manual" && a.title === "Smoke Test Book"
+      );
+      const movieRows = (parsed?.events ?? []).filter(
+        (e) => e.title === "Synthetic Movie 1"
+      );
+
+      const ok =
+        res.status === 200 &&
+        parsed?.format === "inputtracker-export" &&
+        parsed?.version === 2 &&
+        goalRevisions.length === 2 &&
+        goalRevisions.some((g) => g.target === 2) &&
+        goalRevisions.some((g) => g.target === 5) &&
+        annotationRows.length === 2 &&
+        annotationRows.some((a) => a.rating === 8) &&
+        annotationRows.some((a) => a.rating === 9) &&
+        movieRows.length === 2;
+
+      if (ok) {
+        recordPass("GET /api/export.json (v2 with goals and annotations)");
+      } else {
+        recordFail(
+          "GET /api/export.json (v2 with goals and annotations)",
+          `version=${parsed?.version}, goals=${goalRevisions.length}, ` +
+            `annotations=${annotationRows.length}, movieRows=${movieRows.length}`,
+          res.status,
+          tmpDir
+        );
+      }
+
+      // Second import of that archive into the same (already populated) DB:
+      // everything is a duplicate, so all three tables report 0 new rows.
+      const form = new FormData();
+      form.append(
+        "file",
+        new Blob([text], { type: "application/json" }),
+        "inputtracker-export.json"
+      );
+      const importRes = await fetch(`${baseUrl}/api/import`, {
+        method: "POST",
+        body: form,
+      });
+      const importBody = (await importRes.json()) as {
+        kind?: string;
+        events?: { inserted?: number; seen?: number };
+        goals?: { inserted?: number; seen?: number };
+        annotations?: { inserted?: number; seen?: number };
+      } | null;
+      const importOk =
+        importRes.status === 200 &&
+        importBody?.kind === "native" &&
+        importBody.events?.inserted === 0 &&
+        (importBody.events?.seen ?? 0) > 0 &&
+        importBody.goals?.inserted === 0 &&
+        (importBody.goals?.seen ?? 0) > 0 &&
+        importBody.annotations?.inserted === 0 &&
+        (importBody.annotations?.seen ?? 0) > 0;
+      if (importOk) {
+        recordPass("POST /api/import (second import reports 0 new)");
+      } else {
+        recordFail(
+          "POST /api/import (second import reports 0 new)",
+          JSON.stringify(importBody),
+          importRes.status,
           tmpDir
         );
       }

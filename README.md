@@ -170,6 +170,10 @@ Run commands with `bun run it <command>`.
 | `import` | `<file> [--format json\|csv]` | `bun run it import archive.json` |
 | `import youtube-takeout` | `<file>` | `bun run it import youtube-takeout watch-history.json` |
 | `backup` | none | `bun run it backup` |
+| `notify test\|weekly` | none | `bun run it notify test` |
+| `ingest token\|status\|remap` | none | `bun run it ingest token` |
+| `doctor` | none | `bun run it doctor` |
+| `verify-copy <copy.db>` | none | `bun run it verify-copy copies/2026-10-18.db` |
 
 Details:
 
@@ -191,11 +195,112 @@ Details:
   hash is recomputed, so re-importing adds nothing.
 - `backup` writes `inputtracker-YYYY-MM-DD.db` (a `VACUUM INTO` snapshot) and
   the matching `.json` export into `backup_dir`, then prunes older date sets.
+- `notify test` sends one test notification through every configured channel
+  and prints a `name: ok|failed` line per channel (never a URL or token). Exit
+  0 when at least one channel succeeded, 1 when none is configured, 2 when all
+  configured channels failed. `notify weekly` builds the weekly summary and
+  pushes it; without `notify.weekly_summary` it only prints `weekly summary
+  disabled` and exits 0.
+- `ingest token` prints a fresh random ingest token plus a one-line hint; it
+  never reads the config or writes a file. `ingest status` prints
+  `ingest: enabled` or `ingest: disabled` from the config. `ingest remap`
+  re-maps every stored phone play through the current mapping rules (for
+  example a YouTube Music package becoming `music`): a play whose mapping
+  changed is written as a **new** event row (append-only), an unchanged play
+  hashes the same and inserts nothing — so it is safe to repeat.
+- `doctor` is a read-only environment check. It prints one line per check as
+  `OK|WARN|FAIL <name>: <detail>` for: architecture (x86_64 or aarch64), the
+  Bun version, the config (with tokens redacted), the database (its schema
+  version vs this build, or "will be created" when it does not exist yet and
+  the parent directory is writable), the backup directory, whether the
+  configured port is free (in use is only a WARN — that just means the service
+  is probably running), the systemd user manager, lingering, and the
+  `tailscale` binary. Secrets never reach the output and nothing is ever
+  written: the DB is only opened read-only. Exit 0 unless a check FAILs, then 1
+  (WARNs do not fail the run).
+- `verify-copy <copy.db>` proves that a copied database holds every row of the
+  configured one. Both databases are opened read-only and compared by
+  `record_hash` for `events`, `goals` and `annotations` (missing hashes are
+  printed). Extra rows in the copy are reported but are not a failure — the
+  copy may simply have synced more since it was taken. Exit 0 when everything
+  is present; 1 for bad usage **or** missing rows; 2 when a database is
+  missing or unreadable.
 - `it help`, `it --help` and `it -h` print the usage text and exit 0. Running
   with no command prints the usage text and exits 1.
 
 Exit codes: `0` success, `1` bad usage (also invalid `add` input), `2` failure
-(missing/unreadable config, database, sync, export or import errors).
+(missing/unreadable config, database, sync, export or import errors). Two
+commands deviate: `doctor` exits 1 when any check fails, and `verify-copy`
+exits 1 both for bad usage and when rows are missing from the copy.
+
+## Goals
+
+A goal is a yearly target: a year, a metric and a target number, plus optional
+source and media type filters.
+
+| Field | Meaning |
+|---|---|
+| `year` | The calendar year the goal counts (2000–2100). |
+| `metric` | `items` (consumed items), `hours` (summed duration), `titles` (distinct titles/series) or `active_days` (days with at least one item). |
+| `target` | A positive number to reach. |
+| `source` | Optional filter, e.g. only `audiobookshelf`. |
+| `media_type` | Optional filter, e.g. only `audiobook`. |
+| `archived` | Archived goals leave the normal list; `GET /api/goals?archived=1` still shows them. |
+
+Progress is counted from the same deduplicated display data the calendar and
+stats use (`events_latest`, filtered by the goal's `source` and `media_type`),
+so a watch logged by hand and also synced from Simkl counts once. For a goal
+in the current year the app compares progress with a linear expectation
+(`target × days elapsed / days in year`) and labels it `done`, `on_track`,
+`behind` or `not_started`; goals for past years end up `done` or `missed`
+depending on whether the target was reached.
+
+Editing or archiving a goal never rewrites the old row: every edit is a new
+revision in the append-only `goals` archive (a new `rev_id` under the same
+`goal_id`), and reads use the `goals_latest` view, so only the latest revision
+of each goal is ever shown. In the web app, goals live in the Goals card on
+the Year review and Stats pages (create, edit and archive there). The JSON
+export carries every revision, and importing it back uses `INSERT OR IGNORE`,
+so re-importing adds nothing twice.
+
+## Ratings and notes
+
+You can give any title a rating from 1 to 10 (shown as five stars with
+halves) and a free-text note of up to 5000 characters. A title here is the
+same group the Search page uses: `source` + title (or series name), so a note
+on a show covers all of its episodes.
+
+Both are stored as rows of the append-only `annotations` table keyed by
+`source` + `title`: every save is a new revision (a retried save with the same
+`rev_id` inserts nothing), reads use the `annotations_latest` view, so the
+latest revision wins. Clearing the rating or the note is also just a new row
+(with `NULL`s); nothing is ever updated in place.
+
+In the app, the rating editor is on the Search and Progress pages. Under the
+hood it is `GET /api/annotations?source=<s>&title=<t>` and
+`POST /api/annotations`, and every revision is included in the JSON export
+(v2), so `it export` and `it import` round-trip them like events and goals.
+
+## Duplicates across sources
+
+The same watch often arrives twice: once logged by hand (`manual`) and once
+synced from Simkl. The calendar, heat map, stats, year review, lists and goal
+progress show it **once**. This is display-only deduplication: nothing in the
+database is deleted or changed, and the export still contains both raw rows.
+
+Two events pair up only when all of these hold:
+
+- one of the two sources is `manual` (two synced sources are never merged,
+  and neither are two manual rows);
+- the media type is `movie` or `episode`, and for episodes the season and
+  episode numbers match too;
+- the title or series name matches after the Search-page normalization;
+- the watch falls on the same local date in the configured timezone.
+
+When a pair matches, the non-manual (synced) event wins and the manual one is
+absorbed: the merged row is marked "also from manual", and it keeps its own
+duration unless it has none (then the manual one's is used). The start times
+do not have to be equal — the closest pair wins, ties go to the lower row id.
 
 ## Simkl (TV shows, movies, anime)
 
