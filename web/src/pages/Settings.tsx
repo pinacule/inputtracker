@@ -47,6 +47,7 @@ const THEME_OPTIONS: ReadonlyArray<TabOption<ThemeMode>> = [
 const PROVIDER_LABELS: Readonly<Record<MetaProvider, string>> = {
   anilist: "AniList (Anime)",
   tvmaze: "TVmaze (Series)",
+  cinemeta: "Cinemeta (Films & Series)",
   itunes: "iTunes Search (Films)",
   openlibrary: "Open Library (Books & Audiobooks)",
   tmdb: "TMDB (Films & Series)",

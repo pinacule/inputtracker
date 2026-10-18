@@ -316,7 +316,11 @@ function mapCinemetaWork(
   }
 
   const genres = extractStringList(meta.genres ?? meta.genre);
-  const isSeries = kind === "series" || meta.type === "series" || Array.isArray(meta.videos);
+  // Cinemeta films carry `videos: []`, so trust `type` first and only count episodes when it is absent.
+  const isSeries =
+    meta.type === "series" ||
+    (meta.type !== "movie" &&
+      (kind === "series" || (Array.isArray(meta.videos) && meta.videos.length > 0)));
 
   const seasons = isSeries ? buildSeriesSeasonsFromVideos(meta.videos, runtimeMinutes) : [];
   const finalYear = year ?? seasons[0]?.year ?? null;
