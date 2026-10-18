@@ -596,13 +596,16 @@ export function ContextMenuHost({
         </div>
       )}
 
-      {subPanel === "rate" && (
+      {subPanel === "rate" && target.category !== "music" && (
         <div class="ui-context-menu-subpanel">
           <RatingInput10
             rating={draftRating}
             onChange={setDraftRating}
+            category={target.category}
             compact
+            autoFocus
             onCommit={(val) => void handleSaveRating(val)}
+            onCancel={() => setSubPanel("main")}
           />
           <div class="ui-quick-rate-popover-actions">
             <Button

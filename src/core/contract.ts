@@ -185,6 +185,8 @@ export interface LibraryWork {
   } | null;
   /** v2.2: author (books/audiobooks), artist (music), channel (YouTube), studio/creator, else null. */
   creator: string | null;
+  /** v2.2 (W11): true when a track/video is in Favorite Songs. */
+  favorite?: boolean;
 }
 
 export interface CategoryTotal {
@@ -334,6 +336,8 @@ export interface YoutubeChannel {
   videos: number;
   total_minutes: number;
   last_at: string | null;
+  /** v2.2 (W11): true when the channel is in Takeout subscriptions.csv. */
+  subscribed?: boolean;
 }
 
 export interface YoutubeVideo {

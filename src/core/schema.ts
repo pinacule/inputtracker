@@ -100,6 +100,7 @@ export interface YoutubeVideoRow {
   channel_id: string | null;
   thumbnail_url: string | null;
   genre: string | null;
+  length_seconds?: number | null;
   status: YoutubeEnrichmentStatus;
   http_status: number | null;
   retry_after: string | null;
@@ -112,5 +113,22 @@ export interface YoutubeChannelTopicRow {
   channel: string;
   normalized_channel: string;
   topic: string | null;
+  created_at: string;
+}
+
+export interface YoutubeFavoriteRow {
+  id: number;
+  record_hash: string;
+  video_id: string;
+  added_at: string | null;
+  created_at: string;
+}
+
+export interface YoutubeSubscriptionRow {
+  id: number;
+  record_hash: string;
+  channel_id: string;
+  channel_url: string | null;
+  channel_title: string | null;
   created_at: string;
 }

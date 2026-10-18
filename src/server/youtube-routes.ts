@@ -39,6 +39,10 @@ import { getWorkOverrides } from "./overrides.ts";
 import { normalizeForSearch } from "./search.ts";
 import { isValidYoutubeVideoId } from "./thumbs.ts";
 import {
+  getFavoriteVideoIds,
+  getYoutubeSubscriptions,
+} from "../sources/youtube/takeout.ts";
+import {
   getEventYoutubeVideoId,
   getYoutubeMinWatchMinutesForDb,
   partitionYoutubeEvents,
@@ -593,6 +597,7 @@ export function getYoutubeVideoWorkDetail(
     workTopicOverrides.has(targetVideoId);
 
   const effectiveTitle = override?.title ?? title;
+  const favoriteVideoIds = getFavoriteVideoIds(db);
 
   return {
     key,
@@ -607,6 +612,9 @@ export function getYoutubeVideoWorkDetail(
     rating: override?.rating ?? null,
     progress: null,
     creator: channel,
+    ...(favoriteVideoIds.size > 0
+      ? { favorite: favoriteVideoIds.has(targetVideoId) }
+      : {}),
     sources: Array.from(sourceSet).sort((a, b) => a.localeCompare(b)),
     edited,
     channel,
@@ -849,6 +857,19 @@ export function getYoutubeOverview(
     });
   }
 
+  const subscriptions = getYoutubeSubscriptions(db);
+  const subscribedIds = new Set<string>();
+  const subscribedNormTitles = new Set<string>();
+  for (const sub of subscriptions) {
+    if (sub.channel_id) {
+      subscribedIds.add(sub.channel_id);
+    }
+    if (sub.channel_title && sub.channel_title.trim() !== "") {
+      subscribedNormTitles.add(normalizeChannelKey(sub.channel_title));
+    }
+  }
+  const hasSubscriptions = subscriptions.length > 0;
+
   const channels: YoutubeChannel[] = [];
   for (const [normChan, acc] of channelAcc.entries()) {
     let chanTopic: string | null = null;
@@ -864,6 +885,10 @@ export function getYoutubeOverview(
       }
     }
 
+    const isSubscribed =
+      (acc.channelId !== null && subscribedIds.has(acc.channelId)) ||
+      subscribedNormTitles.has(normChan);
+
     channels.push({
       channel: acc.displayName,
       channel_id: acc.channelId,
@@ -871,6 +896,7 @@ export function getYoutubeOverview(
       videos: acc.videos,
       total_minutes: acc.totalMinutes,
       last_at: acc.latestAt,
+      ...(hasSubscriptions ? { subscribed: isSubscribed } : {}),
     });
   }
 

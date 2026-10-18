@@ -87,6 +87,7 @@ import {
   getYoutubeVideoWorkDetail,
   resolveYoutubeLibraryWorkFields,
 } from "./youtube-routes.ts";
+import { getFavoriteVideoIds } from "../sources/youtube/takeout.ts";
 
 export interface InternalLibraryWork {
   work: LibraryWork;
@@ -242,6 +243,7 @@ export function buildAllLibraryWorks(
   }
 
   const overrides = getWorkOverrides(db);
+  const favoriteVideoIds = getFavoriteVideoIds(db);
 
   const progressSignals = readMediaProgressSignals(db);
   const progressByAbsId = new Map<string, MediaProgressSignal>();
@@ -849,6 +851,12 @@ export function buildAllLibraryWorks(
         };
       }
     }
+    const isFavorite =
+      favoriteVideoIds.size > 0 &&
+      workEvents.some((ev) => {
+        const vid = parseExternalIds(ev.external_ids)?.["youtube_video"];
+        return typeof vid === "string" && favoriteVideoIds.has(vid);
+      });
 
     const work: LibraryWork = {
       key,
@@ -867,6 +875,7 @@ export function buildAllLibraryWorks(
       topic: ytFields.topic,
       progress,
       creator,
+      ...(favoriteVideoIds.size > 0 ? { favorite: isFavorite } : {}),
     };
 
     const detail: LibraryWorkDetail = {

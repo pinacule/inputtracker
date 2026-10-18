@@ -139,7 +139,13 @@ const VALID_STATUSES: ReadonlySet<string> = new Set([
   "unknown",
 ]);
 
-const VALID_SORTS: ReadonlySet<string> = new Set(["recent", "time", "title"]);
+const VALID_SORTS: ReadonlySet<string> = new Set([
+  "recent",
+  "time",
+  "title",
+  "category",
+  "creator",
+]);
 
 const VALID_RANGES: ReadonlySet<string> = new Set([
   "30d",
@@ -150,7 +156,7 @@ const VALID_RANGES: ReadonlySet<string> = new Set([
 
 /**
  * Checks if a raw hash is a legacy route (`#/stats`, `#/heatmap`, `#/year`,
- * `#/progress`, `#/importexport`) and returns its new canonical hash if so,
+ * `#/progress`, `#/importexport`, `#/youtube`) and returns its new canonical hash if so,
  * or `null` if no redirect is needed.
  */
 export function resolveLegacyRedirect(hash: string): string | null {
@@ -174,6 +180,17 @@ export function resolveLegacyRedirect(hash: string): string | null {
       return "#/library?status=in_progress";
     case "importexport":
       return "#/settings";
+    case "youtube": {
+      const next = new URLSearchParams();
+      next.set("cat", "youtube");
+      for (const k of ["channel", "topic", "q", "sort"]) {
+        const v = params.get(k);
+        if (v) {
+          next.set(k, v);
+        }
+      }
+      return `#/library?${next.toString()}`;
+    }
     default:
       return null;
   }

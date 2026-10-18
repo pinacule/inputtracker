@@ -23,6 +23,7 @@ import type {
   DatePrecision,
   HiddenWorksResult,
   LibraryResult,
+  LibrarySortV2,
   LibraryWork,
   LibraryWorkDetail,
   LookupHit,
@@ -30,6 +31,7 @@ import type {
   ManualWork,
   MetaProvider,
   MonthReview,
+  RefreshMetadataResult,
   SeasonInfo,
   SeriesPoint,
   SeriesResult,
@@ -58,6 +60,7 @@ export type {
   DatePrecision,
   HiddenWorksResult,
   LibraryResult,
+  LibrarySortV2,
   LibraryWork,
   LibraryWorkDetail,
   LookupHit,
@@ -65,6 +68,7 @@ export type {
   ManualWork,
   MetaProvider,
   MonthReview,
+  RefreshMetadataResult,
   SeasonInfo,
   SeriesPoint,
   SeriesResult,
@@ -1064,7 +1068,7 @@ export function listArchive(
   );
 }
 
-export type LibrarySort = "recent" | "time" | "title";
+export type LibrarySort = LibrarySortV2;
 
 export interface LibraryParams {
   category?: CategoryListParam;
@@ -1212,18 +1216,21 @@ export function getYoutubeOverview(
   );
 }
 
+export type YoutubeVideoSort = "recent" | "time" | "topic";
+
 export interface YoutubeVideosParams {
   channel?: string;
   topic?: string;
   from?: string;
   to?: string;
   q?: string;
+  sort?: YoutubeVideoSort;
   limit?: number;
   offset?: number;
 }
 
 /**
- * Fetch filtered YouTube videos (`GET /api/youtube/videos?channel=&topic=&from=&to=&q=&limit=&offset=`).
+ * Fetch filtered YouTube videos (`GET /api/youtube/videos?channel=&topic=&from=&to=&q=&sort=&limit=&offset=`).
  */
 export function getYoutubeVideos(
   params: YoutubeVideosParams = {}
@@ -1235,9 +1242,23 @@ export function getYoutubeVideos(
       from: params.from,
       to: params.to,
       q: params.q,
+      sort: params.sort,
       limit: params.limit !== undefined ? String(params.limit) : undefined,
       offset: params.offset !== undefined ? String(params.offset) : undefined,
     })
+  );
+}
+
+/**
+ * Re-look up linked metadata for a library work (`POST /api/library/work/refresh-metadata?key=`).
+ * Degrades gracefully when the caller catches 404.
+ */
+export function refreshWorkMetadata(
+  key: string
+): Promise<RefreshMetadataResult & Partial<LibraryWorkDetail>> {
+  return postJson<RefreshMetadataResult & Partial<LibraryWorkDetail>>(
+    withQuery("/api/library/work/refresh-metadata", { key }),
+    {}
   );
 }
 

@@ -73,7 +73,9 @@ export function categoryOf(event: {
     case "music":
       return "music";
     case "video":
-      return "youtube";
+      return asObject(event.external_ids)?.["youtube_music"] === true
+        ? "music"
+        : "youtube";
     case "movie":
       return hasAnimeId(asObject(event.external_ids)) ? "anime" : "film";
     case "episode":

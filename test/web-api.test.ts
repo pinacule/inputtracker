@@ -24,6 +24,7 @@ import {
   lookupSearch,
   lookupWork,
   postJson,
+  refreshWorkMetadata,
   saveArchiveEntry,
   search,
   setChannelTopic,
@@ -547,5 +548,39 @@ describe("api.ts v2 endpoints (lookup, archive, library, series, review, setting
     expect(calls[16]?.url).toBe(
       "/api/stats?category=film%2Cseries&exclude=youtube"
     );
+  });
+
+  test("v2.2 endpoints: refreshWorkMetadata, Library sorts (category/creator), and YouTube video sort", async () => {
+    mockFetch(() =>
+      jsonResponse({
+        key: "series:synthetic-vikings",
+        changed: true,
+        minutes_before: 5340,
+        minutes_after: 3960,
+      })
+    );
+
+    const refreshed = await refreshWorkMetadata("series:synthetic-vikings");
+    expect(calls[0]?.url).toBe(
+      "/api/library/work/refresh-metadata?key=series%3Asynthetic-vikings"
+    );
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(refreshed.changed).toBe(true);
+    expect(refreshed.minutes_before).toBe(5340);
+    expect(refreshed.minutes_after).toBe(3960);
+
+    mockFetch(() =>
+      jsonResponse({ categories: [], works: [], total_minutes: 0 })
+    );
+    await getLibrary({ exclude: ["youtube", "music"], sort: "category" });
+    await getLibrary({ category: "music", sort: "creator" });
+    expect(calls[1]?.url).toBe(
+      "/api/library?exclude=youtube%2Cmusic&sort=category"
+    );
+    expect(calls[2]?.url).toBe("/api/library?category=music&sort=creator");
+
+    mockFetch(() => jsonResponse({ videos: [], total: 0 }));
+    await getYoutubeVideos({ sort: "topic", limit: 50 });
+    expect(calls[3]?.url).toBe("/api/youtube/videos?sort=topic&limit=50");
   });
 });

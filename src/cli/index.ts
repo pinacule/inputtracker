@@ -10,7 +10,7 @@
 
 import type { Database } from "bun:sqlite";
 import { randomBytes } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import {
   isIngestEnabled,
   loadConfig,
@@ -119,13 +119,13 @@ export function usage(): string {
     "Commands:",
     "  sync audiobookshelf|simkl|activitywatch  fetch new source activity into the DB",
     "    sync activitywatch --since <date>      backfill older YouTube plays from ActivityWatch",
-    "    youtube enrich [--limit <n>]           enrich stored YouTube videos with channel and category",
+    "    youtube enrich [--takeout] [--limit <n>] enrich stored YouTube videos with channel, category, and length",
     "    covers backfill [--limit <n>]          backfill missing covers by title (Open Library / iTunes)",
     "  auth simkl [--status]                    connect or inspect Simkl authorization",
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
     "  import <file> [--format json|csv]        import a native export file into the DB",
-    "    import youtube-takeout <file>          import a YouTube Takeout watch-history JSON file",
+    "    import youtube-takeout <path> [--dry-run] import a YouTube Takeout export (.html, .json, folder, or .zip)",
     "    import achriom <path> [--dry-run]      import an Achriom library export (.zip or .csv)",
     "    archive refresh-metadata [--dry-run]   re-look up linked metadata and update archive runtimes",
     "  backup                                   snapshot the DB + JSON export into backup_dir",
@@ -794,22 +794,33 @@ async function runImport(args: string[], ctx: SyncContext): Promise<number> {
 function runYoutubeTakeoutImport(args: string[], ctx: SyncContext): number {
   const { deps, out, err } = ctx;
 
-  const file = args[0];
+  let file: string | undefined;
+  let dryRun = false;
+
+  for (const arg of args) {
+    if (arg === "--dry-run") {
+      dryRun = true;
+    } else if (arg.startsWith("-")) {
+      err(`Unknown option: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    } else if (file === undefined) {
+      file = arg;
+    } else {
+      err(`Unexpected argument: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+  }
+
   if (file === undefined || file === "") {
     err("Missing <file>.");
-    err(usage());
-    return EXIT_USAGE;
-  }
-  if (args.length > 1) {
-    err(`Unexpected argument: ${args[1] as string}`);
     err(usage());
     return EXIT_USAGE;
   }
 
   const doLoadConfig = deps.loadConfig ?? loadConfig;
   const doOpenDb = deps.openDb ?? openDb;
-  const doReadFile =
-    deps.readFile ?? ((path: string) => readFileSync(path, "utf8"));
 
   let config: Config;
   try {
@@ -819,9 +830,21 @@ function runYoutubeTakeoutImport(args: string[], ctx: SyncContext): number {
     return EXIT_FAILURE;
   }
 
-  let text: string;
+  let input: string | Uint8Array;
   try {
-    text = doReadFile(file);
+    if (deps.readFileBytes) {
+      input = deps.readFileBytes(file);
+    } else if (existsSync(file) && statSync(file).isDirectory()) {
+      input = file;
+    } else if (file.toLowerCase().endsWith(".zip") && existsSync(file)) {
+      input = new Uint8Array(readFileSync(file));
+    } else if (deps.readFile) {
+      input = deps.readFile(file);
+    } else if (existsSync(file)) {
+      input = file;
+    } else {
+      input = readFileSync(file, "utf8");
+    }
   } catch (caught) {
     err(redactMessage(errorText(caught), config));
     return EXIT_FAILURE;
@@ -836,13 +859,16 @@ function runYoutubeTakeoutImport(args: string[], ctx: SyncContext): number {
   }
 
   try {
-    const result = importYoutubeTakeout(db, text);
+    const result = importYoutubeTakeout(db, input, { config, dryRun });
     const { skipped } = result;
+    const hoursStr = (Math.round(result.estimated_hours * 10) / 10).toFixed(1);
     out(
-      `youtube-takeout: ${result.records} records, ${result.seen} views, ` +
-        `${result.inserted} new, skipped ${skipped.ads} ads, ` +
-        `${skipped.no_video} without video, ${skipped.other} other, ` +
-        `${skipped.invalid} invalid`
+      `youtube-takeout${result.dry_run ? " (dry-run)" : ""}: ${result.records} records, ${result.seen} views, ` +
+        `${result.stored} stored, ${result.inserted} new, ${result.music} music, ${hoursStr} h, ` +
+        `skipped ${skipped.ads} ads, ${skipped.no_video} without video, ${skipped.other} other, ` +
+        `${skipped.invalid} invalid, ${result.gap_skipped} gap-skipped` +
+        (result.dedup_skipped > 0 ? `, ${result.dedup_skipped} dedup-skipped` : "") +
+        `, ${result.favorites} favourites, ${result.subscriptions} subscriptions`
     );
     return EXIT_OK;
   } catch (caught) {
@@ -1480,14 +1506,17 @@ async function runYoutube(args: string[], ctx: SyncContext): Promise<number> {
   const [sub, ...rest] = args;
 
   if (sub !== "enrich") {
-    err("Usage: it youtube enrich [--limit <n>]");
+    err("Usage: it youtube enrich [--takeout] [--limit <n>]");
     return EXIT_USAGE;
   }
 
   let limitVal: number | undefined;
+  let takeout = false;
   for (let i = 0; i < rest.length; i += 1) {
     const arg = rest[i]!;
-    if (arg === "--limit" || arg.startsWith("--limit=")) {
+    if (arg === "--takeout") {
+      takeout = true;
+    } else if (arg === "--limit" || arg.startsWith("--limit=")) {
       const raw =
         arg === "--limit" ? rest[i + 1] : arg.slice("--limit=".length);
       if (arg === "--limit") {
@@ -1536,12 +1565,17 @@ async function runYoutube(args: string[], ctx: SyncContext): Promise<number> {
     const result = await doEnrich(db, {
       config,
       limit: limitVal,
+      takeout,
       fetch: deps.fetch as typeof fetch | undefined,
       sleep: deps.sleep,
       nowMs: nowMsFn,
     });
+    const resavedPart =
+      takeout || typeof result.resaved === "number"
+        ? `, ${result.resaved ?? 0} re-saved`
+        : "";
     out(
-      `youtube enrich: ${result.attempted} attempted, ${result.enriched} enriched, ${result.notFound} not found, ${result.failed} failed`
+      `youtube enrich: ${result.attempted} attempted, ${result.enriched} enriched, ${result.notFound} not found, ${result.failed} failed${resavedPart}`
     );
     return EXIT_OK;
   } catch (caught) {
