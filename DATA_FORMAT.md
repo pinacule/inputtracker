@@ -81,10 +81,10 @@ Values the code produces today:
   import — `history_item`; from manual entry — `history_item`. An import keeps
   whatever `source_kind` was in the file.
 - `media_type`: one of `audiobook`, `podcast_episode`, `movie`, `episode`,
-  `video`, `book`, `other`. Audiobookshelf sync only ever produces `audiobook`,
+  `video`, `music`, `book`, `other`. Audiobookshelf sync only ever produces `audiobook`,
   `podcast_episode` or `other`; Simkl sync produces `movie` or `episode`; a
-  YouTube Takeout import or ActivityWatch sync produces `video`; manual entry
-  accepts any of the seven.
+  YouTube Takeout import produces `video`; an ActivityWatch sync produces `video` or `music`;
+  the phone ingest produces `video` or `music`; manual entry accepts any of the eight.
 
 `external_ids` and `raw` are stored as JSON **text** (not JSONB). A typical
 `external_ids` value for an Audiobookshelf session looks like
@@ -116,9 +116,10 @@ Simkl sync writes one event per watch. `source = simkl`, `source_kind = watch`,
 ### YouTube ActivityWatch events (`aw_play`)
 
 ActivityWatch sync converts browser web tab history (aw-watcher-web) into
-`youtube` events. `source = youtube`, `source_kind = aw_play`, `media_type = video`,
-`source_id = <11-char videoId>:<started_at>`, where `started_at` is the play's
-first event start time normalized to UTC ISO 8601 with milliseconds.
+`youtube` events. `source = youtube`, `source_kind = aw_play`, `media_type = video`
+(or `music` for `music.youtube.com`), `source_id = <11-char videoId>:<started_at>`,
+where `started_at` is the play's first event start time normalized to UTC ISO 8601
+with milliseconds.
 
 - A **play** groups consecutive events for the same video id where each event
   starts at most 10 minutes after the previous one of the run ended
@@ -163,8 +164,8 @@ plus `"youtube_music": true` when the record's `header` is `YouTube Music`.
 
 The phone ingest endpoint (`POST /api/ingest/youtube-plays`, see
 `docs/ingest-api.md`) writes one event per play:
-`source = youtube`, `source_kind = phone_play`, `media_type = video`, and
-`source_id = <play_id from the phone, lower-cased>`. `title` is the video
+`source = youtube`, `source_kind = phone_play`, `media_type = video`
+(or `music` for YouTube Music app plays), and `source_id = <play_id from the phone, lower-cased>`. `title` is the video
 title; `parent_title` is the channel name or `NULL`; `started_at`/`ended_at`
 are the play timestamps normalized to UTC ISO 8601 with milliseconds;
 `duration_seconds` is the watched seconds; `progress` is the last position

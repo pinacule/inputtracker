@@ -104,6 +104,38 @@ describe("searchEvents grouping", () => {
     expect(hit.matched).toEqual(["title", "series"]);
     expect(hit.subtitle).toBe("Fake Show");
   });
+
+  test("music events keep parentField -> channel and group by title like videos", () => {
+    const events = [
+      ev("2026-03-01T12:00:00.000Z", {
+        source: "youtube",
+        source_kind: "phone_play",
+        media_type: "music",
+        title: "Fake Song",
+        parent_title: "Fake Channel",
+      }),
+      ev("2026-03-02T12:00:00.000Z", {
+        source: "youtube",
+        source_kind: "phone_play",
+        media_type: "music",
+        title: "Fake Song",
+        parent_title: "Fake Channel",
+      }),
+    ];
+
+    const resChannel = searchEvents(events, TZ, { q: "Fake Channel", limit: 30, offset: 0 });
+    expect(resChannel.total).toBe(2);
+    const songHit = resChannel.hits.find((h) => h.title === "Fake Song");
+    expect(songHit).toBeDefined();
+    expect(songHit!.matched).toContain("channel");
+    expect(songHit!.media_type).toBe("music");
+    expect(songHit!.count).toBe(2);
+
+    const resTitle = searchEvents(events, TZ, { q: "Fake Song", limit: 30, offset: 0 });
+    expect(resTitle.total).toBe(1);
+    expect(resTitle.hits[0]!.title).toBe("Fake Song");
+    expect(resTitle.hits[0]!.matched).toContain("title");
+  });
 });
 
 describe("searchEvents matching", () => {

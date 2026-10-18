@@ -138,6 +138,7 @@ describe("constants", () => {
       "movie",
       "episode",
       "video",
+      "music",
       "book",
       "other",
     ]);

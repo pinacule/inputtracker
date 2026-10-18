@@ -47,6 +47,19 @@ describe("events core", () => {
       expect(norm.raw).toBeNull();
     });
 
+    test("music media_type is accepted by normalize", () => {
+      const minimal: NewEvent = {
+        source: "youtube",
+        source_kind: "phone_play",
+        source_id: "fake-music-001",
+        media_type: "music",
+        started_at: "2026-10-17T08:15:00Z",
+      };
+
+      const norm = normalize(minimal);
+      expect(norm.media_type).toBe("music");
+    });
+
     test("empty strings in title/parent_title/device → null", () => {
       const event: NewEvent = {
         source: "audiobookshelf",

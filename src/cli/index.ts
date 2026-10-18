@@ -38,6 +38,7 @@ import {
   type BackupResult,
 } from "../io/backup.ts";
 import { prefetchCovers } from "../server/covers.ts";
+import { remapPhonePlays } from "../server/ingest.ts";
 import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
@@ -107,6 +108,7 @@ export function usage(): string {
     "  notify weekly                            push the weekly summary (needs notify.weekly_summary)",
     "  ingest token                             print a fresh phone-ingest token",
     "  ingest status                            show whether ingest is enabled",
+    "  ingest remap                             re-map phone plays to update media types",
     "  doctor                                   check the environment before/after a move",
     "  verify-copy <copy.db>                    check a copied DB has every event of the configured DB",
     "",
@@ -1188,7 +1190,47 @@ async function runIngest(args: string[], ctx: SyncContext): Promise<number> {
     return EXIT_OK;
   }
 
-  err("Usage: it ingest token|status");
+  if (sub === "remap") {
+    if (args.length > 1) {
+      err(`Unexpected argument: ${args[1]}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+    const doLoadConfig = deps.loadConfig ?? loadConfig;
+    const doOpenDb = deps.openDb ?? openDb;
+    let config: Config;
+    try {
+      config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+    } catch (caught) {
+      err(redactMessage(errorText(caught)));
+      return EXIT_FAILURE;
+    }
+
+    let db: Database;
+    try {
+      db = doOpenDb(config.storage.db_path);
+    } catch (caught) {
+      err(redactMessage(errorText(caught), config));
+      return EXIT_FAILURE;
+    }
+
+    try {
+      const { remapped, total } = remapPhonePlays(db);
+      out(`remapped ${remapped} of ${total} phone plays`);
+      return EXIT_OK;
+    } catch (caught) {
+      err(redactMessage(errorText(caught), config));
+      return EXIT_FAILURE;
+    } finally {
+      try {
+        db.close();
+      } catch {
+        // ignore close error
+      }
+    }
+  }
+
+  err("Usage: it ingest token|status|remap");
   return EXIT_USAGE;
 }
 

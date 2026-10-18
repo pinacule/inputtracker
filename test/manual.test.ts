@@ -211,6 +211,11 @@ describe("validateManual", () => {
     expect(message).toContain("Invalid media_type: 'xml'");
   });
 
+  test("music media_type is accepted", () => {
+    const event = validateManual(manualInput({ media_type: "music" }), TZ);
+    expect(event.media_type).toBe("music");
+  });
+
   test("bad progress is rejected", () => {
     expect(
       thrownMessage(() => validateManual(manualInput({ progress: 1.5 }), TZ))

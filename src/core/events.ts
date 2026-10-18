@@ -8,6 +8,7 @@ export type MediaType =
   | "movie"
   | "episode"
   | "video"
+  | "music"
   | "book"
   | "other";
 
@@ -17,6 +18,7 @@ export const VALID_MEDIA_TYPES: ReadonlySet<string> = new Set<MediaType>([
   "movie",
   "episode",
   "video",
+  "music",
   "book",
   "other",
 ]);

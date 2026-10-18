@@ -48,6 +48,7 @@ describe("MEDIA_TYPE_OPTIONS", () => {
         "book",
         "episode",
         "movie",
+        "music",
         "other",
         "podcast_episode",
         "video",

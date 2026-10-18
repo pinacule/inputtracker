@@ -308,7 +308,9 @@ The endpoint is `POST /api/ingest/youtube-plays`; the request/response contract,
 the size limit and the idempotency rules are in
 [`docs/ingest-api.md`](docs/ingest-api.md). `bun run it ingest status` shows
 whether ingest is enabled. The token never appears in logs, the web app or
-error responses.
+error responses. `bun run it ingest remap` re-maps stored phone plays through
+current mapping rules (e.g. promoting YouTube Music plays to `music`) in an
+append-only run.
 
 ## Backups, export and import
 

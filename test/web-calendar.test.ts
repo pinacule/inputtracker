@@ -168,11 +168,13 @@ describe("sourceIcon", () => {
     expect(sourceIcon("other", "episode")).toBe("📺");
     expect(sourceIcon("other", "tv")).toBe("📺");
     expect(sourceIcon("other", "video")).toBe("📹");
+    expect(sourceIcon("other", "music")).toBe("🎵");
     expect(sourceIcon("other", "book")).toBe("📖");
   });
 
   test("a YouTube video shows the YouTube icon, other videos keep 📹", () => {
     expect(sourceIcon("youtube", "video")).toBe("▶️");
+    expect(sourceIcon("youtube", "music")).toBe("🎵");
     expect(sourceIcon("youtube")).toBe("▶️");
     expect(sourceIcon("manual", "video")).toBe("📹");
   });

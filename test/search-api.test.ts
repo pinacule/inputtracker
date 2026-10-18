@@ -198,6 +198,13 @@ describe("API endpoint GET /api/search via createApp", () => {
     expect(json.error).toContain("Invalid media_type");
   });
 
+  test("media_type = music is accepted on /api/search", async () => {
+    const app = createApp({ db, config });
+
+    const res = await app.request("/api/search?q=fake&media_type=music");
+    expect(res.status).toBe(200);
+  });
+
   test("unknown query parameters return 400", async () => {
     const app = createApp({ db, config });
 

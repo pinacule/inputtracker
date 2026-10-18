@@ -168,6 +168,9 @@ export function sourceIcon(
   if (m === "episode" || m === "tv") {
     return "📺";
   }
+  if (m === "music") {
+    return "🎵";
+  }
   if (m === "video") {
     // A YouTube video shows the YouTube icon; any other video keeps 📹.
     return s === "youtube" ? "▶️" : "📹";

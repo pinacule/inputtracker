@@ -76,7 +76,8 @@ logged and never written back in any response.
 Each play becomes one append-only event row:
 
 - `source = youtube`, `source_kind = phone_play`, `source_id = <play_id lower-cased>`,
-  `media_type = video`, `title`, `parent_title = <channel or NULL>`,
+  `media_type = video` (or `music` for `com.google.android.apps.youtube.music`),
+  `title`, `parent_title = <channel or NULL>`,
   `started_at`/`ended_at` normalized to millisecond precision
   (`…:11.000Z`), `duration_seconds = watched_seconds`,
   `device = <device>`.
