@@ -170,16 +170,21 @@ export function buildContextMenuActions(
     });
   }
 
-  // Rate (0..10 one decimal)
-  actions.push({
-    id: "rate",
-    label: target.rating !== null && target.rating !== undefined ? "Change rating…" : "Rate…",
-    badge:
-      target.rating !== null && target.rating !== undefined
-        ? `★ ${formatRating10(target.rating)}`
-        : undefined,
-    group: "primary",
-  });
+  // Rate (0..10 one decimal) — hidden for music tracks
+  if (target.category !== "music") {
+    actions.push({
+      id: "rate",
+      label:
+        target.rating !== null && target.rating !== undefined
+          ? "Change rating…"
+          : "Rate…",
+      badge:
+        target.rating !== null && target.rating !== undefined
+          ? `★ ${formatRating10(target.rating)}`
+          : undefined,
+      group: "primary",
+    });
+  }
 
   // Edit work (title, category, status, metadata link, note)
   actions.push({

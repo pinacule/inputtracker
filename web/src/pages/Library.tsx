@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   deleteArchiveEntry,
   getLibrary,
-  getLibraryWork,
   getYoutubeOverview,
   getYoutubeVideos,
   listArchive,
@@ -13,31 +12,28 @@ import {
   type LibraryResult,
   type LibrarySort,
   type LibraryWork,
-  type LibraryWorkDetail,
   type ManualWork,
   type WorkStatus,
   type YoutubeOverview,
   type YoutubeVideo,
+  type YoutubeVideoSort,
 } from "../api";
-import {
-  formatArchiveWhen,
-  formatHistoryPrecisionDate,
-} from "../lib/archive-form";
+import { formatArchiveWhen } from "../lib/archive-form";
 import {
   CATEGORY_META,
   categoryLabel,
   categoryPluralLabel,
-  formatCategoryUnits,
+  formatWorkCardMeta,
+  formatWorkUnitLabel,
 } from "../lib/categories";
 import {
-  buildCategoryFilterParams,
-  matchesCategorySelection,
+  buildLibraryCategoryFilterParams,
+  matchesLibraryCategorySelection,
 } from "../lib/category-filter";
 import { formatLocalDay } from "../lib/format-date";
-import { sourceLabel } from "../lib/sources";
+import { canRateCategory } from "../lib/rating";
 import { formatMinutes } from "../lib/stats";
 import {
-  applyWorkOverrideToDetail,
   applyWorkOverridesToList,
   getChannelTopicOverride,
   performSetChannelTopic,
@@ -49,7 +45,10 @@ import {
   buildYoutubeOverviewFromWorks,
   buildYoutubeVideosFromWorks,
   collectYoutubeTopics,
-  groupYoutubeByTopic,
+  groupYoutubeVideos,
+  sortLibraryWorks,
+  sortYoutubeVideos,
+  type YoutubeVideoGroupBy,
 } from "../lib/youtube";
 import {
   AddIcon,
@@ -57,27 +56,24 @@ import {
   Button,
   Card,
   CategoryChips,
-  CategoryIcon,
   CategoryShareChart,
   Cover,
   EditIcon,
   EmptyState,
   MoreIcon,
-  ProgressBar,
   QuickRatingPill,
-  RatingEditor,
   SearchIcon,
   Skeleton,
   Stat,
   Tabs,
   TrashIcon,
-  YoutubeIcon,
   bindContextMenu,
   openContextMenu,
   type EditableWorkTarget,
   type TabOption,
 } from "../ui";
 import { workFromArchiveSummary } from "./Add";
+import { WorkPage, formatWorkStatusLabel } from "./WorkPage";
 
 export interface LibraryProps {
   initialCategory?: Category;
@@ -88,6 +84,7 @@ export interface LibraryProps {
   initialChannel?: string;
   initialTopic?: string;
   workKey?: string;
+  /** @deprecated Kept for callers that still pass it; Library "All" always excludes YouTube and Music. */
   includeYoutubeInAll?: boolean;
   onOpenAdd?: (opts?: {
     category?: Category;
@@ -112,80 +109,40 @@ const STATUS_TABS: ReadonlyArray<TabOption<WorkStatus | "all">> = [
   { value: "dropped", label: "Dropped" },
 ];
 
-const SORT_OPTIONS: ReadonlyArray<{ value: LibrarySort; label: string }> = [
-  { value: "recent", label: "Recently active" },
-  { value: "time", label: "Most time" },
-  { value: "title", label: "Title A–Z" },
+const YOUTUBE_SORT_TABS: ReadonlyArray<TabOption<YoutubeVideoSort>> = [
+  { value: "recent", label: "Recent" },
+  { value: "time", label: "Watch time" },
+  { value: "topic", label: "Category / Topic" },
 ];
 
-function formatWorkStatusLabel(status: WorkStatus): string {
-  switch (status) {
-    case "in_progress":
-      return "In progress";
-    case "finished":
-      return "Finished";
-    case "dropped":
-      return "Dropped";
-    case "planned":
-      return "Planned";
-    case "unknown":
-      return "Logged";
-  }
-}
+const YOUTUBE_GROUP_TABS: ReadonlyArray<TabOption<YoutubeVideoGroupBy>> = [
+  { value: "none", label: "Videos" },
+  { value: "topic", label: "Group by topic" },
+  { value: "channel", label: "Group by channel" },
+];
 
-function statusBadgeVariant(
-  status: WorkStatus
-): "success" | "warning" | "neutral" {
-  switch (status) {
-    case "finished":
-      return "success";
-    case "in_progress":
-      return "warning";
-    default:
-      return "neutral";
+function buildSortOptions(
+  singleCategory?: Category
+): ReadonlyArray<{ value: LibrarySort; label: string }> {
+  if (singleCategory === "music") {
+    return [
+      { value: "recent", label: "Recent" },
+      { value: "time", label: "Watch / listen time" },
+      { value: "creator", label: "Artist" },
+      { value: "title", label: "Title A–Z" },
+    ];
   }
-}
-
-function buildManualWorkFromDetail(detail: LibraryWorkDetail): ManualWork {
-  return {
-    provider: "manual",
-    category: detail.category,
-    title: detail.title,
-    year: detail.seasons[0]?.year ?? null,
-    creators: [],
-    seasons:
-      detail.seasons.length > 0
-        ? detail.seasons.map((s) => ({
-            number: s.number,
-            title: s.title,
-            year: s.year,
-            episodes: s.episodes,
-            episode_minutes: s.episode_minutes,
-            total_minutes: s.total_minutes,
-            provider_id: s.provider_id,
-          }))
-        : detail.category === "anime" || detail.category === "series"
-          ? [
-              {
-                number: 1,
-                title: "Season 1",
-                year: null,
-                episodes: Math.max(12, detail.units || 12),
-                episode_minutes: 24,
-                total_minutes: Math.max(12, detail.units || 12) * 24,
-                provider_id: null,
-              },
-            ]
-          : [],
-    runtime_minutes:
-      detail.category === "film"
-        ? Math.max(
-            90,
-            Math.round(detail.total_minutes / Math.max(1, detail.units))
-          )
-        : null,
-    pages: null,
-  };
+  const creatorLabel =
+    singleCategory === "book" || singleCategory === "audiobook"
+      ? "Author"
+      : "Creator / Artist";
+  return [
+    { value: "recent", label: "Recently active" },
+    { value: "time", label: "Watch / read time" },
+    { value: "category", label: "Category" },
+    { value: "creator", label: creatorLabel },
+    { value: "title", label: "Title A–Z" },
+  ];
 }
 
 interface YoutubeLibrarySectionProps {
@@ -202,7 +159,7 @@ function YoutubeLibrarySection({
   initialQuery = "",
 }: YoutubeLibrarySectionProps) {
   const [overview, setOverview] = useState<YoutubeOverview | null>(null);
-  const [videos, setVideos] = useState<YoutubeVideo[]>([]);
+  const [rawVideos, setRawVideos] = useState<YoutubeVideo[]>([]);
   const [videosTotal, setVideosTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -212,11 +169,10 @@ function YoutubeLibrarySection({
   const [selectedChannel, setSelectedChannel] = useState<string | null>(
     initialChannel ?? null
   );
+  const [ytSort, setYtSort] = useState<YoutubeVideoSort>("recent");
+  const [groupBy, setGroupBy] = useState<YoutubeVideoGroupBy>("none");
   const [searchInput, setSearchInput] = useState(initialQuery);
   const [query, setQuery] = useState(initialQuery);
-  const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(
-    {}
-  );
 
   // Quick "Set Topic" editor for a channel
   const [editingChannelTopic, setEditingChannelTopic] = useState<string | null>(
@@ -251,18 +207,15 @@ function YoutubeLibrarySection({
   // Fetch /api/youtube overview (fallback gracefully on 404)
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
 
     getYoutubeOverview()
       .then((res) => {
         if (cancelled) return;
         setOverview(res);
-        setLoading(false);
       })
       .catch(() => {
         if (cancelled) return;
         setOverview(buildYoutubeOverviewFromWorks(fallbackWorks));
-        setLoading(false);
       });
 
     return () => {
@@ -270,28 +223,37 @@ function YoutubeLibrarySection({
     };
   }, [fallbackWorks]);
 
-  // Fetch /api/youtube/videos when channel, topic, or search query is active
+  // Always fetch YouTube videos for the YouTube chip view
   useEffect(() => {
     let cancelled = false;
-    if (!selectedChannel && !selectedTopic && !query) {
-      setVideos([]);
-      setVideosTotal(0);
-      return;
-    }
+    setLoading(true);
 
-    getYoutubeVideos({
+    const reqParams = {
       channel: selectedChannel ?? undefined,
       topic:
         selectedTopic && selectedTopic !== UNCATEGORISED_TOPIC
           ? selectedTopic
           : undefined,
       q: query || undefined,
-      limit: 60,
-    })
+      sort: ytSort,
+      limit: 200,
+    };
+
+    getYoutubeVideos(reqParams)
+      .catch(() =>
+        getYoutubeVideos({
+          channel: reqParams.channel,
+          topic: reqParams.topic,
+          q: reqParams.q,
+          limit: reqParams.limit,
+        })
+      )
       .then((res) => {
         if (cancelled) return;
-        setVideos(res.videos ?? []);
-        setVideosTotal(res.total ?? (res.videos ?? []).length);
+        const list = res.videos ?? [];
+        setRawVideos(list);
+        setVideosTotal(res.total ?? list.length);
+        setLoading(false);
       })
       .catch(() => {
         if (cancelled) return;
@@ -299,17 +261,18 @@ function YoutubeLibrarySection({
           channel: selectedChannel ?? undefined,
           topic: selectedTopic ?? undefined,
           q: query || undefined,
+          sort: ytSort,
         });
-        setVideos(fallback.videos);
+        setRawVideos(fallback.videos);
         setVideosTotal(fallback.total);
+        setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [selectedChannel, selectedTopic, query, fallbackWorks]);
+  }, [selectedChannel, selectedTopic, query, ytSort, fallbackWorks]);
 
-  // Apply optimistic channel topic overrides to overview
   const effectiveOverview = useMemo<YoutubeOverview>(() => {
     const base = overview ?? buildYoutubeOverviewFromWorks(fallbackWorks);
     const updatedChannels = (base.channels ?? []).map((ch) => ({
@@ -322,14 +285,35 @@ function YoutubeLibrarySection({
     };
   }, [overview, fallbackWorks]);
 
-  const topicGroups = useMemo(
-    () => groupYoutubeByTopic(effectiveOverview, query),
-    [effectiveOverview, query]
-  );
+  const sortedVideos = useMemo(() => {
+    const withOverrides = rawVideos.map((v) => ({
+      ...v,
+      topic: v.channel
+        ? getChannelTopicOverride(v.channel, v.topic)
+        : v.topic,
+    }));
+    return sortYoutubeVideos(withOverrides, ytSort);
+  }, [rawVideos, ytSort]);
+
+  const groupedVideos = useMemo(() => {
+    if (groupBy === "none") return [];
+    return groupYoutubeVideos(sortedVideos, groupBy, ytSort);
+  }, [sortedVideos, groupBy, ytSort]);
 
   const availableTopics = useMemo(
     () => collectYoutubeTopics(effectiveOverview),
     [effectiveOverview]
+  );
+
+  const totalShownMinutes = useMemo(
+    () =>
+      sortedVideos.reduce((acc, v) => acc + Math.max(0, v.watched_minutes), 0),
+    [sortedVideos]
+  );
+
+  const maxVideoMin = useMemo(
+    () => sortedVideos.reduce((m, v) => Math.max(m, v.watched_minutes), 1),
+    [sortedVideos]
   );
 
   const handleSaveChannelTopic = async (
@@ -357,255 +341,144 @@ function YoutubeLibrarySection({
     });
   };
 
-  // --- CHANNEL PAGE VIEW ---
-  if (selectedChannel) {
-    const chInfo = effectiveOverview.channels.find(
-      (c) => c.channel.toLowerCase() === selectedChannel.toLowerCase()
+  const renderVideoRow = (v: YoutubeVideo) => {
+    const pct = Math.max(
+      6,
+      Math.round((v.watched_minutes / maxVideoMin) * 100)
     );
-    const currentTopic = chInfo?.topic ?? null;
-    const maxVideoMin = videos.reduce(
-      (m, v) => Math.max(m, v.watched_minutes),
-      1
-    );
+    const playsCount = Math.max(1, v.plays || 1);
+    const playsLabel = `${playsCount} ${playsCount === 1 ? "play" : "plays"}`;
+    const menuTarget = {
+      kind: "youtube-video" as const,
+      workKey: v.key,
+      title: v.title,
+      category: "youtube" as const,
+      channel: v.channel,
+      topic: v.topic,
+      href: `#/library?work=${encodeURIComponent(v.key)}&cat=youtube`,
+    };
 
     return (
-      <div class="yt-view-stack">
-        <div class="library-back-row">
-          <Button
-            variant="ghost"
+      <li
+        key={v.key}
+        class="yt-video-row"
+        tabIndex={0}
+        {...bindContextMenu(menuTarget)}
+      >
+        {v.thumbnail_url && (
+          <Cover
+            src={v.thumbnail_url}
+            title={v.title}
+            category="youtube"
             size="sm"
-            onClick={() => {
-              setSelectedChannel(null);
-              window.history.replaceState(null, "", "#/library?cat=youtube");
-            }}
+            aspect="wide"
+          />
+        )}
+        <div class="yt-video-main">
+          <a
+            href={`#/library?work=${encodeURIComponent(v.key)}&cat=youtube`}
+            class="yt-video-title"
           >
-            ← Back to YouTube Topics & Channels
-          </Button>
-        </div>
-
-        <Card padding="lg" class="yt-channel-hero">
-          <div class="settings-row-between">
-            <div class="ui-form-field">
-              <div class="library-work-badges">
-                <Badge
-                  size="sm"
-                  category="youtube"
-                  icon={<YoutubeIcon size={12} />}
+            {v.title}
+          </a>
+          <div class="yt-video-meta tabular-nums">
+            {v.channel && (
+              <>
+                <button
+                  type="button"
+                  class="ui-inline-link"
+                  onClick={() => {
+                    setSelectedChannel(v.channel);
+                    window.history.replaceState(
+                      null,
+                      "",
+                      `#/library?cat=youtube&channel=${encodeURIComponent(
+                        v.channel!
+                      )}`
+                    );
+                  }}
                 >
-                  YouTube Channel
-                </Badge>
-                <Badge size="sm" variant="neutral">
-                  {currentTopic ?? UNCATEGORISED_TOPIC}
-                </Badge>
-              </div>
-              <h2 class="library-work-title">{selectedChannel}</h2>
-              <div class="library-work-stats-row tabular-nums">
-                {chInfo && (
-                  <>
-                    <span>
-                      <strong>{formatMinutes(chInfo.total_minutes)}</strong>{" "}
-                      watched
-                    </span>
-                    <span>·</span>
-                    <span>
-                      <strong>{chInfo.videos}</strong>{" "}
-                      {chInfo.videos === 1 ? "video" : "videos"}
-                    </span>
-                    {chInfo.last_at && (
-                      <>
-                        <span>·</span>
-                        <span>
-                          Last active {formatLocalDay(chInfo.last_at.slice(0, 10))}
-                        </span>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div class="ui-form-actions">
-              <Button
-                variant="secondary"
-                size="sm"
+                  {v.channel}
+                </button>
+                <span>·</span>
+              </>
+            )}
+            <span>{formatLocalDay(v.last_at.slice(0, 10))}</span>
+            <span>·</span>
+            <span>{playsLabel}</span>
+            {v.topic && (
+              <button
+                type="button"
+                class="ui-cat-chip yt-set-topic-btn"
                 onClick={() => {
-                  setTopicInput(currentTopic ?? "");
-                  setEditingChannelTopic(
-                    editingChannelTopic === selectedChannel
-                      ? null
-                      : selectedChannel
+                  setSelectedTopic(v.topic);
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `#/library?cat=youtube&topic=${encodeURIComponent(
+                      v.topic!
+                    )}`
                   );
                 }}
               >
-                {currentTopic ? `Topic: ${currentTopic} (Edit)` : "+ Set Topic"}
-              </Button>
-            </div>
+                {v.topic}
+              </button>
+            )}
           </div>
-
-          {editingChannelTopic === selectedChannel && (
-            <div class="yt-topic-editor-bar">
-              <input
-                type="text"
-                class="ui-input"
-                placeholder="Type or choose a topic…"
-                value={topicInput}
-                onInput={(e) =>
-                  setTopicInput((e.currentTarget as HTMLInputElement).value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void handleSaveChannelTopic(selectedChannel, topicInput);
-                  }
-                }}
-              />
-              <div class="ui-cat-chips">
-                {availableTopics.slice(0, 8).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    class={
-                      t === currentTopic
-                        ? "ui-cat-chip ui-cat-chip--active"
-                        : "ui-cat-chip"
-                    }
-                    onClick={() =>
-                      void handleSaveChannelTopic(selectedChannel, t)
-                    }
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-              <div class="ui-form-actions">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() =>
-                    void handleSaveChannelTopic(selectedChannel, topicInput)
-                  }
-                >
-                  Save Topic
-                </Button>
-                {currentTopic && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      void handleSaveChannelTopic(selectedChannel, null)
-                    }
-                  >
-                    Clear Topic
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditingChannelTopic(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-        </Card>
-
-        <Card
-          padding="md"
-          title={`Videos from ${selectedChannel}`}
-          subtitle={`${videosTotal || videos.length} recorded videos`}
-        >
-          {videos.length === 0 ? (
-            <p class="ui-text-muted">No individual videos found for this channel.</p>
-          ) : (
-            <ul class="yt-videos-list">
-              {videos.map((v) => {
-                const pct = Math.max(
-                  6,
-                  Math.round((v.watched_minutes / maxVideoMin) * 100)
-                );
-                const menuTarget = {
-                  kind: "youtube-video" as const,
-                  workKey: v.key,
-                  title: v.title,
-                  category: "youtube" as const,
-                  channel: v.channel ?? selectedChannel,
-                  topic: v.topic ?? currentTopic,
-                  href: `#/library?work=${encodeURIComponent(v.key)}`,
-                };
-                return (
-                  <li
-                    key={v.key}
-                    class="yt-video-row"
-                    tabIndex={0}
-                    {...bindContextMenu(menuTarget)}
-                  >
-                    {v.thumbnail_url && (
-                      <Cover
-                        src={v.thumbnail_url}
-                        title={v.title}
-                        category="youtube"
-                        size="sm"
-                        aspect="wide"
-                      />
-                    )}
-                    <div class="yt-video-main">
-                      <a
-                        href={`#/library?work=${encodeURIComponent(v.key)}`}
-                        class="yt-video-title"
-                      >
-                        {v.title}
-                      </a>
-                      <div class="yt-video-meta tabular-nums">
-                        <span>
-                          {formatLocalDay(v.last_at.slice(0, 10))}
-                        </span>
-                        {v.plays > 1 && <span>· {v.plays} plays</span>}
-                        {(v.topic ?? currentTopic) && (
-                          <Badge size="sm" variant="neutral">
-                            {v.topic ?? currentTopic}
-                          </Badge>
-                        )}
-                      </div>
-                      <div class="yt-bar-track">
-                        <div
-                          class="yt-bar-fill"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div class="calendar-compact-right tabular-nums">
-                      <strong>{formatMinutes(v.watched_minutes)}</strong>
-                      <QuickRatingPill
-                        workKey={v.key}
-                        title={v.title}
-                        category="youtube"
-                        rating={null}
-                        source="youtube"
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-      </div>
+          <div class="yt-bar-track">
+            <div class="yt-bar-fill" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+        <div class="calendar-compact-right tabular-nums">
+          <strong>{formatMinutes(v.watched_minutes)}</strong>
+          <QuickRatingPill
+            workKey={v.key}
+            title={v.title}
+            category="youtube"
+            rating={null}
+            source="youtube"
+          />
+          <button
+            type="button"
+            class="ui-row-menu-btn"
+            aria-label={`More actions for ${v.title}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const rect = (
+                e.currentTarget as HTMLElement
+              ).getBoundingClientRect();
+              openContextMenu(
+                menuTarget,
+                { x: rect.left, y: rect.bottom + 4 },
+                e.currentTarget as HTMLElement
+              );
+            }}
+          >
+            <MoreIcon size={16} />
+          </button>
+        </div>
+      </li>
     );
-  }
+  };
 
-  // --- TOPICS -> CHANNELS -> VIDEOS HIERARCHY VIEW ---
   return (
     <div class="yt-view-stack">
-      {/* YouTube Overview KPI & Search */}
+      {/* YouTube Overview KPI, Sort, Group & Search */}
       <Card padding="md">
         <div class="yt-overview-top">
           <div class="yt-overview-stats">
             <Stat
               label="YouTube Watch Time"
-              value={formatMinutes(effectiveOverview.total_minutes)}
+              value={formatMinutes(
+                selectedChannel || selectedTopic || query
+                  ? totalShownMinutes
+                  : effectiveOverview.total_minutes || totalShownMinutes
+              )}
               category="youtube"
-              sublabel={`${effectiveOverview.videos} videos across ${effectiveOverview.channels.length} channels & ${topicGroups.length} topics`}
+              sublabel={`${
+                videosTotal || sortedVideos.length
+              } videos · ${effectiveOverview.channels.length} channels`}
             />
             {effectiveOverview.short_plays_hidden > 0 && (
               <span class="yt-short-plays-note tabular-nums">
@@ -623,7 +496,7 @@ function YoutubeLibrarySection({
             <input
               type="search"
               class="ui-input library-search-input"
-              placeholder="Search YouTube topics, channels, or videos…"
+              placeholder="Search YouTube videos, channels, or topics…"
               aria-label="Search within YouTube"
               value={searchInput}
               onInput={(e) =>
@@ -634,293 +507,281 @@ function YoutubeLibrarySection({
         </div>
       </Card>
 
-      {loading && !overview ? (
+      {/* Active Channel / Topic Filter Banner */}
+      {(selectedChannel || selectedTopic) && (
+        <div class="yt-active-filters-bar">
+          <div class="ui-cat-chips">
+            {selectedChannel && (
+              <Badge size="md" category="youtube">
+                Channel: {selectedChannel}
+              </Badge>
+            )}
+            {selectedTopic && (
+              <Badge size="md" variant="neutral">
+                Topic: {selectedTopic}
+              </Badge>
+            )}
+          </div>
+          <div class="ui-form-actions">
+            {selectedChannel && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  const chInfo = effectiveOverview.channels.find(
+                    (c) =>
+                      c.channel.toLowerCase() === selectedChannel.toLowerCase()
+                  );
+                  setTopicInput(chInfo?.topic ?? "");
+                  setEditingChannelTopic(
+                    editingChannelTopic === selectedChannel
+                      ? null
+                      : selectedChannel
+                  );
+                }}
+              >
+                Set channel topic…
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectedChannel(null);
+                setSelectedTopic(null);
+                window.history.replaceState(null, "", "#/library?cat=youtube");
+              }}
+            >
+              × Clear filter
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {selectedChannel && editingChannelTopic === selectedChannel && (
+        <Card padding="sm">
+          <div class="yt-topic-editor-bar">
+            <input
+              type="text"
+              class="ui-input"
+              placeholder={`Topic for ${selectedChannel}…`}
+              value={topicInput}
+              onInput={(e) =>
+                setTopicInput((e.currentTarget as HTMLInputElement).value)
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void handleSaveChannelTopic(selectedChannel, topicInput);
+                }
+              }}
+            />
+            <div class="ui-cat-chips">
+              {availableTopics.slice(0, 8).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  class="ui-cat-chip"
+                  onClick={() =>
+                    void handleSaveChannelTopic(selectedChannel, t)
+                  }
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            <div class="ui-form-actions">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() =>
+                  void handleSaveChannelTopic(selectedChannel, topicInput)
+                }
+              >
+                Save Topic
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleSaveChannelTopic(selectedChannel, null)}
+              >
+                Clear
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditingChannelTopic(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Sort & Group Controls */}
+      <div class="library-controls-bar">
+        <Tabs
+          ariaLabel="Sort YouTube videos"
+          options={YOUTUBE_SORT_TABS}
+          value={ytSort}
+          onChange={(v) => setYtSort(v)}
+        />
+        <Tabs
+          ariaLabel="Group YouTube videos"
+          options={YOUTUBE_GROUP_TABS}
+          value={groupBy}
+          onChange={(v) => setGroupBy(v)}
+        />
+      </div>
+
+      {loading && rawVideos.length === 0 ? (
         <Skeleton height={220} />
-      ) : topicGroups.length === 0 && videos.length === 0 ? (
+      ) : sortedVideos.length === 0 ? (
         <EmptyState
           compact
           title={
             query
-              ? `No YouTube channels or videos matching “${query}”`
-              : "No YouTube watch history yet"
+              ? `No YouTube videos matching “${query}”`
+              : "No YouTube videos recorded yet"
           }
-          description="YouTube plays above your minimum watch time are automatically grouped by topic and channel."
+          description="YouTube videos above your minimum watch time appear here, sortable by recent, watch time, or topic."
         />
+      ) : groupBy === "none" ? (
+        <Card
+          padding="md"
+          title={`Videos (${sortedVideos.length})`}
+          subtitle={`${formatMinutes(totalShownMinutes)} total watch time`}
+        >
+          <ul class="yt-videos-list">{sortedVideos.map(renderVideoRow)}</ul>
+        </Card>
       ) : (
-        <>
-          {/* Topics -> Channels List with Time Bars */}
-          <div class="yt-topics-stack">
-            {topicGroups.map((group) => {
-              const isExpanded =
-                expandedTopics[group.topic] ??
-                (selectedTopic === group.topic ||
-                  Boolean(query) ||
-                  topicGroups.length <= 4);
-
-              return (
-                <Card key={group.topic} padding="md" class="yt-topic-card">
-                  <button
-                    type="button"
-                    class="yt-topic-header"
-                    aria-expanded={isExpanded}
-                    onClick={() =>
-                      setExpandedTopics((prev) => ({
-                        ...prev,
-                        [group.topic]: !isExpanded,
-                      }))
-                    }
-                  >
-                    <div class="yt-topic-title-col">
-                      <div class="yt-topic-title-row">
-                        <span
-                          class="ui-tab-dot ui-tab-dot--youtube"
-                          aria-hidden="true"
-                        />
-                        <h3 class="yt-topic-name">{group.topic}</h3>
-                        <span class="yt-topic-counts tabular-nums">
-                          {group.channelsCount}{" "}
-                          {group.channelsCount === 1 ? "channel" : "channels"} ·{" "}
-                          {group.videosCount}{" "}
-                          {group.videosCount === 1 ? "video" : "videos"}
-                        </span>
-                      </div>
-                      <div class="yt-bar-track yt-bar-track--topic">
-                        <div
-                          class="yt-bar-fill"
-                          style={{
-                            width: `${Math.round(group.barRatio * 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div class="yt-topic-figures tabular-nums">
-                      <strong>{formatMinutes(group.totalMinutes)}</strong>
-                      <span class="ui-text-muted">{group.sharePct}%</span>
-                      <span class="yt-topic-chevron">
-                        {isExpanded ? "▾" : "▸"}
+        <div class="yt-topics-stack">
+          {groupedVideos.map((group) => {
+            const isEditingCh =
+              group.kind === "channel" && editingChannelTopic === group.label;
+            return (
+              <Card key={group.key} padding="md" class="yt-topic-card">
+                <div class="yt-topic-header">
+                  <div class="yt-topic-title-col">
+                    <div class="yt-topic-title-row">
+                      <span
+                        class="ui-tab-dot ui-tab-dot--youtube"
+                        aria-hidden="true"
+                      />
+                      <h3 class="yt-topic-name">{group.label}</h3>
+                      {group.kind === "channel" && group.topic && (
+                        <Badge size="sm" variant="neutral">
+                          {group.topic}
+                        </Badge>
+                      )}
+                      <span class="yt-topic-counts tabular-nums">
+                        {group.videosCount}{" "}
+                        {group.videosCount === 1 ? "video" : "videos"}
                       </span>
                     </div>
-                  </button>
-
-                  {isExpanded && group.channels.length > 0 && (
-                    <ul class="yt-channels-list">
-                      {group.channels.map((ch) => {
-                        const isEditingThis =
-                          editingChannelTopic === ch.channel;
-                        const menuTarget = {
-                          kind: "youtube-channel" as const,
-                          title: ch.channel,
-                          category: "youtube" as const,
-                          channel: ch.channel,
-                          topic: ch.topic,
-                        };
-                        return (
-                          <li
-                            key={ch.channel}
-                            class="yt-channel-row-wrap"
-                            {...bindContextMenu(menuTarget)}
-                          >
-                            <div class="yt-channel-row">
-                              <div class="yt-channel-main">
-                                <div class="yt-channel-top">
-                                  <button
-                                    type="button"
-                                    class="yt-channel-link"
-                                    onClick={() => {
-                                      setSelectedChannel(ch.channel);
-                                      window.history.replaceState(
-                                        null,
-                                        "",
-                                        `#/library?cat=youtube&channel=${encodeURIComponent(
-                                          ch.channel
-                                        )}`
-                                      );
-                                    }}
-                                  >
-                                    {ch.channel}
-                                  </button>
-                                  <span class="yt-channel-meta tabular-nums">
-                                    {ch.videos}{" "}
-                                    {ch.videos === 1 ? "video" : "videos"}
-                                  </span>
-                                </div>
-                                <div class="yt-bar-track">
-                                  <div
-                                    class="yt-bar-fill"
-                                    style={{
-                                      width: `${Math.round(ch.barRatio * 100)}%`,
-                                    }}
-                                  />
-                                </div>
-                              </div>
-
-                              <div class="yt-channel-actions tabular-nums">
-                                <strong>
-                                  {formatMinutes(ch.total_minutes)}
-                                </strong>
-                                <button
-                                  type="button"
-                                  class="ui-cat-chip yt-set-topic-btn"
-                                  title={`Set topic for ${ch.channel}`}
-                                  onClick={() => {
-                                    setTopicInput(ch.topic ?? "");
-                                    setEditingChannelTopic(
-                                      isEditingThis ? null : ch.channel
-                                    );
-                                  }}
-                                >
-                                  {ch.topic ? ch.topic : "Set topic…"}
-                                </button>
-                              </div>
-                            </div>
-
-                            {isEditingThis && (
-                              <div class="yt-topic-editor-bar">
-                                <input
-                                  type="text"
-                                  class="ui-input"
-                                  placeholder="Topic for this channel…"
-                                  value={topicInput}
-                                  onInput={(e) =>
-                                    setTopicInput(
-                                      (e.currentTarget as HTMLInputElement).value
-                                    )
-                                  }
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      void handleSaveChannelTopic(
-                                        ch.channel,
-                                        topicInput
-                                      );
-                                    }
-                                  }}
-                                />
-                                <div class="ui-cat-chips">
-                                  {availableTopics.slice(0, 6).map((t) => (
-                                    <button
-                                      key={t}
-                                      type="button"
-                                      class="ui-cat-chip"
-                                      onClick={() =>
-                                        void handleSaveChannelTopic(
-                                          ch.channel,
-                                          t
-                                        )
-                                      }
-                                    >
-                                      {t}
-                                    </button>
-                                  ))}
-                                </div>
-                                <div class="ui-form-actions">
-                                  <Button
-                                    variant="primary"
-                                    size="sm"
-                                    onClick={() =>
-                                      void handleSaveChannelTopic(
-                                        ch.channel,
-                                        topicInput
-                                      )
-                                    }
-                                  >
-                                    Save
-                                  </Button>
-                                  {ch.topic && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() =>
-                                        void handleSaveChannelTopic(
-                                          ch.channel,
-                                          null
-                                        )
-                                      }
-                                    >
-                                      Clear
-                                    </Button>
-                                  )}
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setEditingChannelTopic(null)}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </Card>
-              );
-            })}
-          </div>
-
-          {/* Matching Videos when searching within YouTube */}
-          {query && videos.length > 0 && (
-            <Card
-              padding="md"
-              title={`Videos matching “${query}” (${videosTotal})`}
-            >
-              <ul class="yt-videos-list">
-                {videos.map((v) => (
-                  <li
-                    key={v.key}
-                    class="yt-video-row"
-                    tabIndex={0}
-                    {...bindContextMenu({
-                      kind: "youtube-video",
-                      workKey: v.key,
-                      title: v.title,
-                      category: "youtube",
-                      channel: v.channel,
-                      topic: v.topic,
-                      href: `#/library?work=${encodeURIComponent(v.key)}`,
-                    })}
-                  >
-                    <div class="yt-video-main">
-                      <a
-                        href={`#/library?work=${encodeURIComponent(v.key)}`}
-                        class="yt-video-title"
-                      >
-                        {v.title}
-                      </a>
-                      <div class="yt-video-meta tabular-nums">
-                        {v.channel && (
-                          <button
-                            type="button"
-                            class="ui-inline-link"
-                            onClick={() => setSelectedChannel(v.channel)}
-                          >
-                            {v.channel}
-                          </button>
-                        )}
-                        <span>
-                          · {formatLocalDay(v.last_at.slice(0, 10))}
-                        </span>
-                      </div>
-                    </div>
-                    <div class="calendar-compact-right tabular-nums">
-                      <strong>{formatMinutes(v.watched_minutes)}</strong>
-                      <QuickRatingPill
-                        workKey={v.key}
-                        title={v.title}
-                        category="youtube"
-                        rating={null}
-                        source="youtube"
+                    <div class="yt-bar-track yt-bar-track--topic">
+                      <div
+                        class="yt-bar-fill"
+                        style={{
+                          width: `${Math.round(group.barRatio * 100)}%`,
+                        }}
                       />
                     </div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </>
+                  </div>
+
+                  <div class="yt-topic-figures tabular-nums">
+                    <strong>{formatMinutes(group.totalMinutes)}</strong>
+                    <span class="ui-text-muted">{group.sharePct}%</span>
+                    {group.kind === "channel" && (
+                      <button
+                        type="button"
+                        class="ui-cat-chip yt-set-topic-btn"
+                        onClick={() => {
+                          setTopicInput(group.topic ?? "");
+                          setEditingChannelTopic(
+                            isEditingCh ? null : group.label
+                          );
+                        }}
+                      >
+                        {group.topic ? "Edit topic" : "Set topic…"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {isEditingCh && (
+                  <div class="yt-topic-editor-bar">
+                    <input
+                      type="text"
+                      class="ui-input"
+                      placeholder={`Topic for ${group.label}…`}
+                      value={topicInput}
+                      onInput={(e) =>
+                        setTopicInput(
+                          (e.currentTarget as HTMLInputElement).value
+                        )
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void handleSaveChannelTopic(group.label, topicInput);
+                        }
+                      }}
+                    />
+                    <div class="ui-cat-chips">
+                      {availableTopics.slice(0, 6).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          class="ui-cat-chip"
+                          onClick={() =>
+                            void handleSaveChannelTopic(group.label, t)
+                          }
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                    <div class="ui-form-actions">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() =>
+                          void handleSaveChannelTopic(group.label, topicInput)
+                        }
+                      >
+                        Save
+                      </Button>
+                      {group.topic && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            void handleSaveChannelTopic(group.label, null)
+                          }
+                        >
+                          Clear
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingChannelTopic(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <ul class="yt-videos-list">
+                  {group.videos.map(renderVideoRow)}
+                </ul>
+              </Card>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -935,7 +796,6 @@ export function Library({
   initialChannel,
   initialTopic,
   workKey,
-  includeYoutubeInAll = false,
   onOpenAdd,
   onOpenEditWork,
 }: LibraryProps) {
@@ -964,11 +824,6 @@ export function Library({
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Work detail state (`#/library?work=<key>`)
-  const [workDetail, setWorkDetail] = useState<LibraryWorkDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
   const [confirmDeleteEntryId, setConfirmDeleteEntryId] = useState<
     string | null
   >(null);
@@ -1012,16 +867,13 @@ export function Library({
     return () => window.clearTimeout(debounceRef.current);
   }, [searchInput]);
 
-  // Fetch Library list + archive summaries
+  // Fetch Library list + archive summaries (Library "All" excludes YouTube and Music)
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    const filterParams = buildCategoryFilterParams(
-      selectedCategories,
-      includeYoutubeInAll
-    );
+    const filterParams = buildLibraryCategoryFilterParams(selectedCategories);
 
     const fetchLib = getLibrary({
       category: filterParams.category,
@@ -1029,11 +881,21 @@ export function Library({
       q: query || undefined,
       sort,
     }).catch(() =>
-      // Fallback if server doesn't yet support multi-category / exclude query params
+      // Fallback if backend doesn't yet accept v2.2 sort values (`category`/`creator`)
       getLibrary({
+        category: filterParams.category,
+        exclude: filterParams.exclude,
         q: query || undefined,
-        sort,
-      })
+        sort:
+          sort === "recent" || sort === "time" || sort === "title"
+            ? sort
+            : "recent",
+      }).catch(() =>
+        getLibrary({
+          q: query || undefined,
+          sort: "recent",
+        })
+      )
     );
 
     const fetchArch = listArchive({
@@ -1057,42 +919,7 @@ export function Library({
     return () => {
       cancelled = true;
     };
-  }, [selectedCategories, includeYoutubeInAll, query, sort, refreshTick]);
-
-  // Fetch single work detail when `workKey` is present
-  useEffect(() => {
-    if (!workKey) {
-      setWorkDetail(null);
-      setDetailError(null);
-      setDetailLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setDetailLoading(true);
-    setDetailError(null);
-
-    getLibraryWork(workKey)
-      .then((res) => {
-        if (cancelled) return;
-        setWorkDetail(res);
-        setDetailLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setDetailError(err instanceof Error ? err.message : String(err));
-        setDetailLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [workKey, refreshTick]);
-
-  const effectiveWorkDetail = useMemo(
-    () => (workDetail ? applyWorkOverrideToDetail(workDetail) : null),
-    [workDetail, overrideTick]
-  );
+  }, [selectedCategories, query, sort, refreshTick]);
 
   const effectiveWorks = useMemo(
     () => applyWorkOverridesToList(libraryData?.works ?? []),
@@ -1100,22 +927,27 @@ export function Library({
   );
 
   const filteredWorks = useMemo<LibraryWork[]>(() => {
-    return effectiveWorks.filter((w) => {
-      if (
-        !matchesCategorySelection(
-          w.category,
-          selectedCategories,
-          includeYoutubeInAll
-        )
-      ) {
+    const matched = effectiveWorks.filter((w) => {
+      if (!matchesLibraryCategorySelection(w.category, selectedCategories)) {
         return false;
       }
       if (statusFilter !== "all" && w.status !== statusFilter) {
         return false;
       }
+      if (query) {
+        const qNorm = query.toLowerCase();
+        const inTitle = w.title.toLowerCase().includes(qNorm);
+        const inCreator = (w.creator ?? w.channel ?? "")
+          .toLowerCase()
+          .includes(qNorm);
+        if (!inTitle && !inCreator) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [effectiveWorks, selectedCategories, includeYoutubeInAll, statusFilter]);
+    return sortLibraryWorks(matched, sort);
+  }, [effectiveWorks, selectedCategories, statusFilter, query, sort]);
 
   const handleDeleteArchive = async (entryId: string) => {
     setDeletingEntryId(entryId);
@@ -1128,7 +960,7 @@ export function Library({
         variant: "info",
       });
     } catch (err) {
-      setDetailError(err instanceof Error ? err.message : String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setDeletingEntryId(null);
     }
@@ -1136,8 +968,12 @@ export function Library({
 
   const singleCategory =
     selectedCategories.length === 1 ? selectedCategories[0] : undefined;
-  const isYoutubeView =
-    selectedCategories.length === 1 && selectedCategories[0] === "youtube";
+  const isYoutubeView = singleCategory === "youtube";
+  const isMusicView = singleCategory === "music";
+  const sortOptions = useMemo(
+    () => buildSortOptions(singleCategory),
+    [singleCategory]
+  );
 
   // --- WORK DETAIL PAGE VIEW (`#/library?work=<key>`) ---
   if (workKey) {
@@ -1146,443 +982,15 @@ export function Library({
         ? `#/library?cat=${selectedCategories.join(",")}`
         : "#/library";
 
-    const workArchiveEntryIds = Array.from(
-      new Set(
-        (effectiveWorkDetail?.history ?? [])
-          .map((h) => h.entry_id)
-          .filter((id): id is string => Boolean(id))
-      )
-    );
-
     return (
-      <section
-        class="page-container library-detail-page"
-        aria-label={effectiveWorkDetail?.title ?? "Work Detail"}
-      >
-        <div class="library-back-row">
-          <Button variant="ghost" size="sm" href={backHref}>
-            ← Back to Library
-          </Button>
-        </div>
-
-        {detailError && (
-          <div class="calendar-error" role="alert">
-            <span>
-              <strong>Could not load work:</strong> {detailError}
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setRefreshTick((t) => t + 1)}
-            >
-              Retry
-            </Button>
-          </div>
-        )}
-
-        {detailLoading && !effectiveWorkDetail && (
-          <Card padding="lg">
-            <div class="library-detail-skeleton" aria-busy="true">
-              <Skeleton width={120} height={180} />
-              <div class="library-detail-skeleton-lines">
-                <Skeleton width="60%" height={32} />
-                <Skeleton width="40%" height={20} />
-                <Skeleton width="80%" height={60} />
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {effectiveWorkDetail && (
-          <>
-            {/* Work Hero Card */}
-            <Card padding="lg" class="library-work-hero">
-              <div
-                class="library-work-hero-layout"
-                {...bindContextMenu({
-                  kind: "work",
-                  workKey: effectiveWorkDetail.key,
-                  title: effectiveWorkDetail.title,
-                  category: effectiveWorkDetail.category,
-                  status: effectiveWorkDetail.status,
-                  rating: effectiveWorkDetail.rating,
-                  note: effectiveWorkDetail.note,
-                  topic: effectiveWorkDetail.topic,
-                  channel: effectiveWorkDetail.channel,
-                  entryId: workArchiveEntryIds[0] ?? null,
-                })}
-              >
-                <Cover
-                  src={effectiveWorkDetail.cover_url}
-                  title={effectiveWorkDetail.title}
-                  category={effectiveWorkDetail.category}
-                  size="xl"
-                  aspect={
-                    CATEGORY_META[effectiveWorkDetail.category].defaultAspect
-                  }
-                />
-
-                <div class="library-work-hero-body">
-                  <div class="library-work-badges">
-                    <Badge
-                      size="md"
-                      category={effectiveWorkDetail.category}
-                      icon={
-                        <CategoryIcon
-                          category={effectiveWorkDetail.category}
-                          size={13}
-                        />
-                      }
-                    >
-                      {categoryLabel(effectiveWorkDetail.category)}
-                    </Badge>
-                    <Badge
-                      size="md"
-                      variant={statusBadgeVariant(effectiveWorkDetail.status)}
-                    >
-                      {formatWorkStatusLabel(effectiveWorkDetail.status)}
-                    </Badge>
-                    {effectiveWorkDetail.edited && (
-                      <Badge size="sm" variant="neutral">
-                        Edited
-                      </Badge>
-                    )}
-                    {effectiveWorkDetail.topic && (
-                      <Badge size="sm" variant="neutral">
-                        {effectiveWorkDetail.topic}
-                      </Badge>
-                    )}
-                    {effectiveWorkDetail.sources.map((src) => (
-                      <Badge key={src} size="sm" variant="neutral">
-                        {sourceLabel(src)}
-                      </Badge>
-                    ))}
-                    <QuickRatingPill
-                      workKey={effectiveWorkDetail.key}
-                      title={effectiveWorkDetail.title}
-                      category={effectiveWorkDetail.category}
-                      rating={effectiveWorkDetail.rating}
-                      source={effectiveWorkDetail.sources[0] ?? "manual"}
-                      onRated={(next) =>
-                        setWorkDetail((prev) =>
-                          prev ? { ...prev, rating: next } : prev
-                        )
-                      }
-                    />
-                  </div>
-
-                  <h1 class="library-work-title">
-                    {effectiveWorkDetail.title}
-                  </h1>
-
-                  <div class="library-work-stats-row tabular-nums">
-                    <span>
-                      <strong>
-                        {formatMinutes(effectiveWorkDetail.total_minutes)}
-                      </strong>{" "}
-                      total time
-                    </span>
-                    <span>·</span>
-                    <span>
-                      <strong>
-                        {formatCategoryUnits(
-                          effectiveWorkDetail.category,
-                          effectiveWorkDetail.units
-                        )}
-                      </strong>
-                    </span>
-                    {effectiveWorkDetail.first_at && (
-                      <>
-                        <span>·</span>
-                        <span>
-                          Active{" "}
-                          {formatLocalDay(
-                            effectiveWorkDetail.first_at.slice(0, 10)
-                          )}
-                          {effectiveWorkDetail.last_at &&
-                          effectiveWorkDetail.last_at.slice(0, 10) !==
-                            effectiveWorkDetail.first_at.slice(0, 10)
-                            ? ` – ${formatLocalDay(
-                                effectiveWorkDetail.last_at.slice(0, 10)
-                              )}`
-                            : ""}
-                        </span>
-                      </>
-                    )}
-                  </div>
-
-                  <div class="library-work-actions">
-                    {/* Edit Work (title, category, status, metadata match, rating, note, hide) */}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      leadingIcon={<EditIcon size={14} />}
-                      onClick={() =>
-                        onOpenEditWork?.({
-                          key: effectiveWorkDetail.key,
-                          title: effectiveWorkDetail.title,
-                          category: effectiveWorkDetail.category,
-                          status: effectiveWorkDetail.status,
-                          rating: effectiveWorkDetail.rating,
-                          note: effectiveWorkDetail.note,
-                          topic: effectiveWorkDetail.topic,
-                          channel: effectiveWorkDetail.channel,
-                          cover_url: effectiveWorkDetail.cover_url,
-                          edited: effectiveWorkDetail.edited,
-                        })
-                      }
-                    >
-                      Edit Work
-                    </Button>
-
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      leadingIcon={<AddIcon size={15} />}
-                      onClick={() => {
-                        const manualWork =
-                          buildManualWorkFromDetail(effectiveWorkDetail);
-                        if (onOpenAdd) {
-                          onOpenAdd({
-                            category: effectiveWorkDetail.category,
-                            work: manualWork,
-                          });
-                        } else {
-                          window.location.hash = `#/add?category=${
-                            effectiveWorkDetail.category
-                          }&q=${encodeURIComponent(effectiveWorkDetail.title)}`;
-                        }
-                      }}
-                    >
-                      {effectiveWorkDetail.category === "anime" ||
-                      effectiveWorkDetail.category === "series"
-                        ? "Add more seasons"
-                        : "Log again"}
-                    </Button>
-
-                    {/* Archive / imported entry actions ("Edit entry" and "Delete entry") */}
-                    {workArchiveEntryIds.map((entryId) => {
-                      const summary = archiveEntries.find(
-                        (e) => e.entry_id === entryId
-                      );
-                      const isConfirming = confirmDeleteEntryId === entryId;
-                      return (
-                        <div key={entryId} class="library-work-archive-btns">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            leadingIcon={<EditIcon size={14} />}
-                            onClick={() => {
-                              const manualWork =
-                                buildManualWorkFromDetail(effectiveWorkDetail);
-                              onOpenAdd?.({
-                                category: effectiveWorkDetail.category,
-                                editingEntry: {
-                                  entry_id: entryId,
-                                  work: manualWork,
-                                  consumed: summary?.consumed ?? {
-                                    seasons: effectiveWorkDetail.seasons
-                                      .filter((s) => s.watched_episodes > 0)
-                                      .map((s) =>
-                                        s.watched_episodes < s.episodes
-                                          ? {
-                                              number: s.number,
-                                              episodes: s.watched_episodes,
-                                            }
-                                          : { number: s.number }
-                                      ),
-                                    times: Math.max(
-                                      1,
-                                      effectiveWorkDetail.units
-                                    ),
-                                    progress: 1,
-                                  },
-                                  when: summary?.when ?? {
-                                    precision: "unknown",
-                                  },
-                                  rating: effectiveWorkDetail.rating,
-                                  note: effectiveWorkDetail.note,
-                                },
-                              });
-                            }}
-                          >
-                            Edit Entry
-                          </Button>
-
-                          {isConfirming ? (
-                            <>
-                              <Button
-                                variant="danger"
-                                size="sm"
-                                disabled={deletingEntryId === entryId}
-                                onClick={() =>
-                                  void handleDeleteArchive(entryId)
-                                }
-                              >
-                                {deletingEntryId === entryId
-                                  ? "Deleting…"
-                                  : "Confirm Delete"}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setConfirmDeleteEntryId(null)}
-                              >
-                                Cancel
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              leadingIcon={<TrashIcon size={14} />}
-                              onClick={() => setConfirmDeleteEntryId(entryId)}
-                            >
-                              Delete Entry
-                            </Button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* Seasons Progress (for Series / Anime) */}
-            {effectiveWorkDetail.seasons.length > 0 && (
-              <Card
-                padding="md"
-                title="Seasons Progress"
-                subtitle={`${
-                  effectiveWorkDetail.seasons.filter(
-                    (s) => s.watched_episodes >= s.episodes && s.episodes > 0
-                  ).length
-                } of ${effectiveWorkDetail.seasons.length} seasons finished`}
-              >
-                <div class="library-seasons-grid">
-                  {effectiveWorkDetail.seasons.map((season) => {
-                    const maxEp = Math.max(1, season.episodes);
-                    const watched = Math.min(maxEp, season.watched_episodes);
-                    return (
-                      <div key={season.number} class="library-season-row">
-                        <ProgressBar
-                          value={watched}
-                          max={maxEp}
-                          category={effectiveWorkDetail.category}
-                          label={
-                            <strong>
-                              {season.title || `Season ${season.number}`}
-                              {season.year ? ` (${season.year})` : ""}
-                            </strong>
-                          }
-                          valueLabel={`${watched} / ${season.episodes} ep`}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
-            )}
-
-            <div class="library-work-two-col">
-              {/* Rating 0–10 & Personal Note */}
-              <Card
-                padding="md"
-                title="Rating & Personal Note"
-                subtitle="Rated 0–10 with one decimal; stored append-only"
-              >
-                <RatingEditor
-                  workKey={effectiveWorkDetail.key}
-                  source={effectiveWorkDetail.sources[0] ?? "manual"}
-                  title={effectiveWorkDetail.title}
-                  initialRating={effectiveWorkDetail.rating}
-                  initialNote={effectiveWorkDetail.note}
-                  skipFetch
-                  onSaved={(ann) =>
-                    setWorkDetail((prev) =>
-                      prev
-                        ? { ...prev, rating: ann.rating, note: ann.note }
-                        : prev
-                    )
-                  }
-                />
-              </Card>
-
-              {/* History Timeline */}
-              <Card
-                padding="md"
-                title="Activity & Archive History"
-                subtitle={`${effectiveWorkDetail.history.length} recorded ${
-                  effectiveWorkDetail.history.length === 1 ? "unit" : "units"
-                }`}
-              >
-                {effectiveWorkDetail.history.length === 0 ? (
-                  <p class="ui-text-muted">No individual history items.</p>
-                ) : (
-                  <ul class="library-history-list">
-                    {effectiveWorkDetail.history.map((item, idx) => (
-                      <li
-                        key={`${item.started_at}-${idx}`}
-                        class="library-history-row"
-                      >
-                        <div class="library-history-main">
-                          <span class="library-history-label">
-                            {item.label}
-                          </span>
-                          <span class="library-history-meta tabular-nums">
-                            {item.precision === "day" ? (
-                              <a
-                                href={`#/calendar?date=${item.started_at.slice(
-                                  0,
-                                  10
-                                )}`}
-                              >
-                                {formatHistoryPrecisionDate(
-                                  item.started_at,
-                                  item.precision
-                                )}
-                              </a>
-                            ) : (
-                              formatHistoryPrecisionDate(
-                                item.started_at,
-                                item.precision
-                              )
-                            )}
-                            {" · "}
-                            {sourceLabel(item.source)}
-                            {item.entry_id ? " (Archive)" : ""}
-                          </span>
-                        </div>
-                        <div class="library-history-right tabular-nums">
-                          {item.minutes > 0 && (
-                            <span class="library-history-min">
-                              {formatMinutes(item.minutes)}
-                            </span>
-                          )}
-                          {item.entry_id && (
-                            <button
-                              type="button"
-                              class="ui-inline-danger-btn"
-                              title="Delete archive entry"
-                              disabled={deletingEntryId === item.entry_id}
-                              onClick={() =>
-                                void handleDeleteArchive(item.entry_id!)
-                              }
-                            >
-                              <TrashIcon size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
-            </div>
-          </>
-        )}
-      </section>
+      <WorkPage
+        workKey={workKey}
+        backHref={backHref}
+        archiveEntries={archiveEntries}
+        onOpenAdd={onOpenAdd}
+        onOpenEditWork={onOpenEditWork}
+        onChanged={() => setRefreshTick((t) => t + 1)}
+      />
     );
   }
 
@@ -1593,27 +1001,14 @@ export function Library({
         <div class="page-header-titles">
           <h1>Library</h1>
           <p class="page-subtitle">
-            Everything you have watched, read, and listened to — grouped by work
-            across every source. Right-click any work for quick actions.
+            {isYoutubeView
+              ? "YouTube videos watched — sort by recent, watch time, or topic, and group by topic or channel."
+              : isMusicView
+                ? "Music tracks played — sort by recent, listen time, or artist."
+                : "Books, audiobooks, films, series, anime, and podcasts across every source."}
           </p>
         </div>
         <div class="page-header-actions">
-          <Button
-            variant={isYoutubeView ? "primary" : "secondary"}
-            size="sm"
-            leadingIcon={<YoutubeIcon size={15} />}
-            onClick={() => {
-              const next: Category[] = isYoutubeView ? [] : ["youtube"];
-              setSelectedCategories(next);
-              window.history.replaceState(
-                null,
-                "",
-                next.length > 0 ? "#/library?cat=youtube" : "#/library"
-              );
-            }}
-          >
-            YouTube by Topic & Channel
-          </Button>
           <Button
             variant="primary"
             size="sm"
@@ -1633,17 +1028,17 @@ export function Library({
         </div>
       </header>
 
-      {/* Multi-Select Category Chips */}
+      {/* Multi-Select Category Chips (YouTube & Music chips live here; "All" excludes both) */}
       <CategoryChips
         selected={selectedCategories}
         onChange={setSelectedCategories}
         totals={libraryData?.categories ?? []}
-        includeYoutubeInAll={includeYoutubeInAll}
+        scope="library"
         ariaLabel="Library categories"
         showCounts="hours-works"
       />
 
-      {/* Dedicated Library › YouTube View when YouTube is selected */}
+      {/* Library › YouTube Videos View when the YouTube chip is active */}
       {isYoutubeView ? (
         <YoutubeLibrarySection
           fallbackWorks={effectiveWorks}
@@ -1658,23 +1053,28 @@ export function Library({
             <Card padding="md" class="library-overview-card">
               <div class="library-overview-grid">
                 <Stat
-                  label="Library Time"
+                  label={isMusicView ? "Music Listening Time" : "Library Time"}
                   value={formatMinutes(
                     filteredWorks.reduce((acc, w) => acc + w.total_minutes, 0)
                   )}
                   category={singleCategory}
                   sublabel={`${filteredWorks.length} ${
-                    filteredWorks.length === 1 ? "work" : "works"
+                    isMusicView
+                      ? filteredWorks.length === 1
+                        ? "track"
+                        : "tracks"
+                      : filteredWorks.length === 1
+                        ? "work"
+                        : "works"
                   } shown`}
                 />
                 <div class="library-overview-share">
                   <span class="ui-stat-label">Time by Category</span>
                   <CategoryShareChart
                     categories={libraryData.categories.filter((c) =>
-                      matchesCategorySelection(
+                      matchesLibraryCategorySelection(
                         c.category,
-                        selectedCategories,
-                        includeYoutubeInAll
+                        selectedCategories
                       )
                     )}
                     selectedCategory={singleCategory ?? ""}
@@ -1689,14 +1089,31 @@ export function Library({
             </Card>
           )}
 
-          {/* Filter (including Planned / Watchlist), Search & Sort Controls */}
+          {/* Filter, Search & Sort Controls */}
           <div class="library-controls-bar">
-            <Tabs
-              ariaLabel="Filter by work status"
-              options={STATUS_TABS}
-              value={statusFilter}
-              onChange={(val) => setStatusFilter(val)}
-            />
+            {!isMusicView ? (
+              <Tabs
+                ariaLabel="Filter by work status"
+                options={STATUS_TABS}
+                value={statusFilter}
+                onChange={(val) => setStatusFilter(val)}
+              />
+            ) : (
+              <Tabs
+                ariaLabel="Sort music tracks"
+                options={[
+                  { value: "recent" as LibrarySort, label: "Recent" },
+                  { value: "time" as LibrarySort, label: "Watch / listen time" },
+                  { value: "creator" as LibrarySort, label: "Artist" },
+                ]}
+                value={
+                  sort === "recent" || sort === "time" || sort === "creator"
+                    ? sort
+                    : "recent"
+                }
+                onChange={(val) => setSort(val)}
+              />
+            )}
 
             <div class="library-controls-right">
               <div class="library-search-box">
@@ -1706,7 +1123,9 @@ export function Library({
                 <input
                   type="search"
                   class="ui-input library-search-input"
-                  placeholder="Filter works…"
+                  placeholder={
+                    isMusicView ? "Filter tracks or artists…" : "Filter works…"
+                  }
                   aria-label="Filter library works"
                   value={searchInput}
                   onInput={(e) =>
@@ -1725,7 +1144,7 @@ export function Library({
                   )
                 }
               >
-                {SORT_OPTIONS.map((opt) => (
+                {sortOptions.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>
@@ -1810,6 +1229,9 @@ export function Library({
                 const workHref = `#/library?work=${encodeURIComponent(
                   work.key
                 )}${catQuery}`;
+                const creatorText = work.creator ?? work.channel ?? null;
+                const cardMetaText = formatWorkCardMeta(work);
+                const ratable = canRateCategory(work.category);
                 const menuTarget = {
                   kind: "work" as const,
                   workKey: work.key,
@@ -1837,17 +1259,25 @@ export function Library({
                           title={work.title}
                           category={work.category}
                           size="fill"
-                          aspect="poster"
+                          aspect={
+                            work.category === "music" ||
+                            work.category === "audiobook" ||
+                            work.category === "podcast"
+                              ? "square"
+                              : "poster"
+                          }
                         />
                       </a>
-                      <QuickRatingPill
-                        workKey={work.key}
-                        title={work.title}
-                        category={work.category}
-                        rating={work.rating}
-                        source={work.sources[0] ?? "manual"}
-                        variant="overlay"
-                      />
+                      {ratable && (
+                        <QuickRatingPill
+                          workKey={work.key}
+                          title={work.title}
+                          category={work.category}
+                          rating={work.rating}
+                          source={work.sources[0] ?? "manual"}
+                          variant="overlay"
+                        />
+                      )}
                       {work.status === "in_progress" && (
                         <span
                           class="library-work-status-dot"
@@ -1872,26 +1302,20 @@ export function Library({
                       >
                         {work.title}
                       </a>
+                      {creatorText && (
+                        <span
+                          class="library-work-card-creator"
+                          title={creatorText}
+                        >
+                          {creatorText}
+                        </span>
+                      )}
                       <div class="library-work-card-meta tabular-nums">
                         <span
                           class={`ui-tab-dot ui-tab-dot--${work.category}`}
                           aria-hidden="true"
                         />
-                        <span>
-                          {work.status === "planned"
-                            ? "Planned"
-                            : work.total_minutes > 0
-                              ? formatMinutes(work.total_minutes)
-                              : formatCategoryUnits(work.category, work.units)}
-                        </span>
-                        {work.total_minutes > 0 && work.units > 1 && (
-                          <>
-                            <span>·</span>
-                            <span>
-                              {formatCategoryUnits(work.category, work.units)}
-                            </span>
-                          </>
-                        )}
+                        <span>{cardMetaText}</span>
                       </div>
                     </div>
                   </div>
@@ -1909,6 +1333,9 @@ export function Library({
                   const workHref = `#/library?work=${encodeURIComponent(
                     work.key
                   )}${catQuery}`;
+                  const creatorText = work.creator ?? work.channel ?? null;
+                  const unitLabel = formatWorkUnitLabel(work);
+                  const ratable = canRateCategory(work.category);
                   const menuTarget = {
                     kind: "work" as const,
                     workKey: work.key,
@@ -1935,7 +1362,12 @@ export function Library({
                           title={work.title}
                           category={work.category}
                           size="sm"
-                          aspect="square"
+                          aspect={
+                            CATEGORY_META[work.category].defaultAspect ===
+                            "poster"
+                              ? "poster"
+                              : "square"
+                          }
                         />
                         <div class="library-work-list-info">
                           <span
@@ -1948,7 +1380,14 @@ export function Library({
                             <Badge size="sm" category={work.category}>
                               {categoryLabel(work.category)}
                             </Badge>
-                            <span>{formatWorkStatusLabel(work.status)}</span>
+                            {creatorText && (
+                              <span class="library-work-list-creator">
+                                {creatorText}
+                              </span>
+                            )}
+                            {work.category !== "music" && (
+                              <span>{formatWorkStatusLabel(work.status)}</span>
+                            )}
                             {work.last_at && (
                               <span class="tabular-nums">
                                 · {formatLocalDay(work.last_at.slice(0, 10))}
@@ -1958,30 +1397,28 @@ export function Library({
                         </div>
                       </a>
                       <div class="library-work-list-right tabular-nums">
-                        <QuickRatingPill
-                          workKey={work.key}
-                          title={work.title}
-                          category={work.category}
-                          rating={work.rating}
-                          source={work.sources[0] ?? "manual"}
-                          variant="inline"
-                        />
+                        {ratable && (
+                          <QuickRatingPill
+                            workKey={work.key}
+                            title={work.title}
+                            category={work.category}
+                            rating={work.rating}
+                            source={work.sources[0] ?? "manual"}
+                            variant="inline"
+                          />
+                        )}
                         <div class="library-work-list-stats">
                           <strong>
                             {work.status === "planned"
-                              ? "Planned"
+                              ? unitLabel ?? "Planned"
                               : work.total_minutes > 0
                                 ? formatMinutes(work.total_minutes)
-                                : formatCategoryUnits(
-                                    work.category,
-                                    work.units
-                                  )}
+                                : unitLabel ??
+                                  formatWorkStatusLabel(work.status)}
                           </strong>
-                          {work.status !== "planned" && (
-                            <span>
-                              {formatCategoryUnits(work.category, work.units)}
-                            </span>
-                          )}
+                          {work.status !== "planned" &&
+                            work.total_minutes > 0 &&
+                            unitLabel && <span>{unitLabel}</span>}
                         </div>
                         <button
                           type="button"
@@ -2011,7 +1448,7 @@ export function Library({
           )}
 
           {/* Recent Archive Entries Management Strip */}
-          {archiveEntries.length > 0 && (
+          {archiveEntries.length > 0 && !isMusicView && (
             <Card
               padding="md"
               title="Archive & Imported Entries"

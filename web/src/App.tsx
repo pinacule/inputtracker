@@ -5,7 +5,6 @@ import type {
   Category,
   ManualWork,
 } from "./api";
-import { readIncludeYoutubeInAll } from "./lib/category-filter";
 import { getDefaultStore, subscribeQueue } from "./lib/offline-queue";
 import {
   APP_ROUTES,
@@ -45,7 +44,6 @@ import {
   SettingsIcon,
   Sheet,
   ToastViewport,
-  YoutubeIcon,
   type EditableWorkTarget,
 } from "./ui";
 
@@ -103,9 +101,7 @@ export function App() {
     parseAppRoute(window.location.hash)
   );
   const [theme, setTheme] = useState<DarkThemeId>(() => readThemePreference());
-  const [includeYoutubeInAll, setIncludeYoutubeInAll] = useState<boolean>(() =>
-    readIncludeYoutubeInAll()
-  );
+  const includeYoutubeInAll = true;
   const [queueCount, setQueueCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState(loc.q ?? "");
   const [addSheet, setAddSheet] = useState<AddSheetContext>({ open: false });
@@ -244,13 +240,7 @@ export function App() {
   const renderSidebarLink = (id: AppRoute) => {
     const def = APP_ROUTES.find((r) => r.id === id);
     if (!def) return null;
-    const isActive =
-      loc.route === id &&
-      !(
-        id === "library" &&
-        loc.categories?.length === 1 &&
-        loc.categories[0] === "youtube"
-      );
+    const isActive = loc.route === id;
 
     return (
       <a
@@ -272,11 +262,6 @@ export function App() {
       </a>
     );
   };
-
-  const isYoutubeActive =
-    loc.route === "library" &&
-    loc.categories?.length === 1 &&
-    loc.categories[0] === "youtube";
 
   return (
     <div class="app-shell">
@@ -332,26 +317,10 @@ export function App() {
           />
         </form>
 
-        {/* Primary Navigation (4 core views + dedicated YouTube view) */}
+        {/* Primary Navigation (4 core views) */}
         <nav class="sidebar-nav-section" aria-label="Primary">
           <span class="sidebar-nav-heading">Views</span>
           {PRIMARY_NAV_ROUTES.map(renderSidebarLink)}
-          <a
-            href="#/library?cat=youtube"
-            class={
-              isYoutubeActive
-                ? "sidebar-nav-link sidebar-nav-link--active"
-                : "sidebar-nav-link"
-            }
-            aria-current={isYoutubeActive ? "page" : undefined}
-          >
-            <span class="sidebar-nav-link-main">
-              <span class="sidebar-nav-icon">
-                <YoutubeIcon size={18} />
-              </span>
-              <span>YouTube</span>
-            </span>
-          </a>
         </nav>
 
         {/* Clean Sidebar Footer (Settings & Sync) */}
@@ -386,15 +355,6 @@ export function App() {
             </span>
           </a>
           <div class="mobile-topbar-actions">
-            <IconButton
-              label="YouTube by Topic & Channel"
-              variant="subtle"
-              size="sm"
-              href="#/library?cat=youtube"
-              active={isYoutubeActive}
-            >
-              <YoutubeIcon size={17} />
-            </IconButton>
             <IconButton
               label="Search library"
               variant="subtle"
@@ -491,8 +451,6 @@ export function App() {
             <Settings
               theme={theme}
               onThemeChange={setTheme}
-              includeYoutubeInAll={includeYoutubeInAll}
-              onIncludeYoutubeChange={setIncludeYoutubeInAll}
             />
           )}
         </main>

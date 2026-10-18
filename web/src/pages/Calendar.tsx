@@ -1,36 +1,34 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
-import {
-  getCalendar,
-  getLibrary,
-  type CalendarDay,
-  type CalendarResult,
-  type Category,
-  type LibraryWork,
-  type ManualWork,
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import type {
+  ArchiveConsumed,
+  ArchiveWhen,
+  Category,
+  LibraryWork,
+  ManualWork,
 } from "../api";
+import { toggleCategoryChip } from "../lib/category-filter";
 import {
-  buildMonthGrid,
-  formatDuration,
+  buildArchiveEntryLookup,
+  buildHomeCategoryChipTotals,
+  buildHomeDayDetailModel,
+  buildHomeHash,
+  buildInProgressShelf,
+  buildLibraryWorkLookup,
+  buildMonthModels,
+  buildWeekGraphModel,
+  filterAndEnrichCalendarDays,
+  formatMonthHeading,
+  getTodayLocalDate,
+  isValidDateStr,
+  isValidMonthStr,
+  pickDefaultDayForMonth,
+  resolveHomeSelection,
   shiftMonth,
-} from "../lib/calendar";
+} from "../lib/home";
 import {
-  buildCategoryFilterParams,
-  matchesCategorySelection,
-} from "../lib/category-filter";
-import {
-  DEFAULT_TIMEZONE,
-  formatCleanDayHeading,
-} from "../lib/format-date";
-import { formatMinutes } from "../lib/stats";
-import {
-  categoryCssColor,
-  categoryLabel,
-  groupDayPanelItems,
-  resolveItemCategory,
-  summarizeCalendarMonthV2,
-  summarizeCurrentWeek,
-  summarizeDayCellV2,
-} from "../lib/ui-helpers";
+  fetchHomePageBundle,
+  type HomePageBundle,
+} from "../lib/home-data";
 import {
   applyWorkOverridesToList,
   subscribeWorkEdits,
@@ -38,446 +36,80 @@ import {
 import {
   AddIcon,
   Button,
-  Card,
   CategoryChips,
-  CategoryShareChart,
   ChevronLeftIcon,
   ChevronRightIcon,
-  CloseIcon,
-  Cover,
-  EmptyState,
   IconButton,
-  MoreIcon,
-  QuickRatingPill,
-  Sheet,
   Skeleton,
-  Sparkline,
-  YoutubeIcon,
-  bindContextMenu,
-  openContextMenu,
-  type EditableWorkTarget,
 } from "../ui";
+import {
+  DayDetailPanel,
+  InProgressShelf,
+  MonthCalendarGrid,
+  MonthRhythmCard,
+  WeekGraph,
+} from "../ui/home";
 
+/** Props the app shell passes to the home page (`#/calendar`). Keep or extend as needed. */
 export interface CalendarProps {
-  /** Optional date in `YYYY-MM-DD` format to select on mount (`#/calendar?date=...`). */
+  /** `?date=YYYY-MM-DD`: the day to select. */
   date?: string;
-  /** Optional month in `YYYY-MM` format. */
+  /** `?month=YYYY-MM`: the month to show. */
   initialMonth?: string;
-  /** Optional single category filter (legacy). */
   initialCategory?: Category;
-  /** Optional multi-select category filter (`?cat=anime,film`). */
   initialCategories?: readonly Category[];
-  /** Whether "All" includes YouTube (default false). */
   includeYoutubeInAll?: boolean;
-  /** Callback to open the Add to Archive flow. */
-  onOpenAdd?: (opts?: {
+  onOpenAdd?: (prefill?: {
     date?: string;
     category?: Category;
     work?: ManualWork;
+    editingEntry?: {
+      entry_id: string;
+      work: ManualWork;
+      consumed: ArchiveConsumed;
+      when: ArchiveWhen;
+      rating?: number | null;
+      note?: string | null;
+    };
   }) => void;
-  /** Callback to open the Edit Work sheet. */
-  onOpenEditWork?: (work: EditableWorkTarget) => void;
+  onOpenEditWork?: (work: LibraryWork) => void;
 }
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
-
-function isMobileViewport(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  return window.innerWidth < 768;
-}
-
-function getCurrentMonth(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
-
-function getTodayDate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function formatMonthTitle(month: string): string {
-  const [yStr, mStr] = month.split("-");
-  const y = parseInt(yStr ?? "2026", 10);
-  const m = parseInt(mStr ?? "1", 10);
-  const d = new Date(Date.UTC(y, m - 1, 1));
-  return d.toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-interface DayDetailContentProps {
-  dateStr: string;
-  todayStr: string;
-  day: CalendarDay | undefined;
-  workLookup: ReadonlyMap<string, LibraryWork>;
-  onClose?: () => void;
-  onOpenAdd?: (opts?: {
-    date?: string;
-    category?: Category;
-    work?: ManualWork;
-  }) => void;
-  showHeader?: boolean;
-}
-
-function DayDetailContent({
-  dateStr,
-  todayStr,
-  day,
-  workLookup,
-  onClose,
-  onOpenAdd,
-  showHeader = true,
-}: DayDetailContentProps) {
-  const items = day?.items ?? [];
-  const minutes = day?.minutes ?? 0;
-  const [youtubeExpanded, setYoutubeExpanded] = useState(false);
-
-  useEffect(() => {
-    setYoutubeExpanded(false);
-  }, [dateStr]);
-
-  const grouped = useMemo(() => groupDayPanelItems(items), [items]);
-  const cellSummary = useMemo(
-    () => summarizeDayCellV2(day, Math.max(minutes, 60), 0),
-    [day, minutes]
-  );
-
-  const headingText = formatCleanDayHeading(dateStr, todayStr);
-  const hasAnyActivity =
-    grouped.workGroups.length > 0 || grouped.youtubeSummary !== null;
-
-  return (
-    <div class="calendar-detail-content">
-      {showHeader && (
-        <div class="calendar-detail-header">
-          <div class="calendar-detail-headline">
-            <h2 id="calendar-detail-heading" class="calendar-detail-date">
-              {headingText}
-            </h2>
-            <span class="calendar-detail-summary tabular-nums">
-              {minutes > 0
-                ? formatDuration(minutes * 60)
-                : hasAnyActivity
-                  ? `${items.length} ${items.length === 1 ? "item" : "items"}`
-                  : "Quiet day"}
-            </span>
-          </div>
-          <div class="calendar-detail-header-actions">
-            <Button
-              variant="ghost"
-              size="sm"
-              href={`#/add?date=${dateStr}`}
-              onClick={
-                onOpenAdd
-                  ? (e) => {
-                      e.preventDefault();
-                      onOpenAdd({ date: dateStr });
-                    }
-                  : undefined
-              }
-              leadingIcon={<AddIcon size={14} />}
-            >
-              Add
-            </Button>
-            {onClose && (
-              <IconButton
-                label="Close day detail"
-                variant="ghost"
-                size="sm"
-                onClick={onClose}
-              >
-                <CloseIcon size={18} />
-              </IconButton>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Day Category Share Strip */}
-      {cellSummary.categorySegments.length > 0 && (
-        <div class="calendar-detail-cat-strip">
-          <div class="calendar-detail-cat-bar" aria-hidden="true">
-            {cellSummary.categorySegments.map((seg) => (
-              <span
-                key={seg.category}
-                class="calendar-detail-cat-seg"
-                style={{
-                  width: `${Math.max(4, seg.sharePct)}%`,
-                  backgroundColor: categoryCssColor(seg.category),
-                }}
-              />
-            ))}
-          </div>
-          <div class="calendar-detail-cat-pills">
-            {cellSummary.categorySegments.map((seg) => (
-              <span
-                key={seg.category}
-                class="calendar-detail-cat-pill tabular-nums"
-              >
-                <span
-                  class={`ui-tab-dot ui-tab-dot--${seg.category}`}
-                  aria-hidden="true"
-                />
-                {categoryLabel(seg.category)}{" "}
-                {seg.minutes > 0
-                  ? formatMinutes(seg.minutes)
-                  : `${seg.count}×`}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!hasAnyActivity ? (
-        <EmptyState
-          compact
-          title="Nothing logged on this day"
-          description="Select another date or add an entry for this day."
-          actions={
-            <Button
-              variant="secondary"
-              size="sm"
-              href={`#/add?date=${dateStr}`}
-              onClick={
-                onOpenAdd
-                  ? (e) => {
-                      e.preventDefault();
-                      onOpenAdd({ date: dateStr });
-                    }
-                  : undefined
-              }
-              leadingIcon={<AddIcon size={15} />}
-            >
-              Add to archive
-            </Button>
-          }
-        />
-      ) : (
-        <div class="calendar-compact-list">
-          {/* Compact rows grouped by work */}
-          {grouped.workGroups.map((group) => {
-            const matchedWork = workLookup.get(group.key);
-            const workKey = matchedWork?.key ?? group.key;
-            const workHref = matchedWork
-              ? `#/library?work=${encodeURIComponent(matchedWork.key)}`
-              : `#/library?q=${encodeURIComponent(group.workTitle)}`;
-
-            const menuTarget = {
-              kind: "day-work" as const,
-              workKey,
-              title: group.workTitle,
-              category: group.category,
-              status: matchedWork?.status,
-              rating: matchedWork?.rating ?? null,
-              href: workHref,
-              source: group.source,
-            };
-
-            return (
-              <div
-                key={group.key}
-                class="calendar-compact-row"
-                tabIndex={0}
-                {...bindContextMenu(menuTarget)}
-              >
-                {/* Only render a cover thumbnail when an actual image URL exists; never render heavy letter tiles for music/entries without art */}
-                {group.coverUrl ? (
-                  <Cover
-                    src={group.coverUrl}
-                    title={group.workTitle}
-                    category={group.category}
-                    size="xs"
-                    aspect="square"
-                  />
-                ) : (
-                  <span
-                    class={`ui-tab-dot ui-tab-dot--${group.category} calendar-compact-dot`}
-                    aria-hidden="true"
-                  />
-                )}
-
-                <div class="calendar-compact-main">
-                  <div class="calendar-compact-title-line">
-                    <a
-                      href={workHref}
-                      class="calendar-compact-title"
-                      title={group.workTitle}
-                    >
-                      {group.workTitle}
-                    </a>
-                    {group.detailLabel && (
-                      <span
-                        class="calendar-compact-detail"
-                        title={group.detailLabel}
-                      >
-                        {group.detailLabel}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div class="calendar-compact-right tabular-nums">
-                  {group.totalSeconds > 0 && (
-                    <span class="calendar-compact-duration">
-                      {formatDuration(group.totalSeconds)}
-                    </span>
-                  )}
-                  <QuickRatingPill
-                    workKey={workKey}
-                    title={group.workTitle}
-                    category={group.category}
-                    rating={matchedWork?.rating ?? null}
-                    source={group.source}
-                    variant="inline"
-                  />
-                  <button
-                    type="button"
-                    class="ui-row-menu-btn"
-                    aria-label={`More actions for ${group.workTitle}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const rect = (
-                        e.currentTarget as HTMLElement
-                      ).getBoundingClientRect();
-                      openContextMenu(
-                        menuTarget,
-                        { x: rect.left, y: rect.bottom + 4 },
-                        e.currentTarget as HTMLElement
-                      );
-                    }}
-                  >
-                    <MoreIcon size={15} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* YouTube collapsed into a single expandable line ("12 videos · 48 min") */}
-          {grouped.youtubeSummary && (
-            <div class="calendar-yt-collapse">
-              <button
-                type="button"
-                class="calendar-yt-summary-row"
-                aria-expanded={youtubeExpanded}
-                onClick={() => setYoutubeExpanded((v) => !v)}
-              >
-                <span class="calendar-yt-summary-left">
-                  <span
-                    class="ui-tab-dot ui-tab-dot--youtube"
-                    aria-hidden="true"
-                  />
-                  <YoutubeIcon size={14} />
-                  <strong class="calendar-yt-summary-title">YouTube</strong>
-                  <span class="calendar-yt-summary-meta tabular-nums">
-                    {grouped.youtubeSummary.summaryLabel}
-                  </span>
-                </span>
-                <span class="calendar-yt-summary-chevron">
-                  {youtubeExpanded ? "Hide" : "Show"}
-                </span>
-              </button>
-
-              {youtubeExpanded && (
-                <ul class="calendar-yt-expanded-list">
-                  {grouped.youtubeSummary.items.map((item) => {
-                    const videoTitle = item.title ?? "YouTube video";
-                    const channel = item.parent_title;
-                    const ytKey = `youtube:${videoTitle.toLowerCase()}`;
-                    const menuTarget = {
-                      kind: "youtube-video" as const,
-                      workKey: ytKey,
-                      title: videoTitle,
-                      category: "youtube" as const,
-                      channel: channel ?? null,
-                      source: "youtube",
-                    };
-                    return (
-                      <li
-                        key={item.id}
-                        class="calendar-yt-item"
-                        tabIndex={0}
-                        {...bindContextMenu(menuTarget)}
-                      >
-                        <div class="calendar-yt-item-main">
-                          <a
-                            href={
-                              channel
-                                ? `#/library?cat=youtube&channel=${encodeURIComponent(
-                                    channel
-                                  )}`
-                                : "#/library?cat=youtube"
-                            }
-                            class="calendar-yt-item-title"
-                          >
-                            {videoTitle}
-                          </a>
-                          {channel && (
-                            <span class="calendar-yt-item-channel">
-                              {channel}
-                            </span>
-                          )}
-                        </div>
-                        <div class="calendar-compact-right tabular-nums">
-                          {item.duration_seconds &&
-                            item.duration_seconds > 0 && (
-                              <span class="calendar-compact-duration">
-                                {formatDuration(item.duration_seconds)}
-                              </span>
-                            )}
-                          <QuickRatingPill
-                            workKey={ytKey}
-                            title={videoTitle}
-                            category="youtube"
-                            rating={null}
-                            source="youtube"
-                            variant="inline"
-                          />
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
+/**
+ * Home Page (`#/calendar`), designed from scratch for v2.2:
+ * - Phone-first flow: This Week's 7-day stacked bar graph and Today's detail
+ *   sit immediately at the top on mobile, followed by "In the middle of" and
+ *   the Month rhythm & calendar grid.
+ * - Desktop two-column studio (`>= 1024px`): Month Rhythm Skyline + 7-column
+ *   Calendar Grid + "In the middle of" on the left stage; sticky 7-day Week Graph
+ *   + Selected Day Detail inspector on the right without any modal.
+ * - Graphs over numbers; covers only where a real cover URL exists; YouTube and
+ *   music included in "All" with YouTube collapsed to one expandable line per day
+ *   and ratings hidden for music.
+ */
 export function Calendar({
   date,
   initialMonth,
   initialCategory,
   initialCategories,
-  includeYoutubeInAll = false,
   onOpenAdd,
-}: CalendarProps = {}) {
-  const currentMonth = getCurrentMonth();
-  const today = getTodayDate();
+}: CalendarProps) {
+  const todayStr = useMemo(() => getTodayLocalDate(), []);
 
-  const [month, setMonth] = useState<string>(() => {
-    if (date && /^\d{4}-\d{2}/.test(date)) {
-      return date.slice(0, 7);
-    }
-    if (initialMonth && /^\d{4}-\d{2}$/.test(initialMonth)) {
-      return initialMonth;
-    }
-    return currentMonth;
-  });
+  const initialResolved = useMemo(
+    () => resolveHomeSelection({ date, initialMonth }, todayStr),
+    [date, initialMonth, todayStr]
+  );
+
+  const [currentMonth, setCurrentMonth] = useState<string>(
+    initialResolved.month
+  );
+  const [selectedDate, setSelectedDate] = useState<string>(
+    initialResolved.selectedDate
+  );
+  const [explicitDate, setExplicitDate] = useState<boolean>(
+    initialResolved.explicitDate
+  );
 
   const [selectedCategories, setSelectedCategories] = useState<Category[]>(
     () => {
@@ -491,36 +123,34 @@ export function Calendar({
     }
   );
 
-  const [selectedDate, setSelectedDate] = useState<string | null>(() => {
-    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return date;
-    }
-    return today;
-  });
-
-  const [mobileSheetOpen, setMobileSheetOpen] = useState<boolean>(false);
-
-  const [data, setData] = useState<CalendarResult | null>(null);
-  const [libraryWorks, setLibraryWorks] = useState<LibraryWork[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [bundle, setBundle] = useState<HomePageBundle | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [overrideTick, setOverrideTick] = useState(0);
+  const [overrideTick, setOverrideTick] = useState<number>(0);
 
+  const dayPanelRef = useRef<HTMLDivElement>(null);
+
+  // Subscribe to optimistic work edits / quick ratings / hides
   useEffect(() => {
     return subscribeWorkEdits(() => setOverrideTick((t) => t + 1));
   }, []);
 
+  // Sync state when route props (`?date=`, `?month=`, `?cat=`) change externally
   useEffect(() => {
-    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      setMonth(date.slice(0, 7));
+    if (isValidDateStr(date)) {
       setSelectedDate(date);
-      if (isMobileViewport()) {
-        setMobileSheetOpen(true);
-      } else {
-        setMobileSheetOpen(false);
-      }
+      setCurrentMonth(
+        isValidMonthStr(initialMonth) ? initialMonth : date.slice(0, 7)
+      );
+      setExplicitDate(true);
+    } else if (isValidMonthStr(initialMonth)) {
+      setCurrentMonth(initialMonth);
+      setSelectedDate(
+        todayStr.startsWith(initialMonth) ? todayStr : `${initialMonth}-01`
+      );
+      setExplicitDate(false);
     }
-  }, [date]);
+  }, [date, initialMonth, todayStr]);
 
   useEffect(() => {
     if (initialCategories !== undefined) {
@@ -530,32 +160,31 @@ export function Calendar({
     }
   }, [initialCategory, initialCategories]);
 
-  // Fetch calendar data + library works (for "Continue" in-progress shelf & ratings)
+  // Fetch calendar month(s), library works, progress, and archive summaries
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    const filterParams = buildCategoryFilterParams(
-      selectedCategories,
-      includeYoutubeInAll
-    );
-
-    const fetchCal = getCalendar(month, filterParams).catch(() =>
-      // Graceful fallback if server doesn't yet accept category/exclude on /api/calendar
-      getCalendar(month)
-    );
-
-    const fetchLib = getLibrary({ sort: "recent" }).catch(() => null);
-
-    Promise.all([fetchCal, fetchLib])
-      .then(([calRes, libRes]) => {
+    fetchHomePageBundle(currentMonth, selectedDate)
+      .then((res) => {
         if (cancelled) return;
-        setData(calRes);
-        if (libRes?.works) {
-          setLibraryWorks(libRes.works);
-        }
+        setBundle(res);
         setLoading(false);
+
+        // When viewing a non-current month without an explicit `?date=`,
+        // select the most recent active day in that month so the day panel
+        // shows real activity right away.
+        if (!explicitDate && !todayStr.startsWith(currentMonth)) {
+          const bestDay = pickDefaultDayForMonth(
+            currentMonth,
+            res.days,
+            todayStr
+          );
+          if (bestDay !== selectedDate) {
+            setSelectedDate(bestDay);
+          }
+        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -566,580 +195,361 @@ export function Calendar({
     return () => {
       cancelled = true;
     };
-  }, [month, selectedCategories, includeYoutubeInAll]);
+  }, [currentMonth, selectedDate, explicitDate, todayStr]);
 
+  const syncUrlHash = (
+    nextDate: string,
+    nextMonth: string,
+    nextCats: readonly Category[],
+    isExplicit: boolean
+  ) => {
+    if (typeof window === "undefined") return;
+    const nextHash = buildHomeHash({
+      selectedDate: nextDate,
+      currentMonth: nextMonth,
+      todayStr,
+      selectedCategories: nextCats,
+      explicitDate: isExplicit,
+    });
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, "", nextHash);
+    }
+  };
+
+  const handleSelectDate = (nextDate: string, fromMonthGrid = false) => {
+    if (!isValidDateStr(nextDate)) return;
+    const nextMonth = nextDate.slice(0, 7);
+    setSelectedDate(nextDate);
+    setExplicitDate(true);
+    if (nextMonth !== currentMonth) {
+      setCurrentMonth(nextMonth);
+    }
+    syncUrlHash(nextDate, nextMonth, selectedCategories, true);
+
+    if (
+      fromMonthGrid &&
+      typeof window !== "undefined" &&
+      window.innerWidth < 1024 &&
+      dayPanelRef.current
+    ) {
+      dayPanelRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  };
+
+  const handleStepMonth = (delta: number) => {
+    const nextMonth = shiftMonth(currentMonth, delta);
+    const nextDate = todayStr.startsWith(nextMonth)
+      ? todayStr
+      : `${nextMonth}-01`;
+    setCurrentMonth(nextMonth);
+    setSelectedDate(nextDate);
+    setExplicitDate(false);
+    syncUrlHash(nextDate, nextMonth, selectedCategories, false);
+  };
+
+  const handleJumpToday = () => {
+    const todayMonth = todayStr.slice(0, 7);
+    setCurrentMonth(todayMonth);
+    setSelectedDate(todayStr);
+    setExplicitDate(false);
+    syncUrlHash(todayStr, todayMonth, selectedCategories, false);
+  };
+
+  const handleCategoriesChange = (nextCats: Category[]) => {
+    setSelectedCategories(nextCats);
+    syncUrlHash(selectedDate, currentMonth, nextCats, explicitDate);
+  };
+
+  const handleToggleSingleCategory = (cat: Category) => {
+    const next = toggleCategoryChip(selectedCategories, cat);
+    handleCategoriesChange(next);
+  };
+
+  // Apply optimistic work overrides to library works
   const effectiveWorks = useMemo(
-    () => applyWorkOverridesToList(libraryWorks),
-    [libraryWorks, overrideTick]
+    () => applyWorkOverridesToList(bundle?.libraryWorks ?? []),
+    [bundle?.libraryWorks, overrideTick]
   );
 
-  const workLookup = useMemo(() => {
-    const map = new Map<string, LibraryWork>();
-    for (const w of effectiveWorks) {
-      map.set(w.key, w);
-      map.set(`${w.category}:${w.title.toLowerCase().trim()}`, w);
-    }
-    return map;
-  }, [effectiveWorks]);
-
-  // Continue / In Progress works (not YouTube or single music tracks: nothing to continue)
-  const continueWorks = useMemo(
-    () =>
-      effectiveWorks
-        .filter(
-          (w) =>
-            w.status === "in_progress" &&
-            w.category !== "youtube" &&
-            w.category !== "music"
-        )
-        .slice(0, 4),
+  const libraryLookup = useMemo(
+    () => buildLibraryWorkLookup(effectiveWorks),
     [effectiveWorks]
   );
 
-  // Filter days by multi-select category chips and includeYoutubeInAll
-  const filteredDays = useMemo<CalendarDay[]>(() => {
-    const rawDays = data?.days ?? [];
-    return rawDays.map((d) => {
-      const matchingItems = (d.items ?? []).filter((it) => {
-        const cat = resolveItemCategory(it);
-        return matchesCategorySelection(
-          cat,
-          selectedCategories,
-          includeYoutubeInAll
-        );
-      });
-      const min = matchingItems.reduce((acc, it) => {
-        const sec = it.duration_seconds ?? 0;
-        return acc + (sec > 0 ? sec / 60 : 0);
-      }, 0);
-      return {
-        date: d.date,
-        count: matchingItems.length,
-        minutes: Math.round(min),
-        items: matchingItems,
-      };
-    });
-  }, [data, selectedCategories, includeYoutubeInAll]);
-
-  const daysMap = useMemo(() => {
-    const map = new Map<string, CalendarDay>();
-    for (const d of filteredDays) {
-      map.set(d.date, d);
-    }
-    return map;
-  }, [filteredDays]);
-
-  // All-categories summary for the filter chip counts
-  const fullMonthSummary = useMemo(
-    () => summarizeCalendarMonthV2(data?.days ?? [], month),
-    [data, month]
+  const archiveLookup = useMemo(
+    () => buildArchiveEntryLookup(bundle?.archiveEntries ?? []),
+    [bundle?.archiveEntries]
   );
 
-  // Filtered month summary for the active view
-  const monthSummary = useMemo(
-    () => summarizeCalendarMonthV2(filteredDays, month),
-    [filteredDays, month]
-  );
-
-  // Today & This Week summary
-  const weekSummary = useMemo(
+  // Unfiltered days (with overrides applied) for category chip totals
+  const allEnrichedDays = useMemo(
     () =>
-      summarizeCurrentWeek(
-        filteredDays,
-        month === currentMonth ? today : `${month}-15`
+      filterAndEnrichCalendarDays(
+        bundle?.days ?? [],
+        [],
+        libraryLookup
       ),
-    [filteredDays, month, currentMonth, today]
+    [bundle?.days, libraryLookup, overrideTick]
   );
 
-  const weeks = useMemo(() => {
-    try {
-      return buildMonthGrid(month);
-    } catch {
-      return [];
-    }
-  }, [month]);
+  // Filtered days matching `selectedCategories` (where "All" includes YouTube & Music)
+  const filteredDays = useMemo(
+    () =>
+      selectedCategories.length === 0
+        ? allEnrichedDays
+        : filterAndEnrichCalendarDays(
+            bundle?.days ?? [],
+            selectedCategories,
+            libraryLookup
+          ),
+    [bundle?.days, allEnrichedDays, selectedCategories, libraryLookup]
+  );
 
-  useEffect(() => {
-    if (!selectedDate || !selectedDate.startsWith(month)) {
-      if (today.startsWith(month)) {
-        setSelectedDate(today);
-      } else if (filteredDays.length > 0) {
-        const lastActive = [...filteredDays]
-          .filter(
-            (d) => d.date.startsWith(month) && (d.count > 0 || d.minutes > 0)
-          )
-          .sort((a, b) => b.date.localeCompare(a.date))[0];
-        setSelectedDate(lastActive ? lastActive.date : `${month}-01`);
-      } else {
-        setSelectedDate(`${month}-01`);
-      }
-    }
-  }, [month, filteredDays, today, selectedDate]);
+  const unfilteredMonthModels = useMemo(
+    () =>
+      buildMonthModels({
+        month: currentMonth,
+        days: allEnrichedDays,
+        selectedDate,
+        todayStr,
+        previousMonthMinutes:
+          bundle?.monthReview?.previous_month_minutes ?? null,
+      }),
+    [
+      currentMonth,
+      allEnrichedDays,
+      selectedDate,
+      todayStr,
+      bundle?.monthReview?.previous_month_minutes,
+    ]
+  );
 
-  const handlePrevMonth = () => {
-    setMonth((m) => shiftMonth(m, -1));
-    setMobileSheetOpen(false);
-  };
+  const monthModels = useMemo(
+    () =>
+      selectedCategories.length === 0
+        ? unfilteredMonthModels
+        : buildMonthModels({
+            month: currentMonth,
+            days: filteredDays,
+            selectedDate,
+            todayStr,
+            previousMonthMinutes: null,
+          }),
+    [
+      selectedCategories,
+      unfilteredMonthModels,
+      currentMonth,
+      filteredDays,
+      selectedDate,
+      todayStr,
+    ]
+  );
 
-  const handleNextMonth = () => {
-    setMonth((m) => shiftMonth(m, 1));
-    setMobileSheetOpen(false);
-  };
+  const weekModel = useMemo(
+    () =>
+      buildWeekGraphModel(
+        filteredDays,
+        selectedDate,
+        todayStr,
+        currentMonth
+      ),
+    [filteredDays, selectedDate, todayStr, currentMonth]
+  );
 
-  const handleToday = () => {
-    const curMonth = getCurrentMonth();
-    const curDay = getTodayDate();
-    setMonth(curMonth);
-    setSelectedDate(curDay);
-  };
+  const selectedDayData = useMemo(
+    () => filteredDays.find((d) => d.date === selectedDate),
+    [filteredDays, selectedDate]
+  );
 
-  const handleDaySelect = (cellDate: string) => {
-    if (!cellDate.startsWith(month)) {
-      setMonth(cellDate.slice(0, 7));
-    }
-    setSelectedDate(cellDate);
-    if (isMobileViewport()) {
-      setMobileSheetOpen(true);
-    }
-  };
+  const dayDetailModel = useMemo(
+    () =>
+      buildHomeDayDetailModel({
+        date: selectedDate,
+        todayStr,
+        day: selectedDayData,
+        libraryLookup,
+        archiveLookup,
+      }),
+    [selectedDate, todayStr, selectedDayData, libraryLookup, archiveLookup]
+  );
 
-  const selectedDay = selectedDate ? daysMap.get(selectedDate) : undefined;
-  const singleCategory =
+  const inProgressWorks = useMemo(
+    () =>
+      buildInProgressShelf(
+        effectiveWorks,
+        selectedCategories,
+        bundle?.progressItems ?? [],
+        6
+      ),
+    [effectiveWorks, selectedCategories, bundle?.progressItems]
+  );
+
+  const chipTotals = useMemo(
+    () =>
+      buildHomeCategoryChipTotals(
+        unfilteredMonthModels.rhythm.categoryShares,
+        bundle?.libraryCategories ?? []
+      ),
+    [unfilteredMonthModels.rhythm.categoryShares, bundle?.libraryCategories]
+  );
+
+  const singleSelectedCategory =
     selectedCategories.length === 1 ? selectedCategories[0] : undefined;
 
+  const isViewingToday =
+    selectedDate === todayStr && currentMonth === todayStr.slice(0, 7);
+
   return (
-    <section class="page-container calendar-page" aria-label="Calendar">
-      {/* Top Header & Month Stepper */}
-      <header class="calendar-toolbar">
-        <div class="calendar-toolbar-top">
-          <div class="calendar-title-block">
-            <div class="calendar-title-row">
-              <h1 class="calendar-month-heading">{formatMonthTitle(month)}</h1>
-              {loading && (
-                <span class="calendar-loading-pill" role="status">
-                  Updating…
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div
-            class="calendar-nav-controls"
-            role="toolbar"
-            aria-label="Month navigation"
+    <div class="page-container home-page">
+      {/* Top Bar: Month Picker + Today Jump + Primary Add Action */}
+      <header class="home-topbar">
+        <div class="home-month-nav">
+          <IconButton
+            label="Previous month"
+            variant="default"
+            size="sm"
+            onClick={() => handleStepMonth(-1)}
           >
-            <div class="calendar-month-stepper">
-              <IconButton
-                label="Previous month"
-                variant="ghost"
-                size="sm"
-                onClick={handlePrevMonth}
-              >
-                <ChevronLeftIcon size={18} />
-              </IconButton>
-              <button
-                type="button"
-                class="calendar-today-btn"
-                onClick={handleToday}
-              >
-                Today
-              </button>
-              <IconButton
-                label="Next month"
-                variant="ghost"
-                size="sm"
-                onClick={handleNextMonth}
-              >
-                <ChevronRightIcon size={18} />
-              </IconButton>
-            </div>
+            <ChevronLeftIcon size={17} />
+          </IconButton>
 
+          <h1 class="home-month-title">
+            {formatMonthHeading(currentMonth)}
+          </h1>
+
+          <IconButton
+            label="Next month"
+            variant="default"
+            size="sm"
+            onClick={() => handleStepMonth(1)}
+          >
+            <ChevronRightIcon size={17} />
+          </IconButton>
+
+          {!isViewingToday && (
+            <button
+              type="button"
+              class="home-today-btn"
+              onClick={handleJumpToday}
+            >
+              Today
+            </button>
+          )}
+        </div>
+
+        <div class="home-topbar-actions">
+          {onOpenAdd && (
             <Button
               variant="primary"
               size="sm"
-              href="#/add"
-              onClick={
-                onOpenAdd
-                  ? (e) => {
-                      e.preventDefault();
-                      onOpenAdd({
-                        date: selectedDate ?? undefined,
-                        category: singleCategory,
-                      });
-                    }
-                  : undefined
-              }
               leadingIcon={<AddIcon size={16} />}
+              onClick={() =>
+                onOpenAdd({
+                  date: selectedDate,
+                  category: singleSelectedCategory,
+                })
+              }
             >
               Add
             </Button>
-          </div>
+          )}
         </div>
-
-        {/* Multi-Select Category Chips */}
-        <CategoryChips
-          selected={selectedCategories}
-          onChange={setSelectedCategories}
-          totals={fullMonthSummary.categories}
-          includeYoutubeInAll={includeYoutubeInAll}
-          ariaLabel="Filter calendar by category"
-          showCounts="hours"
-        />
       </header>
 
+      {/* Multi-Select Category Filter Bar ("All" includes YouTube & Music) */}
+      <div class="home-filter-bar">
+        <CategoryChips
+          selected={selectedCategories}
+          onChange={handleCategoriesChange}
+          totals={chipTotals}
+          availableCategories={unfilteredMonthModels.availableCategories}
+          includeYoutubeInAll={true}
+          showCounts="hours"
+          syncUrl={false}
+          ariaLabel="Filter calendar by category"
+        />
+      </div>
+
       {error && (
-        <div class="calendar-error" role="alert">
-          <span>
-            <strong>Could not load calendar:</strong> {error}
-          </span>
+        <div class="home-error-banner" role="alert">
+          <span>Could not load calendar data: {error}</span>
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setMonth((m) => m)}
+            onClick={() => setOverrideTick((t) => t + 1)}
           >
             Retry
           </Button>
         </div>
       )}
 
-      {/* Clear At-a-Glance Strip: Today, This Week, This Month, and Continue */}
-      <div class="home-glance-grid">
-        <Card padding="sm" class="home-glance-card">
-          <span class="home-glance-label">Today</span>
-          <div class="home-glance-value tabular-nums">
-            {formatMinutes(weekSummary.todayMinutes)}
-          </div>
-          <span class="home-glance-sub tabular-nums">
-            {weekSummary.todayWorks > 0
-              ? `${weekSummary.todayWorks} ${
-                  weekSummary.todayWorks === 1 ? "work" : "works"
-                } logged`
-              : "Nothing logged yet today"}
-          </span>
-        </Card>
-
-        <Card padding="sm" class="home-glance-card">
-          <div class="home-glance-row">
-            <div>
-              <span class="home-glance-label">This week</span>
-              <div class="home-glance-value tabular-nums">
-                {formatMinutes(weekSummary.weekMinutes)}
-              </div>
+      {loading && !bundle ? (
+        <div class="home-workspace" aria-busy="true">
+          <div class="home-inspector-col">
+            <div class="home-card">
+              <Skeleton height="120px" />
             </div>
-            <Sparkline
-              values={weekSummary.weekDailyMinutes}
-              category={singleCategory}
-              width={72}
-              height={26}
-              label="This week daily minutes"
+            <div class="home-card">
+              <Skeleton height="220px" />
+            </div>
+          </div>
+          <div class="home-stage-col">
+            <div class="home-card">
+              <Skeleton height="110px" />
+            </div>
+            <div class="home-card">
+              <Skeleton height="360px" />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div class="home-workspace">
+          {/* Inspector Column: First on Phone (This Week + Selected Day), Sticky Right on Desktop */}
+          <div class="home-inspector-col">
+            <WeekGraph
+              model={weekModel}
+              todayStr={todayStr}
+              onSelectDate={(d) => handleSelectDate(d, false)}
             />
-          </div>
-          <span class="home-glance-sub tabular-nums">
-            {weekSummary.weekActiveDays} of 7 days active
-          </span>
-        </Card>
 
-        <Card padding="sm" class="home-glance-card home-glance-card--month">
-          <div class="home-glance-row">
-            <div>
-              <span class="home-glance-label">{formatMonthTitle(month)}</span>
-              <div class="home-glance-value tabular-nums">
-                {formatMinutes(monthSummary.totalMinutes)}
-              </div>
-              <span class="home-glance-sub tabular-nums">
-                {monthSummary.activeDays} active{" "}
-                {monthSummary.activeDays === 1 ? "day" : "days"}
-              </span>
-            </div>
-            <div class="home-glance-share">
-              <CategoryShareChart
-                categories={monthSummary.categories}
-                selectedCategory={singleCategory ?? ""}
-                onSelectCategory={(cat) =>
-                  setSelectedCategories(cat ? [cat] : [])
-                }
-                compact
-                title={`Category share for ${formatMonthTitle(month)}`}
-              />
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Continue (In the middle of) Shelf */}
-      {continueWorks.length > 0 && (
-        <div class="home-continue-strip" aria-label="In progress">
-          <div class="home-continue-header">
-            <span class="home-glance-label">Continue</span>
-            <a href="#/library?status=in_progress" class="ui-inline-link">
-              All in progress →
-            </a>
-          </div>
-          <div class="home-continue-list">
-            {continueWorks.map((work) => {
-              const workHref = `#/library?work=${encodeURIComponent(work.key)}`;
-              const menuTarget = {
-                kind: "work" as const,
-                workKey: work.key,
-                title: work.title,
-                category: work.category,
-                status: work.status,
-                rating: work.rating,
-                href: workHref,
-              };
-              return (
-                <a
-                  key={work.key}
-                  href={workHref}
-                  class="home-continue-item"
-                  {...bindContextMenu(menuTarget)}
-                >
-                  {work.cover_url ? (
-                    <Cover
-                      src={work.cover_url}
-                      title={work.title}
-                      category={work.category}
-                      size="xs"
-                      aspect="poster"
-                    />
-                  ) : (
-                    <span
-                      class={`ui-tab-dot ui-tab-dot--${work.category}`}
-                      aria-hidden="true"
-                    />
-                  )}
-                  <div class="home-continue-info">
-                    <span class="home-continue-title">{work.title}</span>
-                    <span class="home-continue-meta tabular-nums">
-                      {categoryLabel(work.category)}
-                      {work.total_minutes > 0
-                        ? ` · ${formatMinutes(work.total_minutes)}`
-                        : ""}
-                    </span>
-                  </div>
-                </a>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Main Calendar Workspace: Calm 7-Col Month Grid + Day Detail Panel */}
-      <div class="calendar-workspace">
-        <div class="calendar-board">
-          <div class="calendar-weekdays" aria-hidden="true">
-            {WEEKDAYS.map((wd) => (
-              <div key={wd} class="calendar-weekday-label">
-                {wd}
-              </div>
-            ))}
-          </div>
-
-          {loading && !data ? (
-            <div class="calendar-grid" aria-busy="true">
-              {Array.from({ length: 5 }).map((_, wIdx) => (
-                <div key={wIdx} class="calendar-week-row">
-                  {Array.from({ length: 7 }).map((__, dIdx) => (
-                    <Skeleton key={dIdx} height={74} />
-                  ))}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div
-              class="calendar-grid"
-              role="grid"
-              aria-label={`Monthly activity grid for ${formatMonthTitle(month)}`}
-            >
-              {weeks.map((week, wIdx) => (
-                <div key={wIdx} class="calendar-week-row" role="row">
-                  {week.map((cellDate) => {
-                    const isCurrentMonth = cellDate.startsWith(month);
-                    const isToday = cellDate === today;
-                    const isSelected = cellDate === selectedDate;
-                    const dayData = daysMap.get(cellDate);
-                    const dayNum = Number(cellDate.slice(8, 10));
-
-                    const cellSummary = summarizeDayCellV2(
-                      dayData,
-                      monthSummary.maxDayMinutes,
-                      0
-                    );
-                    const count = cellSummary.count;
-                    const minutes = cellSummary.minutes;
-                    const intensity = isCurrentMonth ? cellSummary.intensity : 0;
-
-                    const classNames = [
-                      "calendar-day",
-                      isCurrentMonth ? "" : "calendar-day--outside",
-                      isToday ? "calendar-day--today" : "",
-                      isSelected ? "calendar-day--selected" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ");
-
-                    const ariaLabel = `${cellDate}${
-                      isToday ? " (Today)" : ""
-                    }${
-                      count > 0
-                        ? `, ${count} ${
-                            count === 1 ? "item" : "items"
-                          }, ${minutes} minutes`
-                        : ", no activity"
-                    }`;
-
-                    return (
-                      <button
-                        key={cellDate}
-                        type="button"
-                        class={classNames}
-                        data-intensity={intensity}
-                        onClick={() => handleDaySelect(cellDate)}
-                        aria-label={ariaLabel}
-                        aria-pressed={isSelected}
-                      >
-                        <div class="calendar-day-top">
-                          <span class="calendar-day-num">{dayNum}</span>
-                          {count > 0 && (
-                            <span class="calendar-day-duration">
-                              {minutes >= 1
-                                ? formatDuration(minutes * 60)
-                                : `${count}×`}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Calm Category Dots + Proportional Time Bar (No Truncated Titles) */}
-                        {count > 0 &&
-                          cellSummary.categorySegments.length > 0 && (
-                            <div class="calendar-day-media" aria-hidden="true">
-                              <div class="calendar-day-dots">
-                                {cellSummary.categorySegments.map((seg) => (
-                                  <span
-                                    key={seg.category}
-                                    class={`ui-tab-dot ui-tab-dot--${seg.category}`}
-                                    title={`${categoryLabel(seg.category)}: ${
-                                      seg.minutes > 0
-                                        ? formatMinutes(seg.minutes)
-                                        : `${seg.count}×`
-                                    }`}
-                                  />
-                                ))}
-                              </div>
-
-                              <div class="calendar-day-bar-track">
-                                <div
-                                  class="calendar-day-bar-fill"
-                                  style={{
-                                    width: `${Math.round(
-                                      cellSummary.barWidthRatio * 100
-                                    )}%`,
-                                  }}
-                                >
-                                  {cellSummary.categorySegments.map((seg) => (
-                                    <span
-                                      key={seg.category}
-                                      class="calendar-day-bar-seg"
-                                      style={{
-                                        width: `${Math.max(8, seg.sharePct)}%`,
-                                        backgroundColor: categoryCssColor(
-                                          seg.category
-                                        ),
-                                      }}
-                                    />
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Intensity & Timezone Legend */}
-          <div class="calendar-legend" aria-hidden="true">
-            <div class="calendar-legend-scale">
-              <span>Less</span>
-              <span class="calendar-legend-swatch calendar-legend-swatch--0" />
-              <span class="calendar-legend-swatch calendar-legend-swatch--1" />
-              <span class="calendar-legend-swatch calendar-legend-swatch--2" />
-              <span class="calendar-legend-swatch calendar-legend-swatch--3" />
-              <span class="calendar-legend-swatch calendar-legend-swatch--4" />
-              <span>More time</span>
-            </div>
-            <span>Times in {DEFAULT_TIMEZONE}</span>
-          </div>
-        </div>
-
-        {/* Desktop Sticky Detail Panel (>= 1024px) */}
-        {selectedDate && (
-          <aside
-            class="calendar-detail-aside"
-            aria-labelledby="calendar-detail-heading"
-          >
-            <div class="calendar-detail-card">
-              <DayDetailContent
-                dateStr={selectedDate}
-                todayStr={today}
-                day={selectedDay}
-                workLookup={workLookup}
+            <div ref={dayPanelRef}>
+              <DayDetailPanel
+                model={dayDetailModel}
+                singleCategory={singleSelectedCategory}
+                onSelectDate={(d) => handleSelectDate(d, false)}
                 onOpenAdd={onOpenAdd}
-                onClose={() => setSelectedDate(null)}
               />
             </div>
-          </aside>
-        )}
-      </div>
+          </div>
 
-      {/* Inline Detail Card (< 1024px) */}
-      {selectedDate && (
-        <section
-          class="calendar-detail-inline"
-          aria-label="Selected day details"
-        >
-          <div class="calendar-detail-card">
-            <DayDetailContent
-              dateStr={selectedDate}
-              todayStr={today}
-              day={selectedDay}
-              workLookup={workLookup}
+          {/* Stage Column: In the Middle Of + Month Rhythm Skyline + 7-Column Calendar Grid */}
+          <div class="home-stage-col">
+            <InProgressShelf
+              works={inProgressWorks}
+              selectedDate={selectedDate}
               onOpenAdd={onOpenAdd}
-              onClose={() => setSelectedDate(null)}
+            />
+
+            <MonthRhythmCard
+              model={monthModels.rhythm}
+              todayStr={todayStr}
+              selectedCategories={selectedCategories}
+              onSelectDate={(d) => handleSelectDate(d, false)}
+              onToggleCategory={handleToggleSingleCategory}
+            />
+
+            <MonthCalendarGrid
+              monthHeading={monthModels.rhythm.heading}
+              weeks={monthModels.weeks}
+              todayStr={todayStr}
+              onSelectDate={handleSelectDate}
             />
           </div>
-        </section>
+        </div>
       )}
-
-      {/* Phone Bottom Sheet (< 768px) */}
-      {selectedDate && (
-        <Sheet
-          open={mobileSheetOpen}
-          onClose={() => setMobileSheetOpen(false)}
-          title={formatCleanDayHeading(selectedDate, today)}
-          subtitle={
-            selectedDay && selectedDay.minutes > 0
-              ? formatDuration(selectedDay.minutes * 60)
-              : selectedDay && selectedDay.count > 0
-                ? `${selectedDay.count} ${
-                    selectedDay.count === 1 ? "item" : "items"
-                  }`
-                : "Quiet day"
-          }
-        >
-          <DayDetailContent
-            dateStr={selectedDate}
-            todayStr={today}
-            day={selectedDay}
-            workLookup={workLookup}
-            onOpenAdd={onOpenAdd}
-            showHeader={false}
-          />
-        </Sheet>
-      )}
-    </section>
+    </div>
   );
 }

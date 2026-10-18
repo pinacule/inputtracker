@@ -12,12 +12,13 @@ import { shiftMonth } from "../lib/calendar";
 import {
   CATEGORIES,
   categoryLabel,
-  formatCategoryUnits,
+  formatWorkCardMeta,
 } from "../lib/categories";
 import {
   buildCategoryFilterParams,
   matchesCategorySelection,
 } from "../lib/category-filter";
+import { canRateCategory } from "../lib/rating";
 import { formatMinutes } from "../lib/stats";
 import {
   applyWorkOverridesToList,
@@ -133,14 +134,16 @@ function WorkShowcaseGrid({
                 <Badge size="sm" category={work.category}>
                   {categoryLabel(work.category)}
                 </Badge>
-                <QuickRatingPill
-                  workKey={work.key}
-                  title={work.title}
-                  category={work.category}
-                  rating={work.rating}
-                  source={work.sources[0] ?? "manual"}
-                  variant="inline"
-                />
+                {canRateCategory(work.category) && (
+                  <QuickRatingPill
+                    workKey={work.key}
+                    title={work.title}
+                    category={work.category}
+                    rating={work.rating}
+                    source={work.sources[0] ?? "manual"}
+                    variant="inline"
+                  />
+                )}
               </div>
               <a
                 href={workHref}
@@ -149,10 +152,13 @@ function WorkShowcaseGrid({
               >
                 {work.title}
               </a>
+              {(work.creator ?? work.channel) && (
+                <span class="review-work-meta">
+                  {work.creator ?? work.channel}
+                </span>
+              )}
               <span class="review-work-meta tabular-nums">
-                {work.total_minutes > 0
-                  ? formatMinutes(work.total_minutes)
-                  : formatCategoryUnits(work.category, work.units)}
+                {formatWorkCardMeta(work)}
               </span>
             </div>
           </div>
@@ -168,7 +174,6 @@ export function Review({
   initialYear,
   initialCategory,
   initialCategories,
-  includeYoutubeInAll = false,
 }: ReviewProps) {
   const currentMonth = getCurrentMonthStr();
   const currentYear = Number(currentMonth.slice(0, 4));
@@ -236,10 +241,7 @@ export function Review({
     setLoading(true);
     setError(null);
 
-    const filterParams = buildCategoryFilterParams(
-      selectedCategories,
-      includeYoutubeInAll
-    );
+    const filterParams = buildCategoryFilterParams(selectedCategories, "all");
 
     if (view === "month") {
       getMonthReview(month, filterParams)
@@ -272,28 +274,18 @@ export function Review({
     return () => {
       cancelled = true;
     };
-  }, [view, month, year, selectedCategories, includeYoutubeInAll]);
+  }, [view, month, year, selectedCategories]);
 
   // Filtered Month Review view model
   const filteredMonth = useMemo(() => {
     if (!monthData) return null;
     const categories = (monthData.categories ?? []).filter((c) =>
-      matchesCategorySelection(
-        c.category,
-        selectedCategories,
-        includeYoutubeInAll
-      )
+      matchesCategorySelection(c.category, selectedCategories, "all")
     );
     const days: SeriesPoint[] = (monthData.days ?? []).map((pt) => {
       const byCat: Partial<Record<Category, number>> = {};
       for (const cat of CATEGORIES) {
-        if (
-          matchesCategorySelection(
-            cat,
-            selectedCategories,
-            includeYoutubeInAll
-          )
-        ) {
+        if (matchesCategorySelection(cat, selectedCategories, "all")) {
           const v = pt.minutes_by_category?.[cat];
           if (v && v > 0) {
             byCat[cat] = v;
@@ -307,11 +299,7 @@ export function Review({
     });
     const filterWorks = (list: readonly LibraryWork[]) =>
       applyWorkOverridesToList(list).filter((w) =>
-        matchesCategorySelection(
-          w.category,
-          selectedCategories,
-          includeYoutubeInAll
-        )
+        matchesCategorySelection(w.category, selectedCategories, "all")
       );
 
     const totalMinutes = categories.reduce(
@@ -328,25 +316,17 @@ export function Review({
       started_works: filterWorks(monthData.started_works ?? []),
       finished_works: filterWorks(monthData.finished_works ?? []),
     };
-  }, [monthData, selectedCategories, includeYoutubeInAll, overrideTick]);
+  }, [monthData, selectedCategories, overrideTick]);
 
   // Filtered Year Review view model
   const filteredYear = useMemo(() => {
     if (!yearData) return null;
     const categories = (yearData.categories ?? []).filter((c) =>
-      matchesCategorySelection(
-        c.category,
-        selectedCategories,
-        includeYoutubeInAll
-      )
+      matchesCategorySelection(c.category, selectedCategories, "all")
     );
     const months = (yearData.months ?? []).map((m) => {
       const cats = (m.categories ?? []).filter((c) =>
-        matchesCategorySelection(
-          c.category,
-          selectedCategories,
-          includeYoutubeInAll
-        )
+        matchesCategorySelection(c.category, selectedCategories, "all")
       );
       const tot = cats.reduce((acc, c) => acc + c.total_minutes, 0);
       return {
@@ -357,11 +337,7 @@ export function Review({
     });
     const filterWorks = (list: readonly LibraryWork[]) =>
       applyWorkOverridesToList(list).filter((w) =>
-        matchesCategorySelection(
-          w.category,
-          selectedCategories,
-          includeYoutubeInAll
-        )
+        matchesCategorySelection(w.category, selectedCategories, "all")
       );
 
     const totalMinutes = categories.reduce(
@@ -377,7 +353,7 @@ export function Review({
       top_works: filterWorks(yearData.top_works ?? []),
       finished_works: filterWorks(yearData.finished_works ?? []),
     };
-  }, [yearData, selectedCategories, includeYoutubeInAll, overrideTick]);
+  }, [yearData, selectedCategories, overrideTick]);
 
   const monthDailySparkline = useMemo(() => {
     if (!filteredMonth?.days) return [];
@@ -502,7 +478,7 @@ export function Review({
         selected={selectedCategories}
         onChange={setSelectedCategories}
         totals={allCategoriesTotals}
-        includeYoutubeInAll={includeYoutubeInAll}
+        scope="all"
         ariaLabel="Filter review by category"
         showCounts="hours"
       />
