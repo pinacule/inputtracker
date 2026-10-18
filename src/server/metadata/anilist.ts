@@ -423,19 +423,33 @@ export async function searchAnilist(
       const rel = (edge.relationType ?? "").toUpperCase();
       const target = knownNodes.get(edge.node.id) ?? edge.node;
 
+      const nodeId = node.id;
+      const targetId = target.id;
+      const nodeIsSeason = isSeasonCandidate(node);
+      const targetIsSeason = isSeasonCandidate(target);
+
       if (CHILD_TO_PARENT_RELATIONS.has(rel)) {
-        addParentLink(node.id, target.id);
+        if (nodeIsSeason && !targetIsSeason) {
+          // A prequel/parent OVA/Movie/Special belongs under the TV series, never above it.
+          addParentLink(targetId, nodeId);
+        } else {
+          addParentLink(nodeId, targetId);
+        }
       } else if (PARENT_TO_CHILD_RELATIONS.has(rel)) {
-        addParentLink(target.id, node.id);
+        if (!nodeIsSeason && targetIsSeason) {
+          addParentLink(nodeId, targetId);
+        } else {
+          addParentLink(targetId, nodeId);
+        }
       }
 
-      if (rel === "SEQUEL" && isSeasonCandidate(node) && isSeasonCandidate(target)) {
-        if (!sequelOf.has(node.id)) {
-          sequelOf.set(node.id, target.id);
+      if (rel === "SEQUEL" && nodeIsSeason && targetIsSeason) {
+        if (!sequelOf.has(nodeId)) {
+          sequelOf.set(nodeId, targetId);
         }
-      } else if (rel === "PREQUEL" && isSeasonCandidate(node) && isSeasonCandidate(target)) {
-        if (!sequelOf.has(target.id)) {
-          sequelOf.set(target.id, node.id);
+      } else if (rel === "PREQUEL" && nodeIsSeason && targetIsSeason) {
+        if (!sequelOf.has(targetId)) {
+          sequelOf.set(targetId, nodeId);
         }
       }
     }
@@ -583,6 +597,16 @@ export async function searchAnilist(
   return results;
 }
 
+const BRIDGE_FORMATS: ReadonlySet<string> = new Set(["MOVIE", "OVA", "SPECIAL"]);
+
+function isBridgeCandidate(node: AniListMediaNode | null | undefined): node is AniListMediaNode & { id: number } {
+  if (!isAnimeNode(node)) {
+    return false;
+  }
+  const format = typeof node.format === "string" ? node.format.toUpperCase() : "";
+  return BRIDGE_FORMATS.has(format);
+}
+
 function findRelationTarget(
   node: AniListMediaNode,
   relationType: "PREQUEL" | "SEQUEL",
@@ -607,7 +631,55 @@ function findRelationTarget(
   return null;
 }
 
-function toSeasonInfo(node: AniListMediaNode, seasonNumber: number): SeasonInfo {
+function findBridgeRelationTarget(
+  node: AniListMediaNode,
+  relationType: "PREQUEL" | "SEQUEL",
+  visited: ReadonlySet<number>,
+  currentYear: number
+): (AniListMediaNode & { id: number }) | null {
+  const edges = node.relations?.edges;
+  if (!Array.isArray(edges)) {
+    return null;
+  }
+  for (const edge of edges) {
+    if (!edge || edge.relationType !== relationType) continue;
+    const target = edge.node;
+    if (
+      isBridgeCandidate(target) &&
+      !visited.has(target.id) &&
+      !isUnreleasedFutureNode(target, currentYear)
+    ) {
+      return target;
+    }
+  }
+  return null;
+}
+
+function findParentSeasonTarget(
+  node: AniListMediaNode,
+  currentYear: number
+): (AniListMediaNode & { id: number }) | null {
+  const edges = node.relations?.edges;
+  if (!Array.isArray(edges)) {
+    return null;
+  }
+  for (const preferredRel of ["PARENT", "MAIN_STORY", "FULL_STORY", "SEQUEL", "PREQUEL"]) {
+    for (const edge of edges) {
+      if (!edge || edge.relationType !== preferredRel) continue;
+      const target = edge.node;
+      if (isSeasonCandidate(target) && !isUnreleasedFutureNode(target, currentYear)) {
+        return target;
+      }
+    }
+  }
+  return null;
+}
+
+function toSeasonInfo(
+  node: AniListMediaNode,
+  seasonNumber: number,
+  fallbackEpisodeMinutes: number | null = null
+): SeasonInfo {
   const episodes =
     typeof node.episodes === "number" && Number.isFinite(node.episodes) && node.episodes > 0
       ? Math.round(node.episodes)
@@ -615,7 +687,7 @@ function toSeasonInfo(node: AniListMediaNode, seasonNumber: number): SeasonInfo 
   const episodeMinutes =
     typeof node.duration === "number" && Number.isFinite(node.duration) && node.duration > 0
       ? Math.round(node.duration)
-      : null;
+      : fallbackEpisodeMinutes;
   const totalMinutes =
     episodes > 0 && episodeMinutes !== null ? episodes * episodeMinutes : null;
 
@@ -678,13 +750,34 @@ export async function getAnilistWork(
   const seasons: SeasonInfo[] = [];
 
   if (!isMovie) {
+    let startMedia = initialMedia;
+    if (!isSeasonCandidate(startMedia)) {
+      const parentTvStub = findParentSeasonTarget(startMedia, currentYear);
+      if (parentTvStub) {
+        const fetchedTv = await fetchMediaById(parentTvStub.id);
+        startMedia = fetchedTv ? mergeNodeFields(fetchedTv, parentTvStub) : parentTvStub;
+        nodeCache.set(startMedia.id!, startMedia);
+      }
+    }
+
     // 1. Walk PREQUEL back to the first season (over TV / TV_SHORT / ONA, max 15 hops).
-    const visitedBack = new Set<number>([initialMedia.id!]);
-    let current = initialMedia;
+    const visitedBack = new Set<number>([initialMedia.id!, startMedia.id!]);
+    let current = startMedia;
     let backHops = 0;
 
     while (backHops < MAX_ANILIST_HOPS) {
-      const prequelStub = findRelationTarget(current, "PREQUEL", visitedBack, currentYear);
+      let prequelStub = findRelationTarget(current, "PREQUEL", visitedBack, currentYear);
+      if (!prequelStub && backHops + 1 < MAX_ANILIST_HOPS) {
+        const bridgeStub = findBridgeRelationTarget(current, "PREQUEL", visitedBack, currentYear);
+        if (bridgeStub) {
+          visitedBack.add(bridgeStub.id);
+          backHops += 1;
+          const fetchedBridge = await fetchMediaById(bridgeStub.id);
+          const bridgeNode = fetchedBridge ? mergeNodeFields(fetchedBridge, bridgeStub) : bridgeStub;
+          nodeCache.set(bridgeNode.id!, bridgeNode);
+          prequelStub = findRelationTarget(bridgeNode, "PREQUEL", visitedBack, currentYear);
+        }
+      }
       if (!prequelStub) {
         break;
       }
@@ -705,7 +798,18 @@ export async function getAnilistWork(
     let forwardHops = 0;
 
     while (forwardHops < MAX_ANILIST_HOPS) {
-      const sequelStub = findRelationTarget(cursor, "SEQUEL", visitedForward, currentYear);
+      let sequelStub = findRelationTarget(cursor, "SEQUEL", visitedForward, currentYear);
+      if (!sequelStub && forwardHops + 1 < MAX_ANILIST_HOPS) {
+        const bridgeStub = findBridgeRelationTarget(cursor, "SEQUEL", visitedForward, currentYear);
+        if (bridgeStub) {
+          visitedForward.add(bridgeStub.id);
+          forwardHops += 1;
+          const fetchedBridge = await fetchMediaById(bridgeStub.id);
+          const bridgeNode = fetchedBridge ? mergeNodeFields(fetchedBridge, bridgeStub) : bridgeStub;
+          nodeCache.set(bridgeNode.id!, bridgeNode);
+          sequelStub = findRelationTarget(bridgeNode, "SEQUEL", visitedForward, currentYear);
+        }
+      }
       if (!sequelStub) {
         break;
       }
@@ -722,8 +826,16 @@ export async function getAnilistWork(
       cursor = nextNode;
     }
 
+    const knownDurations = chainNodes
+      .map((n) => n.duration)
+      .filter((d): d is number => typeof d === "number" && Number.isFinite(d) && d > 0);
+    const fallbackEpMin =
+      knownDurations.length > 0
+        ? Math.round(knownDurations.reduce((a, b) => a + b, 0) / knownDurations.length)
+        : null;
+
     for (let i = 0; i < chainNodes.length; i++) {
-      seasons.push(toSeasonInfo(chainNodes[i]!, i + 1));
+      seasons.push(toSeasonInfo(chainNodes[i]!, i + 1, fallbackEpMin));
     }
   }
 

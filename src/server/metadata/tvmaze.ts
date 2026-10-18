@@ -10,6 +10,12 @@
 
 import { writeCoverUrlCache } from "./cache.ts";
 import {
+  BROADCAST_SLOTS,
+  BROADCAST_SLOT_MULTIPLES,
+  fetchCinemetaSeriesRuntime,
+  isClearlyLowerThanSlot,
+} from "./cinemeta.ts";
+import {
   fetchProviderJson,
   readValidatedImageResponse,
   type RemoteImageResult,
@@ -182,10 +188,84 @@ export async function searchTvmaze(
   return results;
 }
 
+function isRegularTvmazeEpisode(ep: TvmazeEpisode | null | undefined): ep is TvmazeEpisode & { season: number } {
+  if (!ep || typeof ep.season !== "number" || !Number.isInteger(ep.season) || ep.season < 1) {
+    return false;
+  }
+  if (typeof ep.type === "string" && ep.type.trim() !== "") {
+    if (ep.type.trim().toLowerCase() !== "regular") {
+      return false;
+    }
+  }
+  if (ep.number !== undefined && (ep.number === null || typeof ep.number !== "number" || ep.number < 1)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Detect whether TVmaze only reports a commercial broadcast slot (30/60/90 min)
+ * rather than real per-episode runtimes. Returns the base slot in minutes (30, 60,
+ * or 90) when all known runtimes are slot values, else `null`.
+ */
+export function detectTvmazeSlotRuntime(
+  showRuntime: number | null | undefined,
+  averageRuntime: number | null | undefined,
+  episodes: readonly TvmazeEpisode[]
+): number | null {
+  const showSlotCandidate =
+    typeof showRuntime === "number" && BROADCAST_SLOTS.has(Math.round(showRuntime))
+      ? Math.round(showRuntime)
+      : typeof averageRuntime === "number" && BROADCAST_SLOTS.has(Math.round(averageRuntime))
+        ? Math.round(averageRuntime)
+        : null;
+
+  const knownEpRuntimes: number[] = [];
+  for (const ep of episodes) {
+    if (!isRegularTvmazeEpisode(ep)) continue;
+    if (typeof ep.runtime === "number" && Number.isFinite(ep.runtime) && ep.runtime > 0) {
+      knownEpRuntimes.push(Math.round(ep.runtime));
+    }
+  }
+
+  if (knownEpRuntimes.length === 0) {
+    return showSlotCandidate;
+  }
+
+  // If episodes have non-slot individual runtimes (e.g. 58, 48, 47 or 29, 34, 31),
+  // TVmaze already carries real per-episode runtimes.
+  const allAreSlotMultiples = knownEpRuntimes.every((r) => BROADCAST_SLOT_MULTIPLES.has(r));
+  if (!allAreSlotMultiples) {
+    return null;
+  }
+
+  // Find the modal episode runtime.
+  const counts = new Map<number, number>();
+  let modalRuntime = knownEpRuntimes[0]!;
+  let maxCount = 0;
+  for (const r of knownEpRuntimes) {
+    const c = (counts.get(r) ?? 0) + 1;
+    counts.set(r, c);
+    if (c > maxCount) {
+      maxCount = c;
+      modalRuntime = r;
+    }
+  }
+
+  if (showSlotCandidate !== null) {
+    return showSlotCandidate;
+  }
+  if (BROADCAST_SLOTS.has(modalRuntime)) {
+    return modalRuntime;
+  }
+  return null;
+}
+
 function buildSeasons(
   rawSeasons: TvmazeSeason[],
   rawEpisodes: TvmazeEpisode[],
-  defaultShowRuntime: number | null
+  defaultShowRuntime: number | null,
+  slotReplacement?: { slotMinutes: number; realMinutes: number } | null
 ): SeasonInfo[] {
   const seasonMetaMap = new Map<number, TvmazeSeason>();
   const seasonNumbers = new Set<number>();
@@ -198,11 +278,28 @@ function buildSeasons(
   }
 
   const episodesBySeason = new Map<number, TvmazeEpisode[]>();
-  for (const ep of rawEpisodes) {
-    if (!ep || typeof ep.season !== "number" || !Number.isInteger(ep.season) || ep.season < 1) {
-      continue;
+  const allAdjustedEpRuntimes: number[] = [];
+
+  const adjustEpRuntime = (rawRt: number | null | undefined): number | null => {
+    if (typeof rawRt !== "number" || !Number.isFinite(rawRt) || rawRt <= 0) {
+      return null;
     }
-    if (ep.type === "insignificant_special") {
+    const rounded = Math.round(rawRt);
+    if (slotReplacement) {
+      const { slotMinutes, realMinutes } = slotReplacement;
+      if (rounded === slotMinutes) {
+        return realMinutes;
+      }
+      if (rounded > slotMinutes && rounded % slotMinutes === 0) {
+        return Math.round((rounded / slotMinutes) * realMinutes);
+      }
+      return realMinutes;
+    }
+    return rounded;
+  };
+
+  for (const ep of rawEpisodes) {
+    if (!isRegularTvmazeEpisode(ep)) {
       continue;
     }
     seasonNumbers.add(ep.season);
@@ -212,7 +309,21 @@ function buildSeasons(
       episodesBySeason.set(ep.season, list);
     }
     list.push(ep);
+    const adj = adjustEpRuntime(ep.runtime);
+    if (adj !== null) {
+      allAdjustedEpRuntimes.push(adj);
+    }
   }
+
+  const effectiveDefaultRuntime =
+    slotReplacement?.realMinutes ??
+    defaultShowRuntime ??
+    (allAdjustedEpRuntimes.length > 0
+      ? Math.round(
+          allAdjustedEpRuntimes.reduce((a, b) => a + b, 0) /
+            allAdjustedEpRuntimes.length
+        )
+      : null);
 
   const sortedNumbers = [...seasonNumbers].sort((a, b) => a - b);
   const seasons: SeasonInfo[] = [];
@@ -227,23 +338,25 @@ function buildSeasons(
           ? Math.round(meta.episodeOrder)
           : 0;
 
+    // Skip announced future seasons that have 0 episodes.
+    if (episodeCount <= 0) {
+      continue;
+    }
+
     const knownRuntimes = eps
-      .map((e) => e.runtime)
-      .filter((r): r is number => typeof r === "number" && Number.isFinite(r) && r > 0);
+      .map((e) => adjustEpRuntime(e.runtime))
+      .filter((r): r is number => r !== null && r > 0);
 
     const episodeMinutes =
       knownRuntimes.length > 0
         ? Math.round(knownRuntimes.reduce((acc, r) => acc + r, 0) / knownRuntimes.length)
-        : defaultShowRuntime;
+        : effectiveDefaultRuntime;
 
     let totalMinutes: number | null = null;
     if (eps.length > 0 && (knownRuntimes.length > 0 || episodeMinutes !== null)) {
       let sum = 0;
       for (const ep of eps) {
-        const r =
-          typeof ep.runtime === "number" && Number.isFinite(ep.runtime) && ep.runtime > 0
-            ? ep.runtime
-            : episodeMinutes ?? 0;
+        const r = adjustEpRuntime(ep.runtime) ?? episodeMinutes ?? 0;
         sum += r;
       }
       totalMinutes = sum > 0 ? Math.round(sum) : null;
@@ -305,7 +418,37 @@ export async function getTvmazeWork(
       ? Math.round(defaultRuntimeRaw)
       : null;
 
-  const seasons = buildSeasons(rawSeasons, rawEpisodes, defaultRuntime);
+  const imdbId =
+    typeof show.externals?.imdb === "string" && show.externals.imdb.trim() !== ""
+      ? show.externals.imdb.trim()
+      : null;
+
+  let slotReplacement: { slotMinutes: number; realMinutes: number } | null = null;
+  const slotMinutes = detectTvmazeSlotRuntime(show.runtime, show.averageRuntime, rawEpisodes);
+  if (imdbId !== null) {
+    if (slotMinutes !== null) {
+      const cineRuntime = await fetchCinemetaSeriesRuntime(imdbId, ctx);
+      if (cineRuntime !== null && isClearlyLowerThanSlot(cineRuntime, slotMinutes)) {
+        slotReplacement = { slotMinutes, realMinutes: cineRuntime };
+      }
+    } else if (
+      defaultRuntime === null &&
+      !rawEpisodes.some(
+        (e) =>
+          isRegularTvmazeEpisode(e) &&
+          typeof e.runtime === "number" &&
+          Number.isFinite(e.runtime) &&
+          e.runtime > 0
+      )
+    ) {
+      const cineRuntime = await fetchCinemetaSeriesRuntime(imdbId, ctx);
+      if (cineRuntime !== null && cineRuntime > 0) {
+        slotReplacement = { slotMinutes: cineRuntime, realMinutes: cineRuntime };
+      }
+    }
+  }
+
+  const seasons = buildSeasons(rawSeasons, rawEpisodes, defaultRuntime, slotReplacement);
 
   const providerId = String(show.id);
   const title = typeof show.name === "string" && show.name.trim() !== "" ? show.name.trim() : `Show ${id}`;

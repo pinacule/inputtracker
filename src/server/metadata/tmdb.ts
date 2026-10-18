@@ -9,6 +9,11 @@
 
 import { readProviderHint, writeCoverUrlCache, writeProviderHint } from "./cache.ts";
 import {
+  BROADCAST_SLOTS,
+  fetchCinemetaSeriesRuntime,
+  isClearlyLowerThanSlot,
+} from "./cinemeta.ts";
+import {
   fetchProviderJson,
   readValidatedImageResponse,
   type RemoteImageResult,
@@ -343,12 +348,12 @@ function mapTmdbMovie(
   };
 }
 
-function mapTmdbTv(
+async function mapTmdbTv(
   requestedId: string,
   rawId: string,
   data: TmdbTvResponse,
   ctx: ProviderContext
-): WorkWithCover | null {
+): Promise<WorkWithCover | null> {
   const title = typeof data.name === "string" ? data.name.trim() : "";
   if (!title) return null;
 
@@ -362,12 +367,32 @@ function mapTmdbTv(
   const year = parseYear(data.first_air_date);
   const remoteCoverUrl = buildPosterUrl(ctx, data.poster_path);
 
-  const defaultEpRuntime =
+  let defaultEpRuntime =
     Array.isArray(data.episode_run_time) &&
     typeof data.episode_run_time[0] === "number" &&
     data.episode_run_time[0] > 0
       ? Math.round(data.episode_run_time[0])
       : null;
+
+  const imdbId =
+    typeof data.external_ids?.imdb_id === "string" &&
+    data.external_ids.imdb_id.trim() !== ""
+      ? data.external_ids.imdb_id.trim()
+      : null;
+
+  if (imdbId !== null) {
+    if (defaultEpRuntime !== null && BROADCAST_SLOTS.has(defaultEpRuntime)) {
+      const cineRuntime = await fetchCinemetaSeriesRuntime(imdbId, ctx);
+      if (cineRuntime !== null && isClearlyLowerThanSlot(cineRuntime, defaultEpRuntime)) {
+        defaultEpRuntime = cineRuntime;
+      }
+    } else if (defaultEpRuntime === null) {
+      const cineRuntime = await fetchCinemetaSeriesRuntime(imdbId, ctx);
+      if (cineRuntime !== null && cineRuntime > 0) {
+        defaultEpRuntime = cineRuntime;
+      }
+    }
+  }
 
   const seasons: SeasonInfo[] = [];
   const rawSeasons = Array.isArray(data.seasons) ? data.seasons : [];
@@ -383,6 +408,9 @@ function mapTmdbTv(
       typeof s.episode_count === "number" && Number.isFinite(s.episode_count) && s.episode_count > 0
         ? Math.round(s.episode_count)
         : 0;
+    if (episodes <= 0) {
+      continue;
+    }
     const epMin =
       typeof s.episode_minutes === "number" && s.episode_minutes > 0
         ? Math.round(s.episode_minutes)
@@ -420,11 +448,8 @@ function mapTmdbTv(
   const externalIds: Record<string, string> = {
     tmdb: rawId,
   };
-  if (
-    typeof data.external_ids?.imdb_id === "string" &&
-    data.external_ids.imdb_id.trim() !== ""
-  ) {
-    externalIds.imdb = data.external_ids.imdb_id.trim();
+  if (imdbId !== null) {
+    externalIds.imdb = imdbId;
   }
   if (
     data.external_ids?.tvdb_id !== undefined &&
@@ -485,7 +510,7 @@ export async function getTmdbWork(
       return mapTmdbMovie(id, rawId, data, ctx);
     }
     if (typeof data.name === "string" && data.name.trim() !== "") {
-      return mapTmdbTv(id, rawId, data, ctx);
+      return await mapTmdbTv(id, rawId, data, ctx);
     }
     return null;
   };
@@ -502,7 +527,7 @@ export async function getTmdbWork(
     );
     if (status === 404 || !data) return null;
     if (typeof data.name === "string" && data.name.trim() !== "") {
-      return mapTmdbTv(id, rawId, data, ctx);
+      return await mapTmdbTv(id, rawId, data, ctx);
     }
     if (typeof data.title === "string" && data.title.trim() !== "") {
       return mapTmdbMovie(id, rawId, data, ctx);

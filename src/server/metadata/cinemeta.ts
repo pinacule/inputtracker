@@ -215,6 +215,73 @@ export async function searchCinemeta(
   return [];
 }
 
+export const BROADCAST_SLOTS: ReadonlySet<number> = new Set([30, 60, 90]);
+export const BROADCAST_SLOT_MULTIPLES: ReadonlySet<number> = new Set([30, 45, 60, 90, 120]);
+
+/**
+ * True when a cross-checked runtime (e.g. from Cinemeta/IMDb) is clearly lower
+ * than a broadcast slot (30/60/90 min with commercials), rather than an ad-free
+ * ~57–59 min hour on HBO/BBC.
+ */
+export function isClearlyLowerThanSlot(
+  realMinutes: number,
+  slotMinutes: number
+): boolean {
+  return (
+    Number.isFinite(realMinutes) &&
+    Number.isFinite(slotMinutes) &&
+    realMinutes > 0 &&
+    slotMinutes > 0 &&
+    realMinutes <= Math.round(slotMinutes * 0.9) &&
+    slotMinutes - realMinutes >= 4
+  );
+}
+
+/**
+ * Best-effort lookup of a series' typical episode runtime in minutes on Cinemeta
+ * by IMDb ID (`tt\d+`). Never throws: returns `null` on 404, timeout or 5xx so
+ * the caller can safely keep its own runtime when Cinemeta is unreachable.
+ */
+export async function fetchCinemetaSeriesRuntime(
+  imdbId: string,
+  ctx: ProviderContext
+): Promise<number | null> {
+  const cleanId = imdbId.trim().toLowerCase();
+  if (!IMDB_ID_RE.test(cleanId)) {
+    return null;
+  }
+  try {
+    const url = `${ctx.metaConfig.cinemeta_url}/meta/series/${cleanId}.json`;
+    const { status, data } = await fetchProviderJson<CinemetaMetaResponse>(
+      ctx,
+      "cinemeta",
+      url
+    );
+    if (status === 404 || !data?.meta || typeof data.meta !== "object") {
+      return null;
+    }
+    const meta = data.meta;
+    const direct = parseRuntimeMinutes(meta.runtime);
+    if (direct !== null && direct > 0) {
+      return direct;
+    }
+    if (Array.isArray(meta.videos)) {
+      const epRuntimes = meta.videos
+        .filter((v) => v && typeof v.season === "number" && v.season >= 1)
+        .map((v) => parseRuntimeMinutes(v.runtime))
+        .filter((r): r is number => r !== null && r > 0);
+      if (epRuntimes.length > 0) {
+        return Math.round(
+          epRuntimes.reduce((a, b) => a + b, 0) / epRuntimes.length
+        );
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function buildSeriesSeasonsFromVideos(
   videos: CinemetaVideo[] | null | undefined,
   defaultEpisodeMinutes: number | null
@@ -224,6 +291,7 @@ function buildSeriesSeasonsFromVideos(
   }
 
   const bySeason = new Map<number, CinemetaVideo[]>();
+  const allKnownEpRuntimes: number[] = [];
   for (const v of videos) {
     if (!v || typeof v.season !== "number" || !Number.isInteger(v.season) || v.season < 1) {
       // Skip season 0 (specials) and invalid season numbers
@@ -235,7 +303,19 @@ function buildSeriesSeasonsFromVideos(
       bySeason.set(v.season, list);
     }
     list.push(v);
+    const rt = parseRuntimeMinutes(v.runtime);
+    if (rt !== null && rt > 0) {
+      allKnownEpRuntimes.push(rt);
+    }
   }
+
+  const fallbackEpisodeMinutes =
+    defaultEpisodeMinutes ??
+    (allKnownEpRuntimes.length > 0
+      ? Math.round(
+          allKnownEpRuntimes.reduce((a, b) => a + b, 0) / allKnownEpRuntimes.length
+        )
+      : null);
 
   const seasonNumbers = [...bySeason.keys()].sort((a, b) => a - b);
   const seasons: SeasonInfo[] = [];
@@ -261,7 +341,7 @@ function buildSeriesSeasonsFromVideos(
     const episodeMinutes =
       epRuntimes.length > 0
         ? Math.round(epRuntimes.reduce((a, b) => a + b, 0) / epRuntimes.length)
-        : defaultEpisodeMinutes;
+        : fallbackEpisodeMinutes;
 
     let totalMinutes: number | null = null;
     if (epRuntimes.length > 0) {
