@@ -281,6 +281,7 @@ export function eventPrecision(event: {
 export const VALID_META_PROVIDERS: ReadonlySet<string> = new Set([
   "anilist",
   "tvmaze",
+  "cinemeta",
   "itunes",
   "openlibrary",
   "tmdb",

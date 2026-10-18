@@ -1,0 +1,492 @@
+/**
+ * InputTracker Design System — Tokens (v2)
+ *
+ * Aesthetic: Calm, warm reading room & personal archive.
+ * Warm linen/paper surfaces in light mode, deep espresso/walnut charcoal in dark mode,
+ * refined literary serif headings paired with crisp UI sans, soft warm shadows,
+ * and 9 distinct, harmonious, WCAG-AA compliant category colour families.
+ */
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* --- Typography --- */
+  --font-serif: "Iowan Old Style", "Palatino Linotype", "URW Palladio L", P052,
+    Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+
+  /* Type scale */
+  --text-xs: 0.75rem;      /* 12px */
+  --text-sm: 0.875rem;     /* 14px */
+  --text-base: 1rem;       /* 16px */
+  --text-lg: 1.125rem;     /* 18px */
+  --text-xl: 1.3125rem;    /* 21px */
+  --text-2xl: 1.625rem;    /* 26px */
+  --text-3xl: 2.125rem;    /* 34px */
+  --text-4xl: 2.75rem;     /* 44px */
+
+  --leading-tight: 1.18;
+  --leading-snug: 1.32;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.05em;
+  --tracking-wider: 0.08em;
+
+  /* --- Spacing scale --- */
+  --space-0: 0;
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+
+  /* --- Radii --- */
+  --radius-xs: 5px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 9999px;
+
+  /* --- Layout --- */
+  --sidebar-width: 248px;
+  --mobile-nav-height: 64px;
+  --content-max-width: 1340px;
+
+  /* --- Motion --- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 140ms;
+  --duration-normal: 220ms;
+  --duration-slow: 340ms;
+
+  /* --- Light Theme (Warm Paper & Linen) --- */
+  --bg-canvas: #f6f2ea;
+  --bg-surface: #fffdf9;
+  --bg-surface-raised: #ffffff;
+  --bg-subtle: #ede7dc;
+  --bg-muted: #e2dacb;
+  --bg-overlay: rgba(28, 24, 19, 0.45);
+
+  --text-primary: #1f1b16;
+  --text-secondary: #4e463d;
+  --text-muted: #6b6156;
+  --text-on-accent: #fffdf9;
+
+  --border-subtle: #e5dec9;
+  --border-default: #d5cbb8;
+  --border-strong: #b5a892;
+
+  /* Brand / Primary Accent (Warm Terracotta & Library Leather) */
+  --accent-primary: #9c4221;
+  --accent-primary-hover: #7f3418;
+  --accent-primary-subtle: #f6e7e0;
+  --accent-primary-border: #e2beaf;
+  --focus-ring: #9c4221;
+
+  /* Semantic Status Colours */
+  --status-success-fg: #1b6545;
+  --status-success-bg: #e6f4ed;
+  --status-success-border: #b4dfc8;
+
+  --status-warning-fg: #8c4f04;
+  --status-warning-bg: #fdf1de;
+  --status-warning-border: #eccb98;
+
+  --status-danger-fg: #a82424;
+  --status-danger-bg: #fcebeb;
+  --status-danger-border: #f0bcbc;
+
+  /* --- 9 Category Colour Families (Light Mode, WCAG AA) --- */
+
+  /* 1. Anime — Indigo / Ink Blue */
+  --cat-anime-fg: #3b3199;
+  --cat-anime-bg: #edeafd;
+  --cat-anime-border: #c5bef5;
+  --cat-anime-solid: #5248c9;
+  --cat-anime-tile-start: #473db3;
+  --cat-anime-tile-end: #28216e;
+
+  /* 2. Series — Slate Teal / Petrol */
+  --cat-series-fg: #0e5866;
+  --cat-series-bg: #e3f4f7;
+  --cat-series-border: #a8dce5;
+  --cat-series-solid: #157a8c;
+  --cat-series-tile-start: #126978;
+  --cat-series-tile-end: #093b44;
+
+  /* 3. Film — Cinema Amber / Warm Ochre */
+  --cat-film-fg: #824905;
+  --cat-film-bg: #fcf0dc;
+  --cat-film-border: #e8c996;
+  --cat-film-solid: #be7112;
+  --cat-film-tile-start: #9c5b0b;
+  --cat-film-tile-end: #633704;
+
+  /* 4. Book — Botanical Sage / Forest Green */
+  --cat-book-fg: #1b6144;
+  --cat-book-bg: #e6f3ec;
+  --cat-book-border: #b5dcc8;
+  --cat-book-solid: #267855;
+  --cat-book-tile-start: #226649;
+  --cat-book-tile-end: #123d2a;
+
+  /* 5. Audiobook — Warm Plum / Amethyst */
+  --cat-audiobook-fg: #5e348a;
+  --cat-audiobook-bg: #f1ebf8;
+  --cat-audiobook-border: #d4c1eb;
+  --cat-audiobook-solid: #6d3fa0;
+  --cat-audiobook-tile-start: #5b3386;
+  --cat-audiobook-tile-end: #391d59;
+
+  /* 6. YouTube — Warm Vermilion / Terracotta Red */
+  --cat-youtube-fg: #a6261b;
+  --cat-youtube-bg: #fcede9;
+  --cat-youtube-border: #f0c2b8;
+  --cat-youtube-solid: #c23528;
+  --cat-youtube-tile-start: #a82b20;
+  --cat-youtube-tile-end: #6e1810;
+
+  /* 7. Podcast — Warm Copper / Burnt Sienna */
+  --cat-podcast-fg: #8c3d10;
+  --cat-podcast-bg: #fbece3;
+  --cat-podcast-border: #ebbFA6;
+  --cat-podcast-solid: #b8511b;
+  --cat-podcast-tile-start: #9e4314;
+  --cat-podcast-tile-end: #5e2407;
+
+  /* 8. Music — Deep Rose / Berry */
+  --cat-music-fg: #8a2052;
+  --cat-music-bg: #fae8f0;
+  --cat-music-border: #ebb8cf;
+  --cat-music-solid: #b0306a;
+  --cat-music-tile-start: #942457;
+  --cat-music-tile-end: #571131;
+
+  /* 9. Other — Warm Stone / Pewter */
+  --cat-other-fg: #4e463d;
+  --cat-other-bg: #ece7df;
+  --cat-other-border: #cfc5b6;
+  --cat-other-solid: #756a5d;
+  --cat-other-tile-start: #61574b;
+  --cat-other-tile-end: #3b342c;
+
+  /* Legacy MediaKind aliases (mapped to their matching category family) */
+  --kind-audiobook-fg: var(--cat-audiobook-fg);
+  --kind-audiobook-bg: var(--cat-audiobook-bg);
+  --kind-audiobook-border: var(--cat-audiobook-border);
+  --kind-audiobook-solid: var(--cat-audiobook-solid);
+  --kind-audiobook-tile-start: var(--cat-audiobook-tile-start);
+  --kind-audiobook-tile-end: var(--cat-audiobook-tile-end);
+
+  --kind-youtube-fg: var(--cat-youtube-fg);
+  --kind-youtube-bg: var(--cat-youtube-bg);
+  --kind-youtube-border: var(--cat-youtube-border);
+  --kind-youtube-solid: var(--cat-youtube-solid);
+  --kind-youtube-tile-start: var(--cat-youtube-tile-start);
+  --kind-youtube-tile-end: var(--cat-youtube-tile-end);
+
+  --kind-film-fg: var(--cat-film-fg);
+  --kind-film-bg: var(--cat-film-bg);
+  --kind-film-border: var(--cat-film-border);
+  --kind-film-solid: var(--cat-film-solid);
+  --kind-film-tile-start: var(--cat-film-tile-start);
+  --kind-film-tile-end: var(--cat-film-tile-end);
+
+  --kind-manual-fg: var(--cat-book-fg);
+  --kind-manual-bg: var(--cat-book-bg);
+  --kind-manual-border: var(--cat-book-border);
+  --kind-manual-solid: var(--cat-book-solid);
+  --kind-manual-tile-start: var(--cat-book-tile-start);
+  --kind-manual-tile-end: var(--cat-book-tile-end);
+
+  /* --- Calendar Intensity Heat Wash (Light) --- */
+  --heat-0: var(--bg-surface);
+  --heat-1: #f7efe2;
+  --heat-2: #efe1c8;
+  --heat-3: #e5cca3;
+  --heat-4: #d8b27c;
+  --heat-border-1: #e4d4ba;
+  --heat-border-2: #d8c098;
+  --heat-border-3: #c7a470;
+  --heat-border-4: #b5894c;
+
+  /* --- Shadows --- */
+  --shadow-xs: 0 1px 2px rgba(31, 27, 22, 0.05);
+  --shadow-sm: 0 2px 6px rgba(31, 27, 22, 0.06), 0 1px 2px rgba(31, 27, 22, 0.04);
+  --shadow-md: 0 8px 22px rgba(31, 27, 22, 0.08), 0 2px 6px rgba(31, 27, 22, 0.05);
+  --shadow-lg: 0 18px 42px rgba(31, 27, 22, 0.14), 0 4px 12px rgba(31, 27, 22, 0.08);
+  --shadow-cover: 0 6px 16px rgba(25, 20, 14, 0.16), 0 2px 4px rgba(25, 20, 14, 0.1),
+    inset 1px 0 0 rgba(255, 255, 255, 0.22);
+}
+
+/* --- Dark Theme (Deep Warm Charcoal Study — System or Explicit) --- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg-canvas: #14120f;
+    --bg-surface: #1d1a16;
+    --bg-surface-raised: #25211c;
+    --bg-subtle: #29241e;
+    --bg-muted: #352f27;
+    --bg-overlay: rgba(8, 7, 5, 0.72);
+
+    --text-primary: #f4efe6;
+    --text-secondary: #c4bba9;
+    --text-muted: #998f7e;
+    --text-on-accent: #14120f;
+
+    --border-subtle: #2b2620;
+    --border-default: #3a332b;
+    --border-strong: #54493e;
+
+    --accent-primary: #e58564;
+    --accent-primary-hover: #f09b7e;
+    --accent-primary-subtle: #321f18;
+    --accent-primary-border: #5e382b;
+    --focus-ring: #e58564;
+
+    --status-success-fg: #8adbb5;
+    --status-success-bg: #162b21;
+    --status-success-border: #28523f;
+
+    --status-warning-fg: #f5c67a;
+    --status-warning-bg: #2e2211;
+    --status-warning-border: #59401d;
+
+    --status-danger-fg: #f7a6a6;
+    --status-danger-bg: #321a1a;
+    --status-danger-border: #5e2e2e;
+
+    /* 1. Anime (Dark) */
+    --cat-anime-fg: #b8b3fc;
+    --cat-anime-bg: #1e1c38;
+    --cat-anime-border: #3a356e;
+    --cat-anime-solid: #8278f5;
+    --cat-anime-tile-start: #3c3494;
+    --cat-anime-tile-end: #201b54;
+
+    /* 2. Series (Dark) */
+    --cat-series-fg: #8ee0ee;
+    --cat-series-bg: #142a30;
+    --cat-series-border: #25505c;
+    --cat-series-solid: #3cb8cc;
+    --cat-series-tile-start: #125866;
+    --cat-series-tile-end: #093138;
+
+    /* 3. Film (Dark) */
+    --cat-film-fg: #f6c982;
+    --cat-film-bg: #302312;
+    --cat-film-border: #5c421f;
+    --cat-film-solid: #e29a38;
+    --cat-film-tile-start: #824b08;
+    --cat-film-tile-end: #4a2903;
+
+    /* 4. Book (Dark) */
+    --cat-book-fg: #8fdcb8;
+    --cat-book-bg: #172b22;
+    --cat-book-border: #2a5441;
+    --cat-book-solid: #4cb888;
+    --cat-book-tile-start: #1d543c;
+    --cat-book-tile-end: #0f3021;
+
+    /* 5. Audiobook (Dark) */
+    --cat-audiobook-fg: #d3b8f8;
+    --cat-audiobook-bg: #271d35;
+    --cat-audiobook-border: #4a3566;
+    --cat-audiobook-solid: #a37bf0;
+    --cat-audiobook-tile-start: #4b2a70;
+    --cat-audiobook-tile-end: #2a1542;
+
+    /* 6. YouTube (Dark) */
+    --cat-youtube-fg: #f8afa6;
+    --cat-youtube-bg: #331c19;
+    --cat-youtube-border: #61312b;
+    --cat-youtube-solid: #e46356;
+    --cat-youtube-tile-start: #8f251c;
+    --cat-youtube-tile-end: #52120d;
+
+    /* 7. Podcast (Dark) */
+    --cat-podcast-fg: #f7bc97;
+    --cat-podcast-bg: #301f15;
+    --cat-podcast-border: #5e3b26;
+    --cat-podcast-solid: #e07b42;
+    --cat-podcast-tile-start: #82380f;
+    --cat-podcast-tile-end: #4a1e06;
+
+    /* 8. Music (Dark) */
+    --cat-music-fg: #f7add0;
+    --cat-music-bg: #301925;
+    --cat-music-border: #5e2e46;
+    --cat-music-solid: #de5d97;
+    --cat-music-tile-start: #7d1d49;
+    --cat-music-tile-end: #470e28;
+
+    /* 9. Other (Dark) */
+    --cat-other-fg: #cfc6b8;
+    --cat-other-bg: #28241f;
+    --cat-other-border: #474037;
+    --cat-other-solid: #9c9080;
+    --cat-other-tile-start: #4f473e;
+    --cat-other-tile-end: #2b2621;
+
+    /* Calendar Intensity Heat Wash (Dark) */
+    --heat-0: var(--bg-surface);
+    --heat-1: #231e17;
+    --heat-2: #2d241a;
+    --heat-3: #3b2d1d;
+    --heat-4: #4d3720;
+    --heat-border-1: #362d22;
+    --heat-border-2: #4a3a28;
+    --heat-border-3: #634b30;
+    --heat-border-4: #7d5d39;
+
+    /* Shadows (Dark) */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.38);
+    --shadow-md: 0 10px 26px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.6);
+    --shadow-cover: 0 8px 20px rgba(0, 0, 0, 0.55), 0 2px 5px rgba(0, 0, 0, 0.4),
+      inset 1px 0 0 rgba(255, 255, 255, 0.14);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-canvas: #14120f;
+  --bg-surface: #1d1a16;
+  --bg-surface-raised: #25211c;
+  --bg-subtle: #29241e;
+  --bg-muted: #352f27;
+  --bg-overlay: rgba(8, 7, 5, 0.72);
+
+  --text-primary: #f4efe6;
+  --text-secondary: #c4bba9;
+  --text-muted: #998f7e;
+  --text-on-accent: #14120f;
+
+  --border-subtle: #2b2620;
+  --border-default: #3a332b;
+  --border-strong: #54493e;
+
+  --accent-primary: #e58564;
+  --accent-primary-hover: #f09b7e;
+  --accent-primary-subtle: #321f18;
+  --accent-primary-border: #5e382b;
+  --focus-ring: #e58564;
+
+  --status-success-fg: #8adbb5;
+  --status-success-bg: #162b21;
+  --status-success-border: #28523f;
+
+  --status-warning-fg: #f5c67a;
+  --status-warning-bg: #2e2211;
+  --status-warning-border: #59401d;
+
+  --status-danger-fg: #f7a6a6;
+  --status-danger-bg: #321a1a;
+  --status-danger-border: #5e2e2e;
+
+  --cat-anime-fg: #b8b3fc;
+  --cat-anime-bg: #1e1c38;
+  --cat-anime-border: #3a356e;
+  --cat-anime-solid: #8278f5;
+  --cat-anime-tile-start: #3c3494;
+  --cat-anime-tile-end: #201b54;
+
+  --cat-series-fg: #8ee0ee;
+  --cat-series-bg: #142a30;
+  --cat-series-border: #25505c;
+  --cat-series-solid: #3cb8cc;
+  --cat-series-tile-start: #125866;
+  --cat-series-tile-end: #093138;
+
+  --cat-film-fg: #f6c982;
+  --cat-film-bg: #302312;
+  --cat-film-border: #5c421f;
+  --cat-film-solid: #e29a38;
+  --cat-film-tile-start: #824b08;
+  --cat-film-tile-end: #4a2903;
+
+  --cat-book-fg: #8fdcb8;
+  --cat-book-bg: #172b22;
+  --cat-book-border: #2a5441;
+  --cat-book-solid: #4cb888;
+  --cat-book-tile-start: #1d543c;
+  --cat-book-tile-end: #0f3021;
+
+  --cat-audiobook-fg: #d3b8f8;
+  --cat-audiobook-bg: #271d35;
+  --cat-audiobook-border: #4a3566;
+  --cat-audiobook-solid: #a37bf0;
+  --cat-audiobook-tile-start: #4b2a70;
+  --cat-audiobook-tile-end: #2a1542;
+
+  --cat-youtube-fg: #f8afa6;
+  --cat-youtube-bg: #331c19;
+  --cat-youtube-border: #61312b;
+  --cat-youtube-solid: #e46356;
+  --cat-youtube-tile-start: #8f251c;
+  --cat-youtube-tile-end: #52120d;
+
+  --cat-podcast-fg: #f7bc97;
+  --cat-podcast-bg: #301f15;
+  --cat-podcast-border: #5e3b26;
+  --cat-podcast-solid: #e07b42;
+  --cat-podcast-tile-start: #82380f;
+  --cat-podcast-tile-end: #4a1e06;
+
+  --cat-music-fg: #f7add0;
+  --cat-music-bg: #301925;
+  --cat-music-border: #5e2e46;
+  --cat-music-solid: #de5d97;
+  --cat-music-tile-start: #7d1d49;
+  --cat-music-tile-end: #470e28;
+
+  --cat-other-fg: #cfc6b8;
+  --cat-other-bg: #28241f;
+  --cat-other-border: #474037;
+  --cat-other-solid: #9c9080;
+  --cat-other-tile-start: #4f473e;
+  --cat-other-tile-end: #2b2621;
+
+  --heat-0: var(--bg-surface);
+  --heat-1: #231e17;
+  --heat-2: #2d241a;
+  --heat-3: #3b2d1d;
+  --heat-4: #4d3720;
+  --heat-border-1: #362d22;
+  --heat-border-2: #4a3a28;
+  --heat-border-3: #634b30;
+  --heat-border-4: #7d5d39;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.38);
+  --shadow-md: 0 10px 26px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.6);
+  --shadow-cover: 0 8px 20px rgba(0, 0, 0, 0.55), 0 2px 5px rgba(0, 0, 0, 0.4),
+    inset 1px 0 0 rgba(255, 255, 255, 0.14);
+}
+
+/* Respect reduced motion preferences globally */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+  }
+}

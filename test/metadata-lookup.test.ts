@@ -965,6 +965,8 @@ describe("Provider mappings and AniList season chain", () => {
               genres: ["Action", "Adventure", "Drama"],
               description: "Paul Atreides unites with Chani and the Fremen.",
               poster: "https://cinemeta.invalid/poster/tt15239678.jpg",
+              // Real Cinemeta films carry an empty episode list.
+              videos: [],
             },
           }),
           { status: 200, headers: { "content-type": "application/json" } }

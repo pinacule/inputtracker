@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   getTitleHistory,
   search,
-  type Annotation,
   type SearchHit,
   type SearchResult,
   type TitleHistory,
 } from "../api";
-import { RatingEditor } from "../components/RatingEditor";
-import { formatSeasonEpisode, sourceIcon } from "../lib/calendar";
+import { formatSeasonEpisode } from "../lib/calendar";
+import {
+  categoryLabel,
+  resolveItemCategory,
+} from "../lib/categories";
 import { formatLocalDay } from "../lib/format-date";
 import {
   MIN_QUERY_LENGTH,
@@ -18,98 +20,44 @@ import {
   highlightParts,
   normalizeForSearch,
 } from "../lib/search";
-import { formatMinutes, STATS_SOURCES } from "../lib/stats";
-import { sourceColor, sourceLabel } from "../lib/sources";
+import { sourceLabel } from "../lib/sources";
+import { STATS_SOURCES, formatMinutes } from "../lib/stats";
 import { formatHours } from "../lib/year-review";
+import {
+  AddIcon,
+  Badge,
+  Button,
+  Card,
+  CategoryIcon,
+  Cover,
+  EmptyState,
+  RatingEditor,
+  SearchIcon,
+  Skeleton,
+} from "../ui";
 
 const PAGE_SIZE = 30;
-const DEBOUNCE_MS = 250;
+const DEBOUNCE_MS = 240;
 
 export interface SearchProps {
-  /** `?q=` from the hash, kept in sync with the input. */
   qParam?: string;
-  /** `?key=` from the hash: when set, the detail view is shown. */
   hitKeyParam?: string;
 }
 
-/** Cover thumbnail with a source-icon fallback when missing or broken. */
-function HitThumbnail({
-  source,
-  mediaType,
-  coverUrl,
-  large = false,
-}: {
-  source: string;
-  mediaType: string | null;
-  coverUrl: string | null;
-  large?: boolean;
-}) {
-  const [failed, setFailed] = useState(false);
-
-  if (coverUrl && !failed) {
-    return (
-      <img
-        class={large ? "search-detail-cover" : "search-hit-cover"}
-        src={coverUrl}
-        alt=""
-        width={large ? 64 : 48}
-        height={large ? 64 : 48}
-        loading="lazy"
-        onError={() => setFailed(true)}
-      />
-    );
-  }
-
-  return (
-    <span
-      class={large ? "search-detail-icon-badge" : "search-hit-icon-badge"}
-      aria-hidden="true"
-    >
-      {sourceIcon(source, mediaType)}
-    </span>
-  );
-}
-
-/** Title with every query-word occurrence highlighted, original characters kept. */
 function HighlightedTitle({ title, query }: { title: string; query: string }) {
   const parts = useMemo(() => highlightParts(title, query), [title, query]);
   return (
     <span class="search-hit-title">
-      {parts.map((part, index) =>
+      {parts.map((part, idx) =>
         part.match ? (
-          <mark key={index} class="search-hit-mark">
+          <mark key={idx} class="search-hit-mark">
             {part.text}
           </mark>
         ) : (
-          <span key={index}>{part.text}</span>
+          <span key={idx}>{part.text}</span>
         )
       )}
     </span>
-  );
-}
-
-/** One row of the title history list. */
-function HistoryRow({ item, groupTitle }: { item: TitleHistory["items"][number]; groupTitle: string }) {
-  const badge = formatSeasonEpisode(item.season, item.episode);
-  // The raw event title is only interesting when it differs from the group
-  // title (a YouTube video or episode name, not the book/movie itself).
-  const eventTitle =
-    item.event_title !== null && item.event_title !== groupTitle
-      ? item.event_title
-      : null;
-  const description = [badge, eventTitle].filter(Boolean).join(" · ");
-
-  return (
-    <li class="search-history-row">
-      <a class="search-history-date" href={`#/calendar?date=${item.local_date}`}>
-        {formatLocalDay(item.local_date)}
-      </a>
-      <span class="search-history-time">{item.local_time}</span>
-      <span class="search-history-desc">{description}</span>
-      <span class="search-history-min">
-        {item.minutes > 0 ? formatMinutes(item.minutes) : "—"}
-      </span>
-    </li>
   );
 }
 
@@ -122,33 +70,27 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [history, setHistory] = useState<TitleHistory | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
-  /** Latest search request; earlier responses are dropped. */
   const seqRef = useRef(0);
   const debounceRef = useRef<number | undefined>(undefined);
 
-  // Back/forward navigation: adopt the query from the hash.
   useEffect(() => {
     setInputValue(qParam ?? "");
     setQuery(qParam ?? "");
   }, [qParam]);
 
-  // Typing (debounced) updates the hash without adding history entries, so
-  // reload and the back button keep the query.
   useEffect(() => {
-    if (query === (qParam ?? "")) {
-      return;
-    }
+    if (hitKeyParam) return;
+    if (query === (qParam ?? "")) return;
     const hash =
       query !== "" ? `#/search?q=${encodeURIComponent(query)}` : "#/search";
     window.history.replaceState(null, "", hash);
-  }, [query]);
+  }, [query, hitKeyParam, qParam]);
 
-  // The search itself. Runs also while a detail view is open so the results
-  // behind it stay correct; only the latest request may update the list.
   useEffect(() => {
     const seq = ++seqRef.current;
     if (normalizeForSearch(query).length < MIN_QUERY_LENGTH) {
@@ -158,6 +100,7 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
       setLoadingMore(false);
       return;
     }
+
     setLoading(true);
     setError(null);
     search({
@@ -183,7 +126,6 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
       });
   }, [query, source, mediaType]);
 
-  // Detail view: fetch the full history whenever a key is in the hash.
   useEffect(() => {
     if (!hitKeyParam) {
       setHistory(null);
@@ -195,6 +137,7 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
     setHistory(null);
     setHistoryError(null);
     setHistoryLoading(true);
+
     getTitleHistory(hitKeyParam)
       .then((res) => {
         if (!cancelled) {
@@ -208,12 +151,12 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
           setHistoryLoading(false);
         }
       });
+
     return () => {
       cancelled = true;
     };
   }, [hitKeyParam]);
 
-  // Clear a pending debounce when the page unmounts.
   useEffect(
     () => () => {
       window.clearTimeout(debounceRef.current);
@@ -221,25 +164,8 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
     []
   );
 
-  function handleInput(event: Event) {
-    const value = (event.target as HTMLInputElement).value;
-    setInputValue(value);
-    window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => setQuery(value), DEBOUNCE_MS);
-  }
-
-  function handleKeyDown(event: KeyboardEvent) {
-    if (event.key === "Enter") {
-      // Enter searches immediately, skipping the debounce.
-      window.clearTimeout(debounceRef.current);
-      setQuery(inputValue);
-    }
-  }
-
-  function loadMore() {
-    if (!result || loadingMore || result.hits.length >= result.total) {
-      return;
-    }
+  const handleLoadMore = () => {
+    if (!result || loadingMore || result.hits.length >= result.total) return;
     const seq = ++seqRef.current;
     setLoadingMore(true);
     search({
@@ -253,7 +179,11 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
         if (seqRef.current === seq) {
           setResult((prev) =>
             prev
-              ? { query: res.query, total: res.total, hits: [...prev.hits, ...res.hits] }
+              ? {
+                  query: res.query,
+                  total: res.total,
+                  hits: [...prev.hits, ...res.hits],
+                }
               : res
           );
           setLoadingMore(false);
@@ -265,218 +195,328 @@ export function Search({ qParam, hitKeyParam }: SearchProps) {
           setLoadingMore(false);
         }
       });
-  }
+  };
 
-  const queryTooShort = normalizeForSearch(query).length < MIN_QUERY_LENGTH;
-  const backHref = qParam ? `#/search?q=${encodeURIComponent(qParam)}` : "#/search";
+  if (hitKeyParam) {
+    const backHref = qParam
+      ? `#/search?q=${encodeURIComponent(qParam)}`
+      : "#/search";
+    const histCat = history
+      ? resolveItemCategory({
+          source: history.source,
+          media_type: history.items[0]?.media_type,
+        })
+      : "other";
 
-  const countText = queryTooShort
-    ? `Type at least ${MIN_QUERY_LENGTH} characters`
-    : loading
-      ? "Searching…"
-      : error !== null
-        ? ""
-        : result === null
-          ? ""
-          : result.total === 0
-            ? `No matches for “${query}”`
-            : `${result.total} ${result.total === 1 ? "result" : "results"}`;
+    return (
+      <section class="page-container search-page" aria-label="Title History">
+        <div>
+          <Button variant="ghost" size="sm" href={backHref}>
+            ← Back to Search Results
+          </Button>
+        </div>
 
-  return (
-    <div class="page search-page">
-      {hitKeyParam ? (
-        <>
-          <a class="search-back-link" href={backHref}>
-            ← Back to results
-          </a>
+        {historyError && (
+          <div class="calendar-error" role="alert">
+            <span>
+              <strong>Could not load title history:</strong> {historyError}
+            </span>
+          </div>
+        )}
 
-          {historyError !== null && (
-            <div class="alert alert-error" role="alert">
-              <strong>Error loading title:</strong> {historyError}
-            </div>
-          )}
+        {historyLoading && <Skeleton height={160} />}
 
-          {historyLoading && <p class="muted">Loading title…</p>}
-
-          {history !== null && (
-            <>
-              <section class="card search-detail" aria-labelledby="search-detail-title">
-                <div class="search-detail-header">
-                  <HitThumbnail
-                    source={history.source}
-                    mediaType={null}
-                    coverUrl={history.cover_url}
-                    large
-                  />
-                  <div class="search-detail-info">
-                    <h1 id="search-detail-title" class="search-detail-title">
-                      {history.title}
-                    </h1>
-                    {history.subtitle && (
-                      <p class="muted search-detail-subtitle">{history.subtitle}</p>
-                    )}
-                    <p class="muted search-detail-meta">
-                      {countLabel(history.source, history.count)} ·{" "}
-                      {formatHours(history.minutes)} · {sourceLabel(history.source)}
-                    </p>
+        {history && (
+          <>
+            <Card padding="lg">
+              <div class="library-work-hero-layout">
+                <Cover
+                  src={history.cover_url}
+                  title={history.title}
+                  category={histCat}
+                  source={history.source}
+                  size="xl"
+                  aspect="square"
+                />
+                <div class="library-work-hero-body">
+                  <div class="library-work-badges">
+                    <Badge
+                      size="md"
+                      category={histCat}
+                      icon={<CategoryIcon category={histCat} size={12} />}
+                    >
+                      {categoryLabel(histCat)}
+                    </Badge>
+                    <Badge size="sm" variant="neutral">
+                      {sourceLabel(history.source)}
+                    </Badge>
                   </div>
+                  <h1 class="library-work-title">{history.title}</h1>
+                  {history.subtitle && (
+                    <p class="ui-text-muted">{history.subtitle}</p>
+                  )}
+                  <p class="library-work-stats-row tabular-nums">
+                    {countLabel(history.source, history.count)} ·{" "}
+                    {formatHours(history.minutes)}
+                  </p>
                 </div>
+              </div>
+            </Card>
+
+            <div class="library-work-two-col">
+              <Card padding="md" title="Rating & Note">
                 <RatingEditor
                   source={history.source}
                   title={history.title}
                   initialRating={history.rating}
-                  onSaved={(annotation: Annotation) =>
+                  onSaved={(ann) =>
                     setHistory((prev) =>
-                      prev === null
-                        ? prev
-                        : { ...prev, rating: annotation.rating }
+                      prev ? { ...prev, rating: ann.rating } : prev
                     )
                   }
                 />
-              </section>
+              </Card>
 
-              <section class="card" aria-label="History">
-                <ul class="search-history-list">
-                  {history.items.map((item) => (
-                    <HistoryRow key={item.id} item={item} groupTitle={history.title} />
-                  ))}
+              <Card
+                padding="md"
+                title="Recorded Sessions"
+                subtitle={`${history.items.length} ${
+                  history.items.length === 1 ? "session" : "sessions"
+                }`}
+              >
+                <ul class="library-history-list">
+                  {history.items.map((item) => {
+                    const se = formatSeasonEpisode(item.season, item.episode);
+                    const evTitle =
+                      item.event_title && item.event_title !== history.title
+                        ? item.event_title
+                        : null;
+                    const desc = [se, evTitle].filter(Boolean).join(" · ");
+                    return (
+                      <li key={item.id} class="library-history-row">
+                        <div class="library-history-main">
+                          <span class="library-history-label">
+                            {desc || history.title}
+                          </span>
+                          <span class="library-history-meta tabular-nums">
+                            <a href={`#/calendar?date=${item.local_date}`}>
+                              {formatLocalDay(item.local_date)}
+                            </a>{" "}
+                            · {item.local_time}
+                          </span>
+                        </div>
+                        <span class="library-history-min tabular-nums">
+                          {item.minutes > 0 ? formatMinutes(item.minutes) : "—"}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
-              </section>
-            </>
-          )}
-        </>
-      ) : (
-        <>
-          <header class="stats-header">
-            <div class="stats-header-titles">
-              <h1>Search</h1>
-              <p class="muted">
-                Find a title, series, author or YouTube channel.
-              </p>
+              </Card>
             </div>
-          </header>
+          </>
+        )}
+      </section>
+    );
+  }
 
-          <div class="search-controls">
-            <div class="search-input-row">
-              <label for="search-input" class="visually-hidden">
-                Search query
-              </label>
-              <input
-                id="search-input"
-                type="search"
-                class="form-input search-input"
-                placeholder="Title, series, author, channel…"
-                value={inputValue}
-                onInput={handleInput}
-                onKeyDown={handleKeyDown}
-                autofocus
-              />
-            </div>
-            <div class="search-filters">
-              <div class="search-filter">
-                <label for="search-source" class="visually-hidden">
-                  Source
-                </label>
-                <select
-                  id="search-source"
-                  class="form-input stats-source-select"
-                  value={source}
-                  onChange={(e) =>
-                    setSource((e.target as HTMLSelectElement).value)
-                  }
-                >
-                  {STATS_SOURCES.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div class="search-filter">
-                <label for="search-media-type" class="visually-hidden">
-                  Media type
-                </label>
-                <select
-                  id="search-media-type"
-                  class="form-input stats-source-select"
-                  value={mediaType}
-                  onChange={(e) =>
-                    setMediaType((e.target as HTMLSelectElement).value)
-                  }
-                >
-                  <option value="">All media types</option>
-                  {SEARCH_MEDIA_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+  const queryTooShort = normalizeForSearch(query).length < MIN_QUERY_LENGTH;
+
+  return (
+    <section class="page-container search-page" aria-label="Search">
+      <header class="page-header">
+        <div class="page-header-titles">
+          <span class="page-eyebrow">Global Archive Search</span>
+          <h1>Search</h1>
+          <p class="page-subtitle">
+            Find any title, series, author, or YouTube channel across your
+            logged history.
+          </p>
+        </div>
+        <div class="page-header-actions">
+          <Button
+            variant="secondary"
+            size="sm"
+            href={
+              inputValue.trim()
+                ? `#/add?q=${encodeURIComponent(inputValue.trim())}`
+                : "#/add"
+            }
+            leadingIcon={<AddIcon size={15} />}
+          >
+            Look up & Add to Archive
+          </Button>
+        </div>
+      </header>
+
+      <Card padding="md">
+        <div class="search-controls-grid">
+          <div class="add-lookup-input-wrap">
+            <span class="add-lookup-icon" aria-hidden="true">
+              <SearchIcon size={18} />
+            </span>
+            <input
+              type="search"
+              class="ui-input add-lookup-input"
+              placeholder="Search titles, authors, series, or channels…"
+              aria-label="Search query"
+              value={inputValue}
+              onInput={(e) => {
+                const val = (e.currentTarget as HTMLInputElement).value;
+                setInputValue(val);
+                window.clearTimeout(debounceRef.current);
+                debounceRef.current = window.setTimeout(
+                  () => setQuery(val),
+                  DEBOUNCE_MS
+                );
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  window.clearTimeout(debounceRef.current);
+                  setQuery(inputValue);
+                }
+              }}
+              autofocus
+            />
           </div>
 
-          {error !== null && (
-            <div class="alert alert-error" role="alert">
-              <strong>Error searching:</strong> {error}
-            </div>
-          )}
-
-          <p class="search-count" aria-live="polite">
-            {countText}
-          </p>
-
-          {result !== null && result.hits.length > 0 && (
-            <ul class="search-list">
-              {result.hits.map((hit: SearchHit) => (
-                <li key={hit.key}>
-                  <a
-                    class="search-hit"
-                    href={`#/search?q=${encodeURIComponent(query)}&key=${encodeURIComponent(hit.key)}`}
-                  >
-                    <HitThumbnail
-                      source={hit.source}
-                      mediaType={hit.media_type}
-                      coverUrl={hit.cover_url}
-                    />
-                    <span class="search-hit-info">
-                      <HighlightedTitle title={hit.title} query={query} />
-                      {hit.subtitle && (
-                        <span class="search-hit-subtitle">{hit.subtitle}</span>
-                      )}
-                      <span class="search-hit-meta">
-                        <span
-                          class="search-source-dot"
-                          style={{ backgroundColor: sourceColor(hit.source) }}
-                          aria-hidden="true"
-                        />
-                        <span class="search-hit-source">
-                          {sourceLabel(hit.source)}
-                        </span>
-                        <span class="search-hit-meta-line">
-                          {formatHitMeta(hit)}
-                        </span>
-                      </span>
-                    </span>
-                  </a>
-                </li>
+          <div class="search-filter-selects">
+            <select
+              class="ui-input"
+              aria-label="Filter by source"
+              value={source}
+              onChange={(e) =>
+                setSource((e.currentTarget as HTMLSelectElement).value)
+              }
+            >
+              {STATS_SOURCES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
               ))}
-            </ul>
-          )}
+            </select>
 
-          {result !== null && result.total > result.hits.length && (
-            <div class="search-more-row">
-              <button
-                type="button"
-                class="btn btn-secondary search-more"
-                onClick={loadMore}
+            <select
+              class="ui-input"
+              aria-label="Filter by media type"
+              value={mediaType}
+              onChange={(e) =>
+                setMediaType((e.currentTarget as HTMLSelectElement).value)
+              }
+            >
+              <option value="">All media types</option>
+              {SEARCH_MEDIA_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      {error && (
+        <div class="calendar-error" role="alert">
+          <span>
+            <strong>Search error:</strong> {error}
+          </span>
+        </div>
+      )}
+
+      {queryTooShort ? (
+        <EmptyState
+          compact
+          icon={<SearchIcon size={24} />}
+          title="Type at least 2 characters to search"
+          description="Matching is case- and diacritics-insensitive across titles, series, authors, and YouTube channels."
+        />
+      ) : loading ? (
+        <div class="ui-form-stack" aria-busy="true">
+          <Skeleton height={68} />
+          <Skeleton height={68} />
+          <Skeleton height={68} />
+        </div>
+      ) : result && result.hits.length === 0 ? (
+        <EmptyState
+          title={`No matches in your history for “${query}”`}
+          description="Want to add this work from the past to your archive?"
+          actions={
+            <Button
+              variant="primary"
+              size="sm"
+              href={`#/add?q=${encodeURIComponent(query)}`}
+              leadingIcon={<AddIcon size={15} />}
+            >
+              Look up “{query}” & Add to Archive
+            </Button>
+          }
+        />
+      ) : result ? (
+        <>
+          <div class="search-results-count tabular-nums" aria-live="polite">
+            {result.total} {result.total === 1 ? "result" : "results"} for “
+            {query}”
+          </div>
+
+          <Card padding="none">
+            <ul class="library-works-list">
+              {result.hits.map((hit: SearchHit) => {
+                const cat = resolveItemCategory(hit);
+                const hitHref = `#/search?q=${encodeURIComponent(
+                  query
+                )}&key=${encodeURIComponent(hit.key)}`;
+                return (
+                  <li key={hit.key}>
+                    <a href={hitHref} class="library-work-list-row">
+                      <Cover
+                        src={hit.cover_url}
+                        title={hit.title}
+                        category={cat}
+                        source={hit.source}
+                        mediaType={hit.media_type}
+                        size="md"
+                        aspect="square"
+                      />
+                      <div class="library-work-list-info">
+                        <span class="library-work-list-title">
+                          <HighlightedTitle title={hit.title} query={query} />
+                        </span>
+                        {hit.subtitle && (
+                          <span class="ui-text-muted">{hit.subtitle}</span>
+                        )}
+                        <span class="library-work-list-sub tabular-nums">
+                          <Badge
+                            size="sm"
+                            category={cat}
+                            icon={<CategoryIcon category={cat} size={11} />}
+                          >
+                            {categoryLabel(cat)}
+                          </Badge>
+                          <span>{sourceLabel(hit.source)}</span>
+                          <span>·</span>
+                          <span>{formatHitMeta(hit)}</span>
+                        </span>
+                      </div>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+
+          {result.total > result.hits.length && (
+            <div class="search-load-more">
+              <Button
+                variant="secondary"
+                onClick={handleLoadMore}
                 disabled={loadingMore}
               >
-                {loadingMore ? "Loading…" : "Load more"}
-              </button>
+                {loadingMore ? "Loading…" : "Load more results"}
+              </Button>
             </div>
           )}
         </>
-      )}
-    </div>
+      ) : null}
+    </section>
   );
 }

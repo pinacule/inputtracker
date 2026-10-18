@@ -11,12 +11,67 @@
  * is parsed and returned.
  */
 
+import type {
+  ArchiveConsumed,
+  ArchiveEntrySummary,
+  ArchiveRequest,
+  ArchiveResult,
+  ArchiveWhen,
+  Category,
+  CategoryTotal,
+  DatePrecision,
+  LibraryResult,
+  LibraryWork,
+  LibraryWorkDetail,
+  LookupHit,
+  LookupSearchResult,
+  ManualWork,
+  MetaProvider,
+  MonthReview,
+  SeasonInfo,
+  SeriesPoint,
+  SeriesResult,
+  SettingsView,
+  SourceStatus,
+  WorkDetails,
+  WorkStatus,
+  YearReviewV2,
+} from "../../src/core/contract";
+
+export type {
+  ArchiveConsumed,
+  ArchiveEntrySummary,
+  ArchiveRequest,
+  ArchiveResult,
+  ArchiveWhen,
+  Category,
+  CategoryTotal,
+  DatePrecision,
+  LibraryResult,
+  LibraryWork,
+  LibraryWorkDetail,
+  LookupHit,
+  LookupSearchResult,
+  ManualWork,
+  MetaProvider,
+  MonthReview,
+  SeasonInfo,
+  SeriesPoint,
+  SeriesResult,
+  SettingsView,
+  SourceStatus,
+  WorkDetails,
+  WorkStatus,
+  YearReviewV2,
+};
+
 // --- Response types (mirror src/server/app.ts) -----------------------------
 
 export interface CalendarItem {
   id: number;
   source: string;
   media_type: string;
+  category?: Category;
   title: string | null;
   parent_title: string | null;
   season: number | null;
@@ -100,6 +155,7 @@ export interface TopItem {
   title: string;
   source: string;
   media_type: string;
+  category?: Category;
   minutes: number;
   count: number;
 }
@@ -820,4 +876,178 @@ export function saveAnnotation(
     rev_id,
   });
 }
+
+// --- V2 API: Metadata Lookup, Archive, Library, Reviews, Settings ----------
+
+export interface LookupSearchParams {
+  q: string;
+  category?: Category | "any";
+}
+
+/**
+ * Search external metadata providers (`GET /api/lookup/search`).
+ * Accepts either `(q, category?)` or `({ q, category? })`.
+ */
+export function lookupSearch(
+  qOrParams: string | LookupSearchParams,
+  category?: Category | "any"
+): Promise<LookupSearchResult> {
+  const params: LookupSearchParams =
+    typeof qOrParams === "string"
+      ? { q: qOrParams, category }
+      : qOrParams;
+  return getJson<LookupSearchResult>(
+    withQuery("/api/lookup/search", {
+      q: params.q,
+      category: params.category,
+    })
+  );
+}
+
+/**
+ * Fetch full details for one work from a metadata provider
+ * (`GET /api/lookup/work/:provider/:id`).
+ */
+export function lookupWork(
+  provider: MetaProvider | string,
+  id: string
+): Promise<WorkDetails> {
+  return getJson<WorkDetails>(
+    `/api/lookup/work/${encodeURIComponent(provider)}/${encodeURIComponent(id)}`
+  );
+}
+
+/**
+ * Create or update an archive entry (`POST /api/archive`).
+ * Re-sending with the same `entry_id` updates the entry's units.
+ */
+export function saveArchiveEntry(
+  body: ArchiveRequest
+): Promise<ArchiveResult> {
+  return postJson<ArchiveResult>("/api/archive", body);
+}
+
+export interface DeleteArchiveResult {
+  entry_id?: string;
+  deleted?: number;
+  ok?: boolean;
+}
+
+/**
+ * Delete an archive entry by writing tombstones for every unit
+ * (`POST /api/archive/:entry_id/delete`).
+ */
+export function deleteArchiveEntry(
+  entryId: string
+): Promise<DeleteArchiveResult> {
+  return postJson<DeleteArchiveResult>(
+    `/api/archive/${encodeURIComponent(entryId)}/delete`,
+    {}
+  );
+}
+
+/**
+ * List archive entries, newest first (`GET /api/archive?category=`).
+ */
+export function listArchive(
+  categoryOrParams?: Category | string | { category?: Category | string }
+): Promise<ArchiveEntrySummary[]> {
+  const category =
+    typeof categoryOrParams === "string"
+      ? categoryOrParams
+      : categoryOrParams?.category;
+  return getJson<ArchiveEntrySummary[]>(
+    withQuery("/api/archive", {
+      category: category || undefined,
+    })
+  );
+}
+
+export type LibrarySort = "recent" | "time" | "title";
+
+export interface LibraryParams {
+  category?: Category | string;
+  q?: string;
+  sort?: LibrarySort;
+}
+
+/**
+ * Fetch the unified library (`GET /api/library?category=&q=&sort=`).
+ */
+export function getLibrary(
+  paramsOrCategory?: LibraryParams | Category | string
+): Promise<LibraryResult> {
+  const params: LibraryParams =
+    typeof paramsOrCategory === "string"
+      ? { category: paramsOrCategory }
+      : paramsOrCategory ?? {};
+  return getJson<LibraryResult>(
+    withQuery("/api/library", {
+      category: params.category || undefined,
+      q: params.q || undefined,
+      sort: params.sort || undefined,
+    })
+  );
+}
+
+/**
+ * Fetch full details, season progress, and history for one library work
+ * (`GET /api/library/work?key=`).
+ */
+export function getLibraryWork(key: string): Promise<LibraryWorkDetail> {
+  return getJson<LibraryWorkDetail>(
+    withQuery("/api/library/work", { key })
+  );
+}
+
+export interface SeriesParams {
+  bucket: "day" | "week" | "month";
+  from?: string;
+  to?: string;
+  category?: Category | string;
+}
+
+/**
+ * Fetch stacked category time series (`GET /api/series?bucket=&from=&to=&category=`).
+ */
+export function getSeries(params: SeriesParams): Promise<SeriesResult> {
+  return getJson<SeriesResult>(
+    withQuery("/api/series", {
+      bucket: params.bucket,
+      from: params.from,
+      to: params.to,
+      category: params.category || undefined,
+    })
+  );
+}
+
+/**
+ * Fetch a monthly review (`GET /api/review/month?month=YYYY-MM`).
+ */
+export function getMonthReview(month?: string): Promise<MonthReview> {
+  return getJson<MonthReview>(
+    withQuery("/api/review/month", { month })
+  );
+}
+
+/**
+ * Fetch a v2 yearly review built from the twelve months (`GET /api/review/year?year=YYYY`).
+ */
+export function getYearReviewV2(
+  year?: number | string
+): Promise<YearReviewV2> {
+  return getJson<YearReviewV2>(
+    withQuery("/api/review/year", {
+      year: year !== undefined && year !== "" ? String(year) : undefined,
+    })
+  );
+}
+
+/**
+ * Fetch read-only settings and source status (`GET /api/settings`).
+ */
+export function getSettings(): Promise<SettingsView> {
+  return getJson<SettingsView>("/api/settings");
+}
+
 
