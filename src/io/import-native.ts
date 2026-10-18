@@ -1,12 +1,17 @@
 /**
- * Native archive import: read back the JSON / CSV files produced by T09
- * (`export-json.ts`, `export-csv.ts`) and insert them into `events`.
+ * Native archive import: read back the JSON / CSV files produced by
+ * (`export-json.ts`, `export-csv.ts`) and insert them into `events`, `goals`
+ * and `annotations`.
  *
  * The importer is intentionally forgiving about the identity columns written by
  * the exporter: `id`, `record_hash`, `ingested_at` and `ingest_run_id` are
  * **ignored**. The record hash is recomputed from the normalized fields by
  * `insertEvents` / `normalize`, so an edited or stale hash in the file can never
  * create a duplicate.
+ *
+ * For goals and annotations, `id` and `record_hash` are also ignored and
+ * recomputed. `goal_id`, `rev_id` and `created_at` are kept from the file as
+ * they are data.
  *
  * `external_ids` and `raw` are stored in the export as JSON *strings*; here they
  * are parsed back into values so a re-insert stores the exact same JSON text.
@@ -20,18 +25,51 @@ import {
   type MediaType,
   type NewEvent,
 } from "../core/events.ts";
-import { EVENT_COLUMNS, EXPORT_FORMAT, EXPORT_VERSION } from "./export-json.ts";
+import { EVENT_COLUMNS, EXPORT_FORMAT } from "./export-json.ts";
+import {
+  goalRecordHash,
+  GoalValidationError,
+  normalizeGoalFields,
+  UUID_RE,
+} from "../server/goals.ts";
+import {
+  annotationRecordHash,
+  AnnotationValidationError,
+  parseAnnotationKey,
+  parseNote,
+  parseRating,
+  parseRevId,
+} from "../server/annotations.ts";
+import { toUtcIso } from "../core/time.ts";
 
 /** `events` source used for the ingest run recorded by an import. */
 export const NATIVE_IMPORT_SOURCE = "native-import";
 
-export interface ImportNativeResult {
+/** Accepted export versions. */
+const ACCEPTED_VERSIONS = new Set([1, 2]);
+
+export interface ImportTableResult {
   /** Number of rows read from the file. */
   seen: number;
   /** Number of rows actually inserted (duplicates are ignored). */
   inserted: number;
+}
+
+export interface ImportNativeResult {
+  /** Event counts. */
+  events: ImportTableResult;
+  /** Goal counts (zeros for v1/CSV). */
+  goals: ImportTableResult;
+  /** Annotation counts (zeros for v1/CSV). */
+  annotations: ImportTableResult;
   /** Id of the `ingest_runs` row written for this import. */
   runId: number;
+
+  // Legacy aliases for backwards compatibility:
+  /** Number of event rows read from the file. */
+  seen: number;
+  /** Number of event rows actually inserted (duplicates are ignored). */
+  inserted: number;
 }
 
 export interface ImportNativeOptions {
@@ -120,10 +158,149 @@ function toNewEvent(record: Record<string, unknown>): NewEvent {
   };
 }
 
+// --- goal/annotation import row types -------------------------------------
+
+interface ValidatedGoalRow {
+  record_hash: string;
+  goal_id: string;
+  rev_id: string;
+  year: number;
+  metric: string;
+  source: string | null;
+  media_type: string | null;
+  target: number;
+  archived: number;
+  created_at: string;
+}
+
+interface ValidatedAnnotationRow {
+  record_hash: string;
+  source: string;
+  title: string;
+  rev_id: string;
+  rating: number | null;
+  note: string | null;
+  created_at: string;
+}
+
+/** `created_at` of an imported row, normalized to UTC ISO 8601 with ms. */
+function importCreatedAt(value: unknown, what: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${what}: created_at is required`);
+  }
+  try {
+    return toUtcIso(value);
+  } catch {
+    throw new Error(`${what}: invalid created_at ${JSON.stringify(value)}`);
+  }
+}
+
+/**
+ * Validate a goal row from a JSON export file with the same rules as
+ * `addGoalRevision` (`normalizeGoalFields`), except that the `goal_id` does not
+ * have to exist yet: the import creates it. Both ids must be present.
+ */
+function validateGoalRow(record: Record<string, unknown>, index: number): ValidatedGoalRow {
+  const what = `Goal at index ${index}`;
+  const goalId = record.goal_id;
+  if (typeof goalId !== "string" || !UUID_RE.test(goalId)) {
+    throw new GoalValidationError(`${what}: invalid goal_id ${JSON.stringify(goalId)}`);
+  }
+  const revId = record.rev_id;
+  if (typeof revId !== "string" || !UUID_RE.test(revId)) {
+    throw new GoalValidationError(`${what}: invalid rev_id ${JSON.stringify(revId)}`);
+  }
+  let fields: ReturnType<typeof normalizeGoalFields>;
+  try {
+    fields = normalizeGoalFields(record);
+  } catch (e) {
+    throw new GoalValidationError(`${what}: ${errorText(e)}`);
+  }
+  const created_at = importCreatedAt(record.created_at, what);
+  const record_hash = goalRecordHash({ goal_id: goalId, rev_id: revId, ...fields });
+  return { record_hash, goal_id: goalId, rev_id: revId, ...fields, created_at };
+}
+
+/**
+ * Validate an annotation row from a JSON export file. Reuses the same
+ * validators from `annotations.ts`.
+ */
+function validateAnnotationRow(
+  record: Record<string, unknown>,
+  index: number
+): ValidatedAnnotationRow {
+  let key: { source: string; title: string };
+  try {
+    key = parseAnnotationKey(record.source, record.title);
+  } catch (e) {
+    throw new AnnotationValidationError(
+      `Annotation at index ${index}: ${(e as Error).message}`
+    );
+  }
+
+  let rating: number | null;
+  try {
+    rating = parseRating(record.rating);
+  } catch (e) {
+    throw new AnnotationValidationError(
+      `Annotation at index ${index}: ${(e as Error).message}`
+    );
+  }
+
+  let note: string | null;
+  try {
+    note = parseNote(record.note);
+  } catch (e) {
+    throw new AnnotationValidationError(
+      `Annotation at index ${index}: ${(e as Error).message}`
+    );
+  }
+
+  // A missing rev_id would get a fresh random one and break idempotent re-import.
+  if (record.rev_id === undefined || record.rev_id === null || record.rev_id === "") {
+    throw new AnnotationValidationError(`Annotation at index ${index}: rev_id is required`);
+  }
+  let revId: string;
+  try {
+    revId = parseRevId(record.rev_id);
+  } catch (e) {
+    throw new AnnotationValidationError(
+      `Annotation at index ${index}: ${(e as Error).message}`
+    );
+  }
+
+  const createdAt = importCreatedAt(record.created_at, `Annotation at index ${index}`);
+
+  const hash = annotationRecordHash({
+    source: key.source,
+    title: key.title,
+    rev_id: revId,
+    rating,
+    note,
+  });
+
+  return {
+    record_hash: hash,
+    source: key.source,
+    title: key.title,
+    rev_id: revId,
+    rating,
+    note,
+    created_at: createdAt,
+  };
+}
+
 // --- JSON ------------------------------------------------------------------
 
-/** Parse a `inputtracker-export` JSON document into `NewEvent`s. */
-export function parseNativeJson(text: string): NewEvent[] {
+/** Parsed native JSON result containing events, goals and annotations. */
+export interface ParsedNativeJson {
+  events: NewEvent[];
+  goals: ValidatedGoalRow[];
+  annotations: ValidatedAnnotationRow[];
+}
+
+/** Parse a `inputtracker-export` JSON document (v1 or v2). */
+export function parseNativeJson(text: string): ParsedNativeJson {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -142,21 +319,59 @@ export function parseNativeJson(text: string): NewEvent[] {
       `Invalid export: expected format "${EXPORT_FORMAT}", got ${JSON.stringify(envelope.format)}`
     );
   }
-  if (envelope.version !== EXPORT_VERSION) {
+
+  const version = envelope.version;
+  if (typeof version !== "number" || !ACCEPTED_VERSIONS.has(version)) {
     throw new Error(
-      `Unsupported export version: expected ${EXPORT_VERSION}, got ${JSON.stringify(envelope.version)}`
+      `Unsupported export version: expected 1 or 2, got ${JSON.stringify(version)}`
     );
   }
+
   if (!Array.isArray(envelope.events)) {
     throw new Error("Invalid export: field 'events' must be an array");
   }
 
-  return envelope.events.map((entry, index) => {
+  const events = envelope.events.map((entry: unknown, index: number) => {
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
       throw new Error(`Invalid export: event at index ${index} is not an object`);
     }
     return toNewEvent(entry as Record<string, unknown>);
   });
+
+  let goals: ValidatedGoalRow[] = [];
+  let annotations: ValidatedAnnotationRow[] = [];
+
+  if (version === 2) {
+    // v2 requires both keys to be present (but empty arrays are fine)
+    if (!("goals" in envelope)) {
+      throw new Error("Invalid v2 export: field 'goals' is required");
+    }
+    if (!("annotations" in envelope)) {
+      throw new Error("Invalid v2 export: field 'annotations' is required");
+    }
+    if (!Array.isArray(envelope.goals)) {
+      throw new Error("Invalid export: field 'goals' must be an array");
+    }
+    if (!Array.isArray(envelope.annotations)) {
+      throw new Error("Invalid export: field 'annotations' must be an array");
+    }
+
+    goals = envelope.goals.map((entry: unknown, index: number) => {
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+        throw new Error(`Invalid export: goal at index ${index} is not an object`);
+      }
+      return validateGoalRow(entry as Record<string, unknown>, index);
+    });
+
+    annotations = envelope.annotations.map((entry: unknown, index: number) => {
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+        throw new Error(`Invalid export: annotation at index ${index} is not an object`);
+      }
+      return validateAnnotationRow(entry as Record<string, unknown>, index);
+    });
+  }
+
+  return { events, goals, annotations };
 }
 
 // --- CSV (RFC 4180) --------------------------------------------------------
@@ -299,9 +514,9 @@ export function detectFormat(filenameOrText: string): "json" | "csv" | null {
 // --- import ----------------------------------------------------------------
 
 /**
- * Import a native export into `events`. The import is atomic: if any row is
- * invalid the whole thing throws, nothing is inserted, and the ingest run is
- * finished with `status = 'failed'`.
+ * Import a native export into `events` (and `goals`/`annotations` for v2 JSON).
+ * The import is atomic: if any row is invalid the whole thing throws, nothing
+ * is inserted, and the ingest run is finished with `status = 'failed'`.
  */
 export function importNative(
   db: Database,
@@ -309,13 +524,82 @@ export function importNative(
   format: "json" | "csv",
   opts: ImportNativeOptions = {}
 ): ImportNativeResult {
-  const events = format === "json" ? parseNativeJson(text) : parseNativeCsv(text);
+  let events: NewEvent[];
+  let goalRows: ValidatedGoalRow[] = [];
+  let annotationRows: ValidatedAnnotationRow[] = [];
+
+  if (format === "json") {
+    const result = parseNativeJson(text);
+    events = result.events;
+    goalRows = result.goals;
+    annotationRows = result.annotations;
+  } else {
+    events = parseNativeCsv(text);
+  }
 
   const runId = startRun(db, opts.source ?? NATIVE_IMPORT_SOURCE);
   try {
-    const { seen, inserted } = insertEvents(db, runId, events);
-    finishRun(db, runId, { status: "ok", rowsSeen: seen, rowsInserted: inserted });
-    return { seen, inserted, runId };
+    // Use a single transaction for atomicity across all three tables.
+    const txResult = db.transaction(() => {
+      const evtResult = insertEvents(db, runId, events);
+
+      let goalsInserted = 0;
+      if (goalRows.length > 0) {
+        const goalStmt = db.prepare(
+          `INSERT OR IGNORE INTO goals (
+            record_hash, goal_id, rev_id, year, metric, source,
+            media_type, target, archived, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`
+        );
+        for (const g of goalRows) {
+          const res = goalStmt.run(
+            g.record_hash, g.goal_id, g.rev_id, g.year, g.metric, g.source,
+            g.media_type, g.target, g.archived, g.created_at
+          );
+          goalsInserted += res.changes;
+        }
+      }
+
+      let annotationsInserted = 0;
+      if (annotationRows.length > 0) {
+        const annStmt = db.prepare(
+          `INSERT OR IGNORE INTO annotations (
+            record_hash, source, title, rev_id, rating, note, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?);`
+        );
+        for (const a of annotationRows) {
+          const res = annStmt.run(
+            a.record_hash, a.source, a.title, a.rev_id, a.rating, a.note,
+            a.created_at
+          );
+          annotationsInserted += res.changes;
+        }
+      }
+
+      return {
+        events: evtResult,
+        goalsInserted,
+        annotationsInserted,
+      };
+    })();
+
+    const totalSeen = txResult.events.seen + goalRows.length + annotationRows.length;
+    const totalInserted = txResult.events.inserted + txResult.goalsInserted + txResult.annotationsInserted;
+    finishRun(db, runId, {
+      status: "ok",
+      rowsSeen: totalSeen,
+      rowsInserted: totalInserted,
+    });
+
+    return {
+      events: { seen: txResult.events.seen, inserted: txResult.events.inserted },
+      goals: { seen: goalRows.length, inserted: txResult.goalsInserted },
+      annotations: { seen: annotationRows.length, inserted: txResult.annotationsInserted },
+      runId,
+      // Legacy aliases
+      seen: txResult.events.seen,
+      inserted: txResult.events.inserted,
+    };
   } catch (caught) {
     finishRun(db, runId, {
       status: "failed",

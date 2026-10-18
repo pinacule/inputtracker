@@ -183,8 +183,9 @@ Details:
   are local wall-clock times in the configured timezone (`YYYY-MM-DD HH:MM`,
   `YYYY-MM-DDTHH:MM`, an optional `:SS`, or a bare date). A value that already
   ends in `Z` or a numeric offset is respected as-is.
-- `export` writes the full archive (every row) as JSON or CSV. `import` reads
-  such a file back; the record hash is recomputed, so re-importing adds nothing.
+- `export` writes the full archive (every row) as JSON (events, goals, ratings
+  and notes) or CSV (events only). `import` reads such a file back; the record
+  hash is recomputed, so re-importing adds nothing.
 - `backup` writes `inputtracker-YYYY-MM-DD.db` (a `VACUUM INTO` snapshot) and
   the matching `.json` export into `backup_dir`, then prunes older date sets.
 - `it help`, `it --help` and `it -h` print the usage text and exit 0. Running
@@ -315,9 +316,9 @@ error responses.
 - `it backup` writes a dated SQLite snapshot and a full JSON export into
   `backup_dir`, keeping the newest `backup_keep` date sets (at least one). The
   backup timer does this nightly at 03:30.
-- `it export --format json|csv --out <file>` writes the full `events` archive.
-  JSON is an envelope (see `DATA_FORMAT.md`); CSV has one header row with every
-  column. The web app offers the same two downloads at `/api/export.json` and
+- `it export --format json|csv --out <file>` writes the full archive. JSON is an
+  envelope with every row of `events`, `goals` and `annotations` (see
+  `DATA_FORMAT.md`); CSV has `events` only, one header row with every column. The web app offers the same two downloads at `/api/export.json` and
   `/api/export.csv`.
 - `it import <file>` (or the web upload) reads a native export back. The record
   hash is recomputed from the data, and inserts are `INSERT OR IGNORE`, so
@@ -332,7 +333,7 @@ The exact column types, the `events_latest` view and worked SQL examples are in
   directory, port, systemd, lingering, Tailscale) and exits non-zero on a real
   problem. It is strictly read-only.
 - `it verify-copy <copy.db>` checks a copied database against the configured one
-  and reports any events missing from the copy.
+  and reports any events, goals or annotations missing from the copy.
 
 The step-by-step PC → VM move (Tailscale, snapshot, copy, install, rollback) is
 in [`MIGRATION.md`](MIGRATION.md).

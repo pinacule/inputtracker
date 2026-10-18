@@ -36,8 +36,9 @@ Next to the database (in the same directory) the app keeps files that are **not*
 part of the data format and are not in any export or backup:
 `secrets/simkl-token.json` holds the Simkl OAuth tokens (the `secrets` directory
 is mode 0700, the file mode 0600) and is a secret — never commit or share it.
-`it export` writes `events` rows only, and `it backup` copies the database
-itself (`VACUUM INTO`) plus that export, so neither includes the token file.
+`it export` writes the `events`, `goals` and `annotations` rows only, and
+`it backup` copies the database itself (`VACUUM INTO`) plus the JSON export, so
+neither includes the token file.
 
 ## Table `events`
 
@@ -384,18 +385,25 @@ WHERE (source = ? AND title = ?) OR (source = ? AND title = ?);
 
 ## Export formats
 
-Both exports contain **every row of `events`** (the full archive, ordered by
-`id`), not the `events_latest` view.
+The JSON export contains **every row** of `events`, `goals` and `annotations`
+(the full archives, each ordered by `id`), not the `*_latest` views. The CSV
+export contains `events` only.
 
-JSON is an envelope:
+JSON is an envelope (version 2):
 
 ```json
 {
   "format": "inputtracker-export",
-  "version": 1,
-  "events": [ ... one object per row, all columns ... ]
+  "version": 2,
+  "events": [ ... one object per row, all columns ... ],
+  "goals": [ ... one object per row, all columns ... ],
+  "annotations": [ ... one object per row, all columns ... ]
 }
 ```
+
+Version 1 files (written before goals and annotations existed) have only
+`events`; the importer still reads them. In a version 2 file both `goals` and
+`annotations` must be present (an empty array is fine).
 
 CSV is RFC 4180 with one header row naming every column, in this order:
 
@@ -414,3 +422,11 @@ Importing an export recomputes `record_hash` and ignores `id`, `record_hash`,
 `INSERT OR IGNORE`. Re-importing the same file therefore adds nothing. The
 importer picks JSON or CSV from the filename extension, or by
 `--format json|csv`.
+
+Goal and annotation rows are checked with the same rules as the API (`POST
+/api/goals`, `POST /api/annotations`), and their `id` and `record_hash` are
+ignored and recomputed too. `goal_id`, `rev_id` and `created_at` are data and
+are kept (`created_at` normalized to UTC); `rev_id` is required, so a re-import
+always hashes the same. Rows are inserted in file order, so `goals_latest` and
+`annotations_latest` resolve as in the source. The import is atomic: one invalid
+event, goal or annotation inserts nothing in any table.

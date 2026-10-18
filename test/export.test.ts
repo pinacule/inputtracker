@@ -205,7 +205,7 @@ describe("exportJson", () => {
     expect(parsed.format).toBe(EXPORT_FORMAT);
     expect(parsed.version).toBe(EXPORT_VERSION);
     expect(EXPORT_FORMAT).toBe("inputtracker-export");
-    expect(EXPORT_VERSION).toBe(1);
+    expect(EXPORT_VERSION).toBe(2);
 
     // ALL rows of the archive, not the collapsed `events_latest` view.
     expect(parsed.events).toHaveLength(4);

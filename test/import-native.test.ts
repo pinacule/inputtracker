@@ -143,7 +143,7 @@ describe("importNative / parseNativeJson", () => {
       parseNativeJson('{"format":"other","version":1,"events":[]}')
     ).toThrow(/format/i);
     expect(() =>
-      parseNativeJson('{"format":"inputtracker-export","version":2,"events":[]}')
+      parseNativeJson('{"format":"inputtracker-export","version":99,"events":[]}')
     ).toThrow(/version/i);
     expect(() =>
       parseNativeJson('{"format":"inputtracker-export","version":1,"events":{}}')
@@ -483,7 +483,7 @@ describe("CLI import", () => {
     expect(code).toBe(0);
     expect(deps.captured.err).toBe("");
     expect(deps.captured.out).toContain(
-      `imported 3 new of 3 events from ${file}`
+      `imported 3 new of 3 events, 0 new of 0 goals, 0 new of 0 annotations from ${file}`
     );
 
     const db = openDb(dbPath);
@@ -500,7 +500,7 @@ describe("CLI import", () => {
 
     expect(code).toBe(0);
     expect(deps.captured.out).toContain(
-      `imported 3 new of 3 events from ${file}`
+      `imported 3 new of 3 events, 0 new of 0 goals, 0 new of 0 annotations from ${file}`
     );
 
     const db = openDb(dbPath);
@@ -519,7 +519,7 @@ describe("CLI import", () => {
 
     expect(code).toBe(0);
     expect(second.captured.out).toContain(
-      `imported 0 new of 3 events from ${file}`
+      `imported 0 new of 3 events, 0 new of 0 goals, 0 new of 0 annotations from ${file}`
     );
   });
 
