@@ -7,9 +7,7 @@ InputTracker is both a daily media log and a **long-term personal archive** of e
 1. **Dark Themes Only (`web/src/lib/theme.ts`, `web/src/styles/tokens.css`):**
    - Light and system modes are removed. The app offers 5 named dark themes (**Warm Study** `espresso`, **Midnight Ink** `midnight`, **Pine & Moss** `forest`, **Obsidian Archive** `obsidian`, and **Velvet Nocturne** `plum`), picked via live swatch cards in **Settings › Appearance** and applied before first paint from `localStorage` (`inputtracker.theme`) with zero flash.
    - All 9 category colour families (`anime`, `series`, `film`, `book`, `audiobook`, `youtube`, `podcast`, `music`, `other`) remain distinct and WCAG AA compliant (>= 4.5:1) on every theme.
-2. **Home Page Clarity (`web/src/pages/Calendar.tsx`):**
    - One glance answers: what did I do **Today** and **This week**, how does **This month** look, and what am I in the middle of (**Continue** shelf of `in_progress` works).
-   - Calendar month cells contain no truncated title rows or cover bloat: each cell shows the day number, total duration, active category dots, and a proportional horizontal stacked category bar.
    - Selected day panel header is a single clean line (`Today`, `Yesterday`, or `Saturday 17 October`) with no duplicated numeric date eyebrow.
    - Day panel items are compact, grouped by work (`groupDayPanelItems`), omit heavy letter tiles when no cover art exists, and collapse a day's YouTube plays into one expandable summary line (`12 videos · 48 min`).
 3. **YouTube by Topic & Channel (`web/src/lib/youtube.ts`):**
