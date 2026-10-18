@@ -218,6 +218,84 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: "rating_tenths",
+    up: (db: Database) => {
+      db.run(`
+        ALTER TABLE annotations
+        ADD COLUMN rating_tenths INTEGER CHECK (rating_tenths IS NULL OR (rating_tenths BETWEEN 0 AND 100));
+      `);
+      db.run("DROP VIEW IF EXISTS annotations_latest;");
+      db.run(`
+        CREATE VIEW annotations_latest AS
+        SELECT *
+        FROM annotations
+        WHERE id IN (
+          SELECT MAX(id)
+          FROM annotations
+          GROUP BY source, title
+        );
+      `);
+    },
+  },
+  {
+    version: 6,
+    name: "work_overrides",
+    up: (db: Database) => {
+      db.run(`
+        CREATE TABLE IF NOT EXISTS work_overrides (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          record_hash TEXT NOT NULL UNIQUE,
+          work_key TEXT NOT NULL,
+          rev_id TEXT NOT NULL,
+          title TEXT,
+          category TEXT,
+          status TEXT,
+          rating_tenths INTEGER CHECK (rating_tenths IS NULL OR (rating_tenths BETWEEN 0 AND 100)),
+          note TEXT CHECK (note IS NULL OR length(note) <= 5000),
+          hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
+          meta_provider TEXT,
+          meta_id TEXT,
+          meta_json TEXT,
+          topic TEXT,
+          created_at TEXT NOT NULL
+        );
+      `);
+
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_work_overrides_work_key
+        ON work_overrides (work_key);
+      `);
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS work_overrides_no_update
+        BEFORE UPDATE ON work_overrides
+        BEGIN
+          SELECT RAISE(ABORT, 'work_overrides is append-only');
+        END;
+      `);
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS work_overrides_no_delete
+        BEFORE DELETE ON work_overrides
+        BEGIN
+          SELECT RAISE(ABORT, 'work_overrides is append-only');
+        END;
+      `);
+
+      db.run(`
+        CREATE VIEW IF NOT EXISTS work_overrides_latest AS
+        SELECT *
+        FROM work_overrides
+        WHERE id IN (
+          SELECT MAX(id)
+          FROM work_overrides
+          GROUP BY work_key
+        );
+      `);
+    },
+  },
 ];
 
 export function migrate(db: Database): void {

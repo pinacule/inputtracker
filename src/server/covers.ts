@@ -99,16 +99,25 @@ export function normalizeImageType(raw: unknown): string | null {
   return base;
 }
 
+const absMissMemory = new Map<string, number>();
+
 function cachePaths(
   config: Config,
   itemId: string
-): { imgPath: string; typePath: string; srcPath: string; nonePath: string } {
+): {
+  imgPath: string;
+  typePath: string;
+  srcPath: string;
+  nonePath: string;
+  absMissPath: string;
+} {
   const dir = coverCacheDir(config);
   return {
     imgPath: join(dir, `${itemId}.img`),
     typePath: join(dir, `${itemId}.type`),
     srcPath: join(dir, `${itemId}.src`),
     nonePath: join(dir, `${itemId}.none`),
+    absMissPath: join(dir, `${itemId}.abs404`),
   };
 }
 
@@ -155,13 +164,31 @@ function writeCachedNone(nonePath: string, nowMs: number): void {
   }
 }
 
+function readCachedAbsMiss(absMissPath: string, nowMs: number): boolean {
+  const memTs = absMissMemory.get(absMissPath);
+  if (memTs !== undefined && nowMs - memTs < NONE_TTL_MS && nowMs >= memTs) {
+    return true;
+  }
+  if (readCachedNone(absMissPath, nowMs)) {
+    return true;
+  }
+  absMissMemory.delete(absMissPath);
+  return false;
+}
+
+function writeCachedAbsMiss(absMissPath: string, nowMs: number): void {
+  absMissMemory.set(absMissPath, nowMs);
+  writeCachedNone(absMissPath, nowMs);
+}
+
 function writeCachedCover(
   imgPath: string,
   typePath: string,
   srcPath: string,
   nonePath: string,
   cover: CoverResult,
-  srcText: string
+  srcText: string,
+  absMissPath?: string
 ): void {
   try {
     mkdirSync(dirname(imgPath), { recursive: true });
@@ -172,6 +199,14 @@ function writeCachedCover(
       try {
         unlinkSync(nonePath);
       } catch {}
+    }
+    if (absMissPath) {
+      absMissMemory.delete(absMissPath);
+      if (existsSync(absMissPath)) {
+        try {
+          unlinkSync(absMissPath);
+        } catch {}
+      }
     }
   } catch {
     // The cache is best-effort; a write failure must not break the response.
@@ -236,7 +271,7 @@ function isNetworkOrServerError(err: unknown): boolean {
     ) {
       return true;
     }
-    if (!/4\d\d/.test(msg)) {
+    if (!/\b4\d\d\b/.test(msg)) {
       return true;
     }
   }
@@ -283,7 +318,10 @@ async function getCoverInternal(
   itemId: string,
   deps: CoverDeps
 ): Promise<CoverResult | null> {
-  const { imgPath, typePath, srcPath, nonePath } = cachePaths(deps.config, itemId);
+  const { imgPath, typePath, srcPath, nonePath, absMissPath } = cachePaths(
+    deps.config,
+    itemId
+  );
   const nowMs = deps.now ? deps.now() : Date.now();
 
   const cached = readCachedCover(imgPath, typePath);
@@ -301,30 +339,44 @@ async function getCoverInternal(
     deps.createAbsClient ?? ((cfg) => createAbsClient(cfg));
 
   // --- Step 1: ABS /api/items/<id>/cover ---
-  try {
-    const client = factory(deps.config);
-    if (typeof client.getBinary === "function") {
-      const fetched = await client.getBinary(`/api/items/${itemId}/cover`);
-      const contentType = normalizeImageType(fetched?.contentType);
-      if (contentType !== null) {
-        const bytes =
-          fetched.bytes instanceof Uint8Array ? fetched.bytes : new Uint8Array();
-        const cover: CoverResult = { bytes, contentType };
-        writeCachedCover(imgPath, typePath, srcPath, nonePath, cover, "abs");
-        return cover;
+  if (!readCachedAbsMiss(absMissPath, nowMs)) {
+    try {
+      const client = factory(deps.config);
+      if (typeof client.getBinary === "function") {
+        const fetched = await client.getBinary(`/api/items/${itemId}/cover`);
+        const contentType = normalizeImageType(fetched?.contentType);
+        if (contentType !== null) {
+          const bytes =
+            fetched.bytes instanceof Uint8Array
+              ? fetched.bytes
+              : new Uint8Array();
+          const cover: CoverResult = { bytes, contentType };
+          writeCachedCover(
+            imgPath,
+            typePath,
+            srcPath,
+            nonePath,
+            cover,
+            "abs",
+            absMissPath
+          );
+          return cover;
+        }
       }
+    } catch (err) {
+      // A rejected token on the item's own cover is not "the book is gone": stop
+      // and cache nothing, so a bad token never turns into Open Library covers or
+      // `.none` entries. (A 401 later, on `/api/libraries`, only skips step 2: an
+      // API key without library access still fetches covers.)
+      if (isNetworkOrServerError(err) || isAuthError(err)) {
+        hadNetworkError = true;
+        // ABS offline / 5xx / auth: do not query further, do not cache failure
+        return null;
+      }
+      // 404: item or cover not found on ABS -> remember the miss so we do not
+      // ask ABS for this itemId again, then proceed to Step 2.
+      writeCachedAbsMiss(absMissPath, nowMs);
     }
-  } catch (err) {
-    // A rejected token on the item's own cover is not "the book is gone": stop
-    // and cache nothing, so a bad token never turns into Open Library covers or
-    // `.none` entries. (A 401 later, on `/api/libraries`, only skips step 2: an
-    // API key without library access still fetches covers.)
-    if (isNetworkOrServerError(err) || isAuthError(err)) {
-      hadNetworkError = true;
-      // ABS offline / 5xx / auth: do not query further, do not cache failure
-      return null;
-    }
-    // 404: item or cover not found on ABS -> proceed to Step 2
   }
 
   // Without a DB connection, steps 2 & 3 cannot discover title/author
@@ -365,7 +417,13 @@ async function getCoverInternal(
         } catch {}
       }
       const meta = rawObj?.mediaMetadata;
-      targetTitle = (meta?.title ?? rawObj?.displayTitle ?? row.title ?? "").trim();
+      const rawTitle = (meta?.title ?? rawObj?.displayTitle ?? row.title ?? "").trim();
+      // A media_progress row without a real title stores the itemId as row.title;
+      // do not treat the opaque itemId as a book title to search for.
+      targetTitle =
+        rawTitle === itemId && !meta?.title && !rawObj?.displayTitle
+          ? ""
+          : rawTitle;
       targetAuthor = (meta?.authorName ?? rawObj?.displayAuthor ?? row.parent_title ?? "").trim();
       if (typeof meta?.seriesName === "string" && meta.seriesName.trim()) {
         seriesName = meta.seriesName.trim();
@@ -464,7 +522,14 @@ async function getCoverInternal(
               }
             }
 
-            // Match! Fetch cover for candidateId
+            // Match! Fetch cover for candidateId (unless it is the same itemId or known 404)
+            if (candidateId === itemId) {
+              continue;
+            }
+            const candidateMissPath = cachePaths(deps.config, candidateId).absMissPath;
+            if (readCachedAbsMiss(candidateMissPath, nowMs)) {
+              continue;
+            }
             try {
               const fetched = await client.getBinary(`/api/items/${candidateId}/cover`);
               const contentType = normalizeImageType(fetched?.contentType);
@@ -478,13 +543,16 @@ async function getCoverInternal(
                   srcPath,
                   nonePath,
                   cover,
-                  `abs-relinked:${candidateId}`
+                  `abs-relinked:${candidateId}`,
+                  absMissPath
                 );
                 return cover;
               }
             } catch (err) {
               if (isNetworkOrServerError(err)) {
                 hadNetworkError = true;
+              } else if (!isAuthError(err)) {
+                writeCachedAbsMiss(candidateMissPath, nowMs);
               }
             }
           }

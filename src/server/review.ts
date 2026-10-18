@@ -33,6 +33,12 @@ import {
 import type { DedupedEvent } from "./dedup.ts";
 import { computeStreaks } from "./insights.ts";
 import { buildAllLibraryWorks, type InternalLibraryWork } from "./library.ts";
+import {
+  type CategoryFilter,
+  type CategoryFilterInput,
+  matchesCategoryFilter,
+  parseCategoryFilter,
+} from "./overrides.ts";
 
 /** Number of days in `YYYY-MM`. */
 function daysInMonth(month: string): number {
@@ -108,7 +114,8 @@ export interface GetSeriesOptions {
   bucket: "day" | "week" | "month";
   from: string;
   to: string;
-  category?: Category;
+  category?: CategoryFilterInput;
+  exclude?: CategoryFilterInput;
   tz?: string;
 }
 
@@ -117,7 +124,8 @@ export function getSeries(
   opts: GetSeriesOptions
 ): SeriesResult {
   const tz = opts.tz ?? "Europe/Bratislava";
-  const { bucket, from, to, category } = opts;
+  const { bucket, from, to } = opts;
+  const filter = parseCategoryFilter(opts.category, opts.exclude);
   const events = getDisplayConsumptionEvents(db, undefined, tz);
 
   const bucketKeys =
@@ -148,7 +156,7 @@ export function getSeries(
     }
 
     const cat = categoryOf(ev);
-    if (category !== undefined && cat !== category) {
+    if (!matchesCategoryFilter(cat, filter)) {
       continue;
     }
 
@@ -204,9 +212,14 @@ interface IndexedWorkData {
 
 function indexLibraryWorks(
   db: Database,
-  tz: string
+  tz: string,
+  filter?: CategoryFilter
 ): IndexedWorkData {
-  const allWorks = buildAllLibraryWorks(db, tz);
+  const allWorks = buildAllLibraryWorks(db, tz).filter(
+    (item) =>
+      item.work.status !== "planned" &&
+      matchesCategoryFilter(item.work.category, filter)
+  );
   const workByEventId = new Map<number, InternalLibraryWork>();
   const firstLocalDateByWorkKey = new Map<string, string>();
   const lastLocalDateByWorkKey = new Map<string, string>();
@@ -431,18 +444,20 @@ function computeMonthReviewFromIndexed(
 export function getMonthReview(
   db: Database,
   month: string,
-  tz: string = "Europe/Bratislava"
+  tz: string = "Europe/Bratislava",
+  filter?: CategoryFilter
 ): MonthReview {
-  const indexed = indexLibraryWorks(db, tz);
+  const indexed = indexLibraryWorks(db, tz, filter);
   return computeMonthReviewFromIndexed(indexed, month, tz);
 }
 
 export function getYearReviewV2(
   db: Database,
   year: number,
-  tz: string = "Europe/Bratislava"
+  tz: string = "Europe/Bratislava",
+  filter?: CategoryFilter
 ): YearReviewV2 {
-  const indexed = indexLibraryWorks(db, tz);
+  const indexed = indexLibraryWorks(db, tz, filter);
   const yearPrefix = `${year}-`;
 
   const months: Array<{

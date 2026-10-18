@@ -71,6 +71,10 @@ import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
 import { getYoutubeThumb, isValidYoutubeVideoId } from "./thumbs.ts";
 import { handleYoutubePlays } from "./ingest.ts";
 import { registerLookupRoutes } from "./lookup-routes.ts";
+import {
+  CategoryFilterValidationError,
+  parseCategoryFilter,
+} from "./overrides.ts";
 import { registerV2Routes } from "./v2-routes.ts";
 
 export interface AppDeps {
@@ -173,9 +177,14 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ ok: true });
   });
 
-  // GET /api/calendar?month=YYYY-MM[&source=...]
+  // GET /api/calendar?month=YYYY-MM[&source=...][&category=...][&exclude=...]
   app.get("/api/calendar", (c) => {
-    const err = validateQueryParams(c.req.url, ["month", "source"]);
+    const err = validateQueryParams(c.req.url, [
+      "month",
+      "source",
+      "category",
+      "exclude",
+    ]);
     if (err) {
       return c.json({ error: err }, 400);
     }
@@ -192,13 +201,29 @@ export function createApp(deps: AppDeps): Hono {
     }
 
     const source = c.req.query("source") || undefined;
-    const result = getCalendar(db, month, tz, source);
-    return c.json(result);
+    try {
+      const filter = parseCategoryFilter(
+        c.req.query("category"),
+        c.req.query("exclude")
+      );
+      const result = getCalendar(db, month, tz, source, filter);
+      return c.json(result);
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
   });
 
-  // GET /api/heatmap/days?year=YYYY[&source=...]
+  // GET /api/heatmap/days?year=YYYY[&source=...][&category=...][&exclude=...]
   app.get("/api/heatmap/days", (c) => {
-    const err = validateQueryParams(c.req.url, ["year", "source"]);
+    const err = validateQueryParams(c.req.url, [
+      "year",
+      "source",
+      "category",
+      "exclude",
+    ]);
     if (err) {
       return c.json({ error: err }, 400);
     }
@@ -215,13 +240,29 @@ export function createApp(deps: AppDeps): Hono {
     }
 
     const source = c.req.query("source") || undefined;
-    const result = getHeatmapDays(db, year, tz, source);
-    return c.json(result);
+    try {
+      const filter = parseCategoryFilter(
+        c.req.query("category"),
+        c.req.query("exclude")
+      );
+      const result = getHeatmapDays(db, year, tz, source, filter);
+      return c.json(result);
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
   });
 
-  // GET /api/heatmap/hours?[year=YYYY][&source=...]
+  // GET /api/heatmap/hours?[year=YYYY][&source=...][&category=...][&exclude=...]
   app.get("/api/heatmap/hours", (c) => {
-    const err = validateQueryParams(c.req.url, ["year", "source"]);
+    const err = validateQueryParams(c.req.url, [
+      "year",
+      "source",
+      "category",
+      "exclude",
+    ]);
     if (err) {
       return c.json({ error: err }, 400);
     }
@@ -235,13 +276,36 @@ export function createApp(deps: AppDeps): Hono {
     }
 
     const source = c.req.query("source") || undefined;
-    const result = getHeatmapHours(db, year || undefined, tz, source);
-    return c.json(result);
+    try {
+      const filter = parseCategoryFilter(
+        c.req.query("category"),
+        c.req.query("exclude")
+      );
+      const result = getHeatmapHours(
+        db,
+        year || undefined,
+        tz,
+        source,
+        filter
+      );
+      return c.json(result);
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
   });
 
-  // GET /api/stats[?from=YYYY-MM-DD][&to=YYYY-MM-DD][&source=...]
+  // GET /api/stats[?from=YYYY-MM-DD][&to=YYYY-MM-DD][&source=...][&category=...][&exclude=...]
   app.get("/api/stats", (c) => {
-    const err = validateQueryParams(c.req.url, ["from", "to", "source"]);
+    const err = validateQueryParams(c.req.url, [
+      "from",
+      "to",
+      "source",
+      "category",
+      "exclude",
+    ]);
     if (err) {
       return c.json({ error: err }, 400);
     }
@@ -263,15 +327,34 @@ export function createApp(deps: AppDeps): Hono {
     }
 
     const source = c.req.query("source") || undefined;
-    const result = getStats(db, { from, to, source, tz });
-    return c.json(result);
+    try {
+      const result = getStats(db, {
+        from,
+        to,
+        source,
+        category: c.req.query("category"),
+        exclude: c.req.query("exclude"),
+        tz,
+      });
+      return c.json(result);
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
   });
 
-  // GET /api/insights[?source=][&date=YYYY-MM-DD] — streaks + "On this day".
+  // GET /api/insights[?source=][&date=YYYY-MM-DD][&category=][&exclude=] — streaks + "On this day".
   // `date` overrides "today" (mainly for tests); it defaults to the current
   // local day in the configured timezone.
   app.get("/api/insights", (c) => {
-    const err = validateQueryParams(c.req.url, ["source", "date"]);
+    const err = validateQueryParams(c.req.url, [
+      "source",
+      "date",
+      "category",
+      "exclude",
+    ]);
     if (err) {
       return c.json({ error: err }, 400);
     }
@@ -286,16 +369,33 @@ export function createApp(deps: AppDeps): Hono {
 
     const source = c.req.query("source") || undefined;
     const today = date ?? formatLocalParts(new Date().toISOString(), tz).date;
-    const result = getInsights(db, { tz, today, source });
-    return c.json(result);
+    try {
+      const categoryFilter = parseCategoryFilter(
+        c.req.query("category"),
+        c.req.query("exclude")
+      );
+      const result = getInsights(db, { tz, today, source, categoryFilter });
+      return c.json(result);
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
   });
 
-  // GET /api/year-review?year=YYYY[&source=...][&date=YYYY-MM-DD] — one year
+  // GET /api/year-review?year=YYYY[&source=...][&date=YYYY-MM-DD][&category=...][&exclude=...] — one year
   // of consumption summarised. `year` defaults to the current local year;
   // `date` overrides "today" (mainly for tests); `source` filters everything,
   // including `available_years`.
   app.get("/api/year-review", (c) => {
-    const err = validateQueryParams(c.req.url, ["year", "source", "date"]);
+    const err = validateQueryParams(c.req.url, [
+      "year",
+      "source",
+      "date",
+      "category",
+      "exclude",
+    ]);
     if (err) {
       return c.json({ error: err }, 400);
     }
@@ -319,8 +419,25 @@ export function createApp(deps: AppDeps): Hono {
     const year = yearRaw !== undefined ? Number(yearRaw) : Number(today.slice(0, 4));
 
     const source = c.req.query("source") || undefined;
-    const result = getYearReview(db, { tz, year, today, source });
-    return c.json(result);
+    try {
+      const categoryFilter = parseCategoryFilter(
+        c.req.query("category"),
+        c.req.query("exclude")
+      );
+      const result = getYearReview(db, {
+        tz,
+        year,
+        today,
+        source,
+        categoryFilter,
+      });
+      return c.json(result);
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
   });
 
   // GET /api/goals?year=YYYY[&date=YYYY-MM-DD][&archived=1]
@@ -460,7 +577,7 @@ export function createApp(deps: AppDeps): Hono {
     }
   });
 
-  // GET /api/search?q=&source=&media_type=&limit=&offset= — read-only search
+  // GET /api/search?q=&source=&media_type=&category=&exclude=&limit=&offset= — read-only search
   // over titles, series, authors and YouTube channels. `q` is required (too
   // short queries return an empty result, not an error); limit defaults to 30.
   app.get("/api/search", (c) => {
@@ -468,6 +585,8 @@ export function createApp(deps: AppDeps): Hono {
       "q",
       "source",
       "media_type",
+      "category",
+      "exclude",
       "limit",
       "offset",
     ]);
@@ -516,8 +635,27 @@ export function createApp(deps: AppDeps): Hono {
       offset = Number(offsetRaw);
     }
 
-    const result = search(db, { tz, q, source, media_type: mediaType, limit, offset });
-    return c.json(result);
+    try {
+      const categoryFilter = parseCategoryFilter(
+        c.req.query("category"),
+        c.req.query("exclude")
+      );
+      const result = search(db, {
+        tz,
+        q,
+        source,
+        media_type: mediaType,
+        categoryFilter,
+        limit,
+        offset,
+      });
+      return c.json(result);
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
   });
 
   // GET /api/title-history?key= — full history of one search hit, read-only.

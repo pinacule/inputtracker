@@ -66,6 +66,25 @@ export interface AnnotationRow {
   title: string;
   rev_id: string;
   rating: number | null;
+  rating_tenths?: number | null;
   note: string | null;
+  created_at: string;
+}
+
+export interface WorkOverrideRow {
+  id: number;
+  record_hash: string;
+  work_key: string;
+  rev_id: string;
+  title: string | null;
+  category: string | null;
+  status: string | null;
+  rating_tenths: number | null;
+  note: string | null;
+  hidden: number;
+  meta_provider: string | null;
+  meta_id: string | null;
+  meta_json: string | null;
+  topic: string | null;
   created_at: string;
 }

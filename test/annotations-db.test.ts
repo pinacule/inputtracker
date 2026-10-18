@@ -332,7 +332,7 @@ describe("annotations db & schema (migration v3)", () => {
     });
     expect(ok.inserted).toBe(true);
 
-    for (const bad of [0, 11, 7.5, Number.NaN, "7" as unknown]) {
+    for (const bad of [-0.1, 10.1, 11, 7.25, Number.NaN, "7" as unknown]) {
       expect(() =>
         saveAnnotation(db, {
           source: "manual",

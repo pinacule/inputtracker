@@ -11,6 +11,16 @@
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import type { AnnotationRow } from "../core/schema.ts";
+import {
+  MAX_RATING,
+  MIN_RATING,
+  RatingValidationError,
+  ratingToTenths,
+  tenthsToLegacyRating,
+  tenthsToRating,
+} from "./ratings.ts";
+
+export { MAX_RATING, MIN_RATING };
 
 /** UUID v4-ish format check (same shape as the goals module uses). */
 const UUID_RE =
@@ -19,9 +29,6 @@ const UUID_RE =
 export const MAX_ANNOTATION_SOURCE_LENGTH = 64;
 export const MAX_ANNOTATION_TITLE_LENGTH = 500;
 export const MAX_ANNOTATION_NOTE_LENGTH = 5000;
-
-export const MIN_RATING = 1;
-export const MAX_RATING = 10;
 
 export class AnnotationValidationError extends Error {
   constructor(message: string) {
@@ -111,22 +118,17 @@ export function parseAnnotationKey(
   return { source: trimmedSource, title: trimmedTitle };
 }
 
-/** Validate the rating: an integer 1–10, or null when absent. */
+/** Validate the rating: 0..10 with at most one decimal place, or null when absent. */
 export function parseRating(value: unknown): number | null {
-  if (value === undefined || value === null) {
-    return null;
+  try {
+    const tenths = ratingToTenths(value);
+    return tenths === null ? null : tenths / 10;
+  } catch (err) {
+    if (err instanceof RatingValidationError) {
+      throw new AnnotationValidationError(err.message);
+    }
+    throw err;
   }
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new AnnotationValidationError(
-      `Field 'rating' must be an integer between ${MIN_RATING} and ${MAX_RATING}`
-    );
-  }
-  if (value < MIN_RATING || value > MAX_RATING) {
-    throw new AnnotationValidationError(
-      `Field 'rating' must be between ${MIN_RATING} and ${MAX_RATING}, got ${value}`
-    );
-  }
-  return value;
 }
 
 /**
@@ -188,7 +190,7 @@ function rowToAnnotation(row: AnnotationRow): Annotation {
     source: row.source,
     title: row.title,
     rev_id: row.rev_id,
-    rating: row.rating,
+    rating: tenthsToRating(row.rating_tenths, row.rating),
     note: row.note,
     created_at: row.created_at,
   };
@@ -200,13 +202,14 @@ function getLatestAnnotation(
   title: string
 ): Annotation | null {
   const row = db
-    .query<AnnotationRow, [string, string]>(
-      `SELECT id, record_hash, source, title, rev_id, rating, note, created_at
+    .query<AnnotationRow, [string, string, string]>(
+      `SELECT id, record_hash, source, title, rev_id, rating, rating_tenths, note, created_at
        FROM annotations_latest
-       WHERE source = ? AND title = ?
+       WHERE (source = ? AND title = ?) OR lower(title) = lower(?)
+       ORDER BY id DESC
        LIMIT 1;`
     )
-    .get(source, title);
+    .get(source, title, title);
   return row === null ? null : rowToAnnotation(row);
 }
 
@@ -227,6 +230,8 @@ export function saveAnnotation(
 
   const key = parseAnnotationKey(input.source, input.title);
   const rating = parseRating(input.rating);
+  const ratingTenths = rating === null ? null : Math.round(rating * 10);
+  const legacyRating = tenthsToLegacyRating(ratingTenths);
   const note = parseNote(input.note);
   const revId = parseRevId(input.rev_id);
   const createdAt = now ?? new Date().toISOString();
@@ -246,10 +251,20 @@ export function saveAnnotation(
       title,
       rev_id,
       rating,
+      rating_tenths,
       note,
       created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
-    [recordHash, key.source, key.title, revId, rating, note, createdAt]
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+    [
+      recordHash,
+      key.source,
+      key.title,
+      revId,
+      legacyRating,
+      ratingTenths,
+      note,
+      createdAt,
+    ]
   );
 
   const annotation = getLatestAnnotation(db, key.source, key.title);
@@ -291,22 +306,31 @@ export function getAnnotationsFor(
     return result;
   }
 
-  const conditions = keys.map(() => "(source = ? AND title = ?)").join(" OR ");
-  const params: string[] = [];
-  for (const key of keys) {
-    params.push(key.source, key.title);
-  }
+  const uniqueTitles = Array.from(new Set(keys.map((k) => k.title.toLowerCase())));
+  const placeholders = uniqueTitles.map(() => "?").join(", ");
 
   const rows = db
     .query<AnnotationRow, string[]>(
-      `SELECT id, record_hash, source, title, rev_id, rating, note, created_at
+      `SELECT id, record_hash, source, title, rev_id, rating, rating_tenths, note, created_at
        FROM annotations_latest
-       WHERE ${conditions};`
+       WHERE lower(title) IN (${placeholders})
+       ORDER BY id ASC;`
     )
-    .all(...params);
+    .all(...uniqueTitles);
 
+  const byLowerTitle = new Map<string, Annotation>();
   for (const row of rows) {
-    result.set(annotationMapKey(row.source, row.title), rowToAnnotation(row));
+    const ann = rowToAnnotation(row);
+    byLowerTitle.set(row.title.toLowerCase(), ann);
+    result.set(annotationMapKey(row.source, row.title), ann);
+  }
+
+  for (const key of keys) {
+    const mapKey = annotationMapKey(key.source, key.title);
+    const byTitle = byLowerTitle.get(key.title.toLowerCase());
+    if (byTitle !== undefined) {
+      result.set(mapKey, byTitle);
+    }
   }
   return result;
 }
