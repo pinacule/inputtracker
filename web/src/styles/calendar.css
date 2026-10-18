@@ -150,6 +150,19 @@
   min-width: 0;
 }
 
+/* Phone: the month card stacks its numbers above the share bar instead of squeezing them. */
+@media (max-width: 767px) {
+  .home-glance-card--month .home-glance-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .home-glance-label,
+  .home-glance-sub {
+    white-space: nowrap;
+  }
+}
+
 /* Continue / In-Progress Shelf */
 .home-continue-strip {
   display: flex;
@@ -418,6 +431,14 @@
 @media (min-width: 768px) {
   .calendar-day-duration {
     font-size: 0.68rem;
+  }
+}
+
+/* Phone cells are too narrow for "1h 32m" beside the day number: shading and the bar carry
+   the amount there, and the day panel shows the exact time. */
+@media (max-width: 767px) {
+  .calendar-day-duration {
+    display: none;
   }
 }
 
