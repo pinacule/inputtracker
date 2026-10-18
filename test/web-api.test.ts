@@ -1,14 +1,25 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   addEvent,
+  deleteArchiveEntry,
   getCalendar,
   getHeatmapDays,
   getHeatmapHours,
   getInProgress,
   getJson,
+  getLibrary,
+  getLibraryWork,
+  getMonthReview,
+  getSeries,
+  getSettings,
   getStats,
+  getYearReviewV2,
   importFile,
+  listArchive,
+  lookupSearch,
+  lookupWork,
   postJson,
+  saveArchiveEntry,
 } from "../web/src/api.ts";
 
 interface FetchCall {
@@ -215,5 +226,156 @@ describe("api.ts write helpers", () => {
     await expect(importFile(file)).rejects.toThrow(
       /File too large for upload\. On the server run: bun run it import youtube-takeout <file>/
     );
+  });
+});
+
+describe("api.ts v2 endpoints (lookup, archive, library, series, review, settings)", () => {
+  test("lookupSearch and lookupWork hit the metadata lookup endpoints", async () => {
+    mockFetch(() =>
+      jsonResponse({
+        query: "synthetic saga",
+        category: "anime",
+        results: [],
+        failed_providers: [],
+      })
+    );
+
+    await lookupSearch("synthetic saga", "anime");
+    await lookupSearch({ q: "synthetic novel", category: "any" });
+
+    expect(calls[0]?.url).toBe(
+      "/api/lookup/search?q=synthetic+saga&category=anime"
+    );
+    expect(calls[1]?.url).toBe(
+      "/api/lookup/search?q=synthetic+novel&category=any"
+    );
+
+    mockFetch(() =>
+      jsonResponse({
+        provider: "anilist",
+        provider_id: "101348",
+        category: "anime",
+        title: "Synthetic Saga",
+        original_title: null,
+        year: 2019,
+        cover_url: "/api/meta-cover/anilist/101348",
+        creators: ["Synthetic Studio"],
+        genres: ["Adventure"],
+        description: "Synthetic description.",
+        seasons: [],
+        runtime_minutes: null,
+        pages: null,
+        external_ids: { anilist: "101348" },
+      })
+    );
+
+    const work = await lookupWork("anilist", "101348");
+    expect(calls[2]?.url).toBe("/api/lookup/work/anilist/101348");
+    expect(work.title).toBe("Synthetic Saga");
+  });
+
+  test("saveArchiveEntry, deleteArchiveEntry, and listArchive use /api/archive", async () => {
+    mockFetch(() =>
+      jsonResponse({
+        entry_id: "entry-1",
+        inserted: 2,
+        units: 2,
+        total_minutes: 1152,
+        estimated: true,
+      })
+    );
+
+    const saveRes = await saveArchiveEntry({
+      entry_id: "entry-1",
+      work: {
+        provider: "manual",
+        category: "anime",
+        title: "Synthetic Saga",
+        year: 2019,
+        creators: [],
+        seasons: [],
+        runtime_minutes: null,
+        pages: null,
+      },
+      consumed: { seasons: [{ number: 1 }, { number: 2 }] },
+      when: { precision: "year", date: "2021" },
+      rating: 9,
+      note: "Great synthetic anime",
+    });
+
+    expect(calls[0]?.url).toBe("/api/archive");
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(saveRes.total_minutes).toBe(1152);
+
+    mockFetch(() => jsonResponse({ deleted: 2, entry_id: "entry-1" }));
+    await deleteArchiveEntry("entry-1");
+    expect(calls[1]?.url).toBe("/api/archive/entry-1/delete");
+    expect(calls[1]?.init?.method).toBe("POST");
+
+    mockFetch(() => jsonResponse([]));
+    await listArchive();
+    await listArchive("anime");
+    expect(calls[2]?.url).toBe("/api/archive");
+    expect(calls[3]?.url).toBe("/api/archive?category=anime");
+  });
+
+  test("getLibrary and getLibraryWork hit /api/library and /api/library/work", async () => {
+    mockFetch(() =>
+      jsonResponse({ categories: [], works: [], total_minutes: 0 })
+    );
+
+    await getLibrary();
+    await getLibrary({ category: "anime", q: "saga", sort: "time" });
+
+    expect(calls[0]?.url).toBe("/api/library");
+    expect(calls[1]?.url).toBe(
+      "/api/library?category=anime&q=saga&sort=time"
+    );
+
+    mockFetch(() =>
+      jsonResponse({
+        key: "anime:synthetic-saga",
+        category: "anime",
+        title: "Synthetic Saga",
+        cover_url: null,
+        total_minutes: 1152,
+        units: 2,
+        first_at: "2021-01-01T12:00:00.000Z",
+        last_at: "2021-12-01T12:00:00.000Z",
+        status: "finished",
+        rating: 9,
+        sources: ["manual"],
+        seasons: [],
+        history: [],
+        note: null,
+      })
+    );
+
+    const detail = await getLibraryWork("anime:synthetic-saga");
+    expect(calls[2]?.url).toBe(
+      "/api/library/work?key=anime%3Asynthetic-saga"
+    );
+    expect(detail.title).toBe("Synthetic Saga");
+  });
+
+  test("getSeries, getMonthReview, getYearReviewV2, and getSettings build exact URLs", async () => {
+    mockFetch(() => jsonResponse({}));
+
+    await getSeries({
+      bucket: "day",
+      from: "2026-09-18",
+      to: "2026-10-17",
+      category: "anime",
+    });
+    await getMonthReview("2026-10");
+    await getYearReviewV2(2026);
+    await getSettings();
+
+    expect(calls[0]?.url).toBe(
+      "/api/series?bucket=day&from=2026-09-18&to=2026-10-17&category=anime"
+    );
+    expect(calls[1]?.url).toBe("/api/review/month?month=2026-10");
+    expect(calls[2]?.url).toBe("/api/review/year?year=2026");
+    expect(calls[3]?.url).toBe("/api/settings");
   });
 });

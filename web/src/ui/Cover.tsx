@@ -1,24 +1,27 @@
 import { useEffect, useState } from "preact/hooks";
 import {
   extractInitials,
-  resolveMediaKind,
+  resolveItemCategory,
+  type Category,
   type MediaKind,
 } from "../lib/ui-helpers";
 import { MediaKindIcon } from "./icons";
 
-export type CoverSize = "xs" | "sm" | "md" | "lg" | "xl";
+export type CoverSize = "xs" | "sm" | "md" | "lg" | "xl" | "fill";
 export type CoverAspect = "square" | "poster" | "wide";
 
 export interface CoverProps {
-  /** Image URL (e.g. `/api/cover/...`), or null/undefined when absent. */
+  /** Image URL (e.g. `/api/cover/...` or `/api/meta-cover/...`), or null/undefined when absent. */
   src?: string | null;
   /** Title used for fallback initials and optional image alt. */
   title?: string | null;
+  /** Canonical v2 category (`anime`, `series`, `film`, `book`, `audiobook`, `youtube`, `podcast`, `music`, `other`). */
+  category?: Category | null;
   /** Event source (`audiobookshelf`, `simkl`, `youtube`, `manual`). */
   source?: string | null;
   /** Event media type (`audiobook`, `movie`, `episode`, `video`, `book`, etc.). */
   mediaType?: string | null;
-  /** Explicit MediaKind override. */
+  /** Legacy MediaKind override. */
   kind?: MediaKind;
   size?: CoverSize;
   aspect?: CoverAspect;
@@ -30,6 +33,7 @@ export interface CoverProps {
 export function Cover({
   src,
   title,
+  category,
   source,
   mediaType,
   kind,
@@ -44,14 +48,21 @@ export function Cover({
     setFailed(false);
   }, [src]);
 
-  const resolvedKind = kind ?? resolveMediaKind(source, mediaType);
+  const resolvedCategory: Category =
+    category ??
+    resolveItemCategory({
+      category,
+      source,
+      media_type: mediaType,
+    });
   const initials = extractInitials(title);
 
   const classes = [
     "ui-cover",
     `ui-cover--${size}`,
     `ui-cover--${aspect}`,
-    `ui-cover--${resolvedKind}`,
+    `ui-cover--cat-${resolvedCategory}`,
+    kind ? `ui-cover--${kind}` : "",
     className ?? "",
   ]
     .filter(Boolean)
@@ -71,7 +82,8 @@ export function Cover({
         <div class="ui-cover-fallback" aria-hidden="true">
           <span class="ui-cover-icon">
             <MediaKindIcon
-              kind={resolvedKind}
+              category={resolvedCategory}
+              kind={kind}
               source={source}
               mediaType={mediaType}
             />

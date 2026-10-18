@@ -4,6 +4,7 @@ import {
   type CalendarDay,
   type CalendarItem,
   type CalendarResult,
+  type Category,
 } from "../api";
 import {
   buildMonthGrid,
@@ -17,20 +18,25 @@ import {
   formatDateTime,
   formatLocalDay,
 } from "../lib/format-date";
-import { SOURCES, sourceLabel } from "../lib/sources";
+import { sourceLabel } from "../lib/sources";
 import { formatMinutes } from "../lib/stats";
 import {
-  MEDIA_KINDS,
-  computeDayIntensity,
-  pickDayPreviewItems,
-  resolveMediaKind,
-  summarizeCalendarMonth,
-  type MediaKind,
+  CATEGORIES,
+  categoryCssColor,
+  categoryLabel,
+  categoryPluralLabel,
+  resolveCalendarWorkTitle,
+  resolveItemCategory,
+  summarizeCalendarMonthV2,
+  summarizeDayCellV2,
 } from "../lib/ui-helpers";
 import {
+  AddIcon,
   Badge,
   Button,
   Card,
+  CategoryIcon,
+  CategoryShareChart,
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
@@ -38,30 +44,35 @@ import {
   Cover,
   EmptyState,
   IconButton,
-  MediaKindIcon,
-  SearchIcon,
   Sheet,
   Skeleton,
+  Sparkline,
   Stat,
   Tabs,
   type TabOption,
 } from "../ui";
 
 export interface CalendarProps {
-  /** Optional date in `YYYY-MM-DD` format to open on mount (`#/calendar?date=...`). */
+  /** Optional date in `YYYY-MM-DD` format to select on mount (`#/calendar?date=...`). */
   date?: string;
+  /** Optional month in `YYYY-MM` format. */
+  initialMonth?: string;
+  /** Optional category filter. */
+  initialCategory?: Category;
+  /** Callback to open the Add to Archive flow. */
+  onOpenAdd?: (opts?: { date?: string; category?: Category }) => void;
 }
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
-const SOURCE_TABS: readonly TabOption<string>[] = [
-  { value: "", label: "All Media" },
-  ...SOURCES.map((s) => ({
-    value: s.value,
-    label: s.label,
-    kind: resolveMediaKind(s.value),
-  })),
-];
+const DAY_ITEMS_COLLAPSE_THRESHOLD = 12;
+
+function isMobileViewport(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.innerWidth < 768;
+}
 
 function getCurrentMonth(): string {
   const now = new Date();
@@ -118,6 +129,7 @@ interface DayDetailContentProps {
   dateStr: string;
   day: CalendarDay | undefined;
   onClose?: () => void;
+  onOpenAdd?: (opts?: { date?: string; category?: Category }) => void;
   showHeader?: boolean;
 }
 
@@ -125,11 +137,28 @@ function DayDetailContent({
   dateStr,
   day,
   onClose,
+  onOpenAdd,
   showHeader = true,
 }: DayDetailContentProps) {
   const items = day?.items ?? [];
   const count = day?.count ?? 0;
   const minutes = day?.minutes ?? 0;
+  const [showAllItems, setShowAllItems] = useState(false);
+
+  useEffect(() => {
+    setShowAllItems(false);
+  }, [dateStr]);
+
+  const cellSummary = useMemo(
+    () => summarizeDayCellV2(day, Math.max(minutes, 60), 5),
+    [day, minutes]
+  );
+
+  const visibleItems =
+    !showAllItems && items.length > DAY_ITEMS_COLLAPSE_THRESHOLD
+      ? items.slice(0, DAY_ITEMS_COLLAPSE_THRESHOLD)
+      : items;
+  const hiddenCount = items.length - visibleItems.length;
 
   return (
     <div class="calendar-detail-content">
@@ -151,16 +180,69 @@ function DayDetailContent({
               )}
             </div>
           </div>
-          {onClose && (
-            <IconButton
-              label="Close day detail"
+          <div class="calendar-detail-header-actions">
+            <Button
               variant="ghost"
               size="sm"
-              onClick={onClose}
+              href={`#/add?date=${dateStr}`}
+              onClick={
+                onOpenAdd
+                  ? (e) => {
+                      e.preventDefault();
+                      onOpenAdd({ date: dateStr });
+                    }
+                  : undefined
+              }
+              leadingIcon={<AddIcon size={14} />}
             >
-              <CloseIcon size={18} />
-            </IconButton>
-          )}
+              Add
+            </Button>
+            {onClose && (
+              <IconButton
+                label="Close day detail"
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+              >
+                <CloseIcon size={18} />
+              </IconButton>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Day Category Breakdown Bar when items exist */}
+      {cellSummary.categorySegments.length > 0 && (
+        <div class="calendar-detail-cat-strip">
+          <div class="calendar-detail-cat-bar" aria-hidden="true">
+            {cellSummary.categorySegments.map((seg) => (
+              <span
+                key={seg.category}
+                class="calendar-detail-cat-seg"
+                style={{
+                  width: `${Math.max(4, seg.sharePct)}%`,
+                  backgroundColor: categoryCssColor(seg.category),
+                }}
+              />
+            ))}
+          </div>
+          <div class="calendar-detail-cat-pills">
+            {cellSummary.categorySegments.map((seg) => (
+              <span
+                key={seg.category}
+                class="calendar-detail-cat-pill tabular-nums"
+              >
+                <span
+                  class={`ui-tab-dot ui-tab-dot--${seg.category}`}
+                  aria-hidden="true"
+                />
+                {categoryLabel(seg.category)}:{" "}
+                {seg.minutes > 0
+                  ? formatMinutes(seg.minutes)
+                  : `${seg.count}×`}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -168,102 +250,139 @@ function DayDetailContent({
         <EmptyState
           compact
           title="Nothing logged on this day"
-          description="Select another date on the calendar or add a manual entry for this day."
+          description="Select another date on the calendar or add an entry for this day."
           actions={
-            <Button variant="secondary" size="sm" href="#/add">
-              Log an entry
+            <Button
+              variant="secondary"
+              size="sm"
+              href={`#/add?date=${dateStr}`}
+              onClick={
+                onOpenAdd
+                  ? (e) => {
+                      e.preventDefault();
+                      onOpenAdd({ date: dateStr });
+                    }
+                  : undefined
+              }
+              leadingIcon={<AddIcon size={15} />}
+            >
+              Add to archive
             </Button>
           }
         />
       ) : (
-        <ul class="calendar-item-list">
-          {items.map((item) => {
-            const fullTitle = formatItemTitle(item);
-            const searchTarget = item.parent_title ?? item.title ?? "";
-            const searchHref = searchTarget
-              ? `#/search?q=${encodeURIComponent(searchTarget)}`
-              : "#/search";
-            const timeLabel = resolveItemLocalTime(item);
+        <>
+          <ul class="calendar-item-list">
+            {visibleItems.map((item) => {
+              const cat = resolveItemCategory(item);
+              const fullTitle = formatItemTitle(item);
+              const workTitle = resolveCalendarWorkTitle(item);
+              const libraryHref = workTitle
+                ? `#/library?q=${encodeURIComponent(workTitle)}`
+                : "#/library";
+              const timeLabel = resolveItemLocalTime(item);
 
-            return (
-              <li key={item.id} class="calendar-item-row">
-                <Cover
-                  src={item.cover_url}
-                  title={item.title ?? item.parent_title}
-                  source={item.source}
-                  mediaType={item.media_type}
-                  size="md"
-                  aspect="square"
-                />
-                <div class="calendar-item-body">
-                  {item.parent_title && (
-                    <div class="calendar-item-parent">{item.parent_title}</div>
-                  )}
-                  <a class="calendar-item-title-link" href={searchHref}>
-                    {fullTitle}
-                  </a>
-                  <div class="calendar-item-meta">
-                    <Badge
-                      size="sm"
-                      source={item.source}
-                      mediaType={item.media_type}
-                      icon={
-                        <MediaKindIcon
-                          source={item.source}
-                          mediaType={item.media_type}
-                          size={11}
-                        />
-                      }
-                    >
-                      {sourceLabel(item.source)}
-                    </Badge>
-
-                    {timeLabel && (
-                      <span
-                        class={
-                          item.time_uncertain
-                            ? "calendar-item-time calendar-item-time--uncertain"
-                            : "calendar-item-time"
-                        }
-                        title={
-                          item.time_uncertain
-                            ? "Played offline and synced later. The day is the sync day; the time of day is unknown."
-                            : undefined
-                        }
+              return (
+                <li key={item.id} class="calendar-item-row">
+                  <Cover
+                    src={item.cover_url}
+                    title={item.title ?? item.parent_title}
+                    category={cat}
+                    source={item.source}
+                    mediaType={item.media_type}
+                    size="md"
+                    aspect="square"
+                  />
+                  <div class="calendar-item-body">
+                    {item.parent_title && (
+                      <div
+                        class="calendar-item-parent"
+                        title={item.parent_title}
                       >
-                        <ClockIcon size={12} />
-                        {item.time_uncertain
-                          ? `synced ${timeLabel} (offline)`
-                          : timeLabel}
-                      </span>
+                        {item.parent_title}
+                      </div>
                     )}
+                    <a
+                      class="calendar-item-title-link"
+                      href={libraryHref}
+                      title={fullTitle}
+                    >
+                      {fullTitle}
+                    </a>
+                    <div class="calendar-item-meta">
+                      <Badge
+                        size="sm"
+                        category={cat}
+                        icon={<CategoryIcon category={cat} size={11} />}
+                      >
+                        {categoryLabel(cat)}
+                      </Badge>
 
-                    {item.duration_seconds !== null &&
-                      item.duration_seconds !== undefined &&
-                      item.duration_seconds > 0 && (
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span>{formatDuration(item.duration_seconds)}</span>
-                        </>
+                      {timeLabel && (
+                        <span
+                          class={
+                            item.time_uncertain
+                              ? "calendar-item-time calendar-item-time--uncertain"
+                              : "calendar-item-time"
+                          }
+                          title={
+                            item.time_uncertain
+                              ? "Played offline and synced later. The day is the sync day; the time of day is unknown."
+                              : undefined
+                          }
+                        >
+                          <ClockIcon size={12} />
+                          {item.time_uncertain
+                            ? `synced ${timeLabel} (offline)`
+                            : timeLabel}
+                        </span>
                       )}
-                  </div>
-                  {item.also_from && item.also_from.length > 0 && (
-                    <div class="calendar-item-dedup">
-                      Also logged via{" "}
-                      {item.also_from.map((src) => sourceLabel(src)).join(", ")}
+
+                      {item.duration_seconds !== null &&
+                        item.duration_seconds !== undefined &&
+                        item.duration_seconds > 0 && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span>{formatDuration(item.duration_seconds)}</span>
+                          </>
+                        )}
                     </div>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                    {item.also_from && item.also_from.length > 0 && (
+                      <div class="calendar-item-dedup">
+                        Also logged via{" "}
+                        {item.also_from
+                          .map((src) => sourceLabel(src))
+                          .join(", ")}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {hiddenCount > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              fullWidth
+              onClick={() => setShowAllItems(true)}
+            >
+              Show all {items.length} entries (+{hiddenCount} more)
+            </Button>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-export function Calendar({ date }: CalendarProps = {}) {
+export function Calendar({
+  date,
+  initialMonth,
+  initialCategory,
+  onOpenAdd,
+}: CalendarProps = {}) {
   const currentMonth = getCurrentMonth();
   const today = getTodayDate();
 
@@ -271,10 +390,15 @@ export function Calendar({ date }: CalendarProps = {}) {
     if (date && /^\d{4}-\d{2}/.test(date)) {
       return date.slice(0, 7);
     }
+    if (initialMonth && /^\d{4}-\d{2}$/.test(initialMonth)) {
+      return initialMonth;
+    }
     return currentMonth;
   });
 
-  const [sourceFilter, setSourceFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<Category | "">(
+    initialCategory ?? ""
+  );
 
   const [selectedDate, setSelectedDate] = useState<string | null>(() => {
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -283,9 +407,8 @@ export function Calendar({ date }: CalendarProps = {}) {
     return today;
   });
 
-  const [mobileSheetOpen, setMobileSheetOpen] = useState<boolean>(() =>
-    Boolean(date && /^\d{4}-\d{2}-\d{2}$/.test(date))
-  );
+  // Never open the modal sheet on desktop (`>= 768px`) when arriving via `?date=`.
+  const [mobileSheetOpen, setMobileSheetOpen] = useState<boolean>(false);
 
   const [data, setData] = useState<CalendarResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -296,17 +419,28 @@ export function Calendar({ date }: CalendarProps = {}) {
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
       setMonth(date.slice(0, 7));
       setSelectedDate(date);
-      setMobileSheetOpen(true);
+      // On desktop, select the day in the side panel without opening a modal over it.
+      if (isMobileViewport()) {
+        setMobileSheetOpen(true);
+      } else {
+        setMobileSheetOpen(false);
+      }
     }
   }, [date]);
 
-  // Fetch calendar data when month or source filter changes.
+  useEffect(() => {
+    if (initialCategory !== undefined) {
+      setCategoryFilter(initialCategory);
+    }
+  }, [initialCategory]);
+
+  // Fetch calendar data when month changes.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    getCalendar(month, sourceFilter || undefined)
+    getCalendar(month)
       .then((res) => {
         if (!cancelled) {
           setData(res);
@@ -323,22 +457,73 @@ export function Calendar({ date }: CalendarProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [month, sourceFilter]);
+  }, [month]);
+
+  // Filter days by selected category if active
+  const filteredDays = useMemo<CalendarDay[]>(() => {
+    const rawDays = data?.days ?? [];
+    if (!categoryFilter) {
+      return rawDays;
+    }
+    return rawDays.map((d) => {
+      const matchingItems = (d.items ?? []).filter(
+        (it) => resolveItemCategory(it) === categoryFilter
+      );
+      const min = matchingItems.reduce((acc, it) => {
+        const sec = it.duration_seconds ?? 0;
+        return acc + (sec > 0 ? sec / 60 : 0);
+      }, 0);
+      return {
+        date: d.date,
+        count: matchingItems.length,
+        minutes: Math.round(min),
+        items: matchingItems,
+      };
+    });
+  }, [data, categoryFilter]);
 
   const daysMap = useMemo(() => {
     const map = new Map<string, CalendarDay>();
-    if (data?.days) {
-      for (const d of data.days) {
-        map.set(d.date, d);
-      }
+    for (const d of filteredDays) {
+      map.set(d.date, d);
     }
     return map;
-  }, [data]);
+  }, [filteredDays]);
 
-  const monthSummary = useMemo(
-    () => summarizeCalendarMonth(data?.days ?? [], month),
+  // Unfiltered month summary for the category tabs/share bar
+  const fullMonthSummary = useMemo(
+    () => summarizeCalendarMonthV2(data?.days ?? [], month),
     [data, month]
   );
+
+  // Filtered month summary for the active view
+  const monthSummary = useMemo(
+    () => summarizeCalendarMonthV2(filteredDays, month),
+    [filteredDays, month]
+  );
+
+  const categoryTabs = useMemo<TabOption<Category | "">[]>(() => {
+    const presentCats = new Set(
+      fullMonthSummary.categories.map((c) => c.category)
+    );
+    const ordered = CATEGORIES.filter(
+      (c) => presentCats.has(c) || c === categoryFilter
+    );
+    return [
+      { value: "", label: "All Categories" },
+      ...ordered.map((cat) => {
+        const entry = fullMonthSummary.categories.find(
+          (c) => c.category === cat
+        );
+        return {
+          value: cat,
+          label: categoryPluralLabel(cat),
+          category: cat,
+          count: entry ? entry.units : undefined,
+        };
+      }),
+    ];
+  }, [fullMonthSummary.categories, categoryFilter]);
 
   const weeks = useMemo(() => {
     try {
@@ -353,16 +538,18 @@ export function Calendar({ date }: CalendarProps = {}) {
     if (!selectedDate || !selectedDate.startsWith(month)) {
       if (today.startsWith(month)) {
         setSelectedDate(today);
-      } else if (data?.days && data.days.length > 0) {
-        const lastActive = [...data.days]
-          .filter((d) => d.date.startsWith(month) && (d.count > 0 || d.minutes > 0))
+      } else if (filteredDays.length > 0) {
+        const lastActive = [...filteredDays]
+          .filter(
+            (d) => d.date.startsWith(month) && (d.count > 0 || d.minutes > 0)
+          )
           .sort((a, b) => b.date.localeCompare(a.date))[0];
         setSelectedDate(lastActive ? lastActive.date : `${month}-01`);
       } else {
         setSelectedDate(`${month}-01`);
       }
     }
-  }, [month, data, today, selectedDate]);
+  }, [month, filteredDays, today, selectedDate]);
 
   const handlePrevMonth = () => {
     setMonth((m) => shiftMonth(m, -1));
@@ -386,14 +573,12 @@ export function Calendar({ date }: CalendarProps = {}) {
       setMonth(cellDate.slice(0, 7));
     }
     setSelectedDate(cellDate);
-    setMobileSheetOpen(true);
+    if (isMobileViewport()) {
+      setMobileSheetOpen(true);
+    }
   };
 
   const selectedDay = selectedDate ? daysMap.get(selectedDate) : undefined;
-
-  const activeKinds = (["audiobook", "film", "youtube", "manual"] as const).filter(
-    (k) => monthSummary.byKind[k].count > 0
-  );
 
   return (
     <section class="page-container calendar-page" aria-label="Calendar">
@@ -401,12 +586,15 @@ export function Calendar({ date }: CalendarProps = {}) {
       <header class="calendar-toolbar">
         <div class="calendar-toolbar-top">
           <div class="calendar-title-block">
-            <h1 class="calendar-month-heading">{formatMonthTitle(month)}</h1>
-            {loading && (
-              <span class="calendar-loading-pill" role="status">
-                Updating…
-              </span>
-            )}
+            <span class="page-eyebrow">Daily Log & Archive</span>
+            <div class="calendar-title-row">
+              <h1 class="calendar-month-heading">{formatMonthTitle(month)}</h1>
+              {loading && (
+                <span class="calendar-loading-pill" role="status">
+                  Updating…
+                </span>
+              )}
+            </div>
           </div>
 
           <div
@@ -414,15 +602,6 @@ export function Calendar({ date }: CalendarProps = {}) {
             role="toolbar"
             aria-label="Month navigation"
           >
-            <Button
-              variant="ghost"
-              size="sm"
-              href="#/search"
-              leadingIcon={<SearchIcon size={15} />}
-            >
-              Search
-            </Button>
-
             <div class="calendar-month-stepper">
               <IconButton
                 label="Previous month"
@@ -448,18 +627,40 @@ export function Calendar({ date }: CalendarProps = {}) {
                 <ChevronRightIcon size={18} />
               </IconButton>
             </div>
+
+            <Button
+              variant="primary"
+              size="sm"
+              href="#/add"
+              onClick={
+                onOpenAdd
+                  ? (e) => {
+                      e.preventDefault();
+                      onOpenAdd({
+                        date: selectedDate ?? undefined,
+                        category: categoryFilter || undefined,
+                      });
+                    }
+                  : undefined
+              }
+              leadingIcon={<AddIcon size={16} />}
+            >
+              Add
+            </Button>
           </div>
         </div>
 
-        <div class="calendar-toolbar-filters">
-          <Tabs
-            ariaLabel="Filter calendar by media source"
-            options={SOURCE_TABS}
-            value={sourceFilter}
-            onChange={(val) => setSourceFilter(val)}
-            variant="pills"
-          />
-        </div>
+        {categoryTabs.length > 1 && (
+          <div class="calendar-toolbar-filters">
+            <Tabs
+              ariaLabel="Filter calendar by category"
+              options={categoryTabs}
+              value={categoryFilter}
+              onChange={(val) => setCategoryFilter(val)}
+              variant="pills"
+            />
+          </div>
+        )}
       </header>
 
       {error && (
@@ -477,107 +678,51 @@ export function Calendar({ date }: CalendarProps = {}) {
         </div>
       )}
 
-      {/* Monthly Summary Strip */}
-      <div class="calendar-summary-grid">
-        <Card padding="sm">
+      {/* Compact Month Pulse Strip (Sparkline + Category Share Bar, No Cover Bloat) */}
+      <Card padding="md" class="calendar-pulse-card">
+        <div class="calendar-pulse-grid">
           <Stat
-            label="Time Logged"
+            label="Time This Month"
             value={formatMinutes(monthSummary.totalMinutes)}
+            category={categoryFilter || undefined}
+            sparkline={
+              <Sparkline
+                values={monthSummary.dailyMinutesSeries}
+                category={categoryFilter || undefined}
+                label={`Daily minutes in ${formatMonthTitle(month)}`}
+              />
+            }
             sublabel={
               monthSummary.busiestDay
-                ? `Peak: ${formatMinutes(monthSummary.busiestDay.minutes)} on ${formatLocalDay(
-                    monthSummary.busiestDay.date
-                  )}`
+                ? `Peak: ${formatMinutes(
+                    monthSummary.busiestDay.minutes
+                  )} on ${formatLocalDay(monthSummary.busiestDay.date)}`
                 : "No timed sessions yet"
             }
           />
-        </Card>
-        <Card padding="sm">
-          <Stat
-            label="Entries"
-            value={monthSummary.totalItems}
-            sublabel={
-              monthSummary.featuredItems.length > 0
-                ? `${monthSummary.featuredItems.length} distinct ${
-                    monthSummary.featuredItems.length === 1 ? "work" : "works"
-                  }`
-                : "Across all sources"
-            }
-          />
-        </Card>
-        <Card padding="sm">
-          <Stat
-            label="Active Days"
-            value={monthSummary.activeDays}
-            sublabel={`In ${formatMonthTitle(month)}`}
-          />
-        </Card>
-        <Card padding="sm">
-          <div class="ui-stat">
-            <span class="ui-stat-label">By Media Kind</span>
-            {activeKinds.length === 0 ? (
-              <div class="ui-stat-sublabel">No activity recorded this month</div>
-            ) : (
-              <div class="calendar-kind-pills">
-                {activeKinds.map((kind) => {
-                  const info = monthSummary.byKind[kind];
-                  return (
-                    <Badge
-                      key={kind}
-                      variant={kind}
-                      size="sm"
-                      icon={<MediaKindIcon kind={kind} size={11} />}
-                    >
-                      {MEDIA_KINDS[kind].shortLabel}: {info.count}
-                    </Badge>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </Card>
-      </div>
 
-      {/* Cover-First Showcase Shelf: Works Consumed This Month */}
-      {monthSummary.featuredItems.length > 0 && (
-        <Card padding="md" class="calendar-shelf-card">
-          <div class="calendar-shelf-header">
-            <h2 class="calendar-shelf-title">On Your Shelf This Month</h2>
-            <span class="calendar-shelf-subtitle">
-              Select a cover to inspect that day
-            </span>
-          </div>
-          <div class="calendar-shelf-scroll">
-            {monthSummary.featuredItems.map((work) => (
-              <button
-                key={`${work.source}:${work.title}`}
-                type="button"
-                class="calendar-shelf-item"
-                onClick={() => handleDaySelect(work.date)}
-                title={`${work.title} (${formatLocalDay(work.date)})`}
-              >
-                <Cover
-                  src={work.coverUrl}
-                  title={work.title}
-                  source={work.source}
-                  mediaType={work.mediaType}
-                  kind={work.kind}
-                  size="lg"
-                  aspect="square"
-                />
-                <span class="calendar-shelf-item-title">{work.title}</span>
-                <span class="calendar-shelf-item-meta">
-                  {work.totalMinutes >= 1
-                    ? formatMinutes(work.totalMinutes)
-                    : `${work.sessionCount}×`}
-                </span>
-              </button>
-            ))}
-          </div>
-        </Card>
-      )}
+          <Stat
+            label="Active Rhythm"
+            value={`${monthSummary.activeDays} / ${monthSummary.daysInMonth}d`}
+            sublabel={`${monthSummary.totalItems} ${
+              monthSummary.totalItems === 1 ? "entry" : "entries"
+            } logged`}
+          />
 
-      {/* Main Calendar Workspace: 7-col Month Grid + Desktop Side Panel */}
+          <div class="calendar-pulse-share">
+            <span class="ui-stat-label">Category Breakdown</span>
+            <CategoryShareChart
+              categories={fullMonthSummary.categories}
+              selectedCategory={categoryFilter}
+              onSelectCategory={(cat) => setCategoryFilter(cat)}
+              compact
+              title={`Category share for ${formatMonthTitle(month)}`}
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* Main Calendar Workspace: 7-col Cover-Free Month Grid + Desktop Side Panel */}
       <div class="calendar-workspace">
         <div class="calendar-board">
           <div class="calendar-weekdays" aria-hidden="true">
@@ -593,7 +738,7 @@ export function Calendar({ date }: CalendarProps = {}) {
               {Array.from({ length: 5 }).map((_, wIdx) => (
                 <div key={wIdx} class="calendar-week-row">
                   {Array.from({ length: 7 }).map((__, dIdx) => (
-                    <Skeleton key={dIdx} height={88} />
+                    <Skeleton key={dIdx} height={84} />
                   ))}
                 </div>
               ))}
@@ -611,36 +756,16 @@ export function Calendar({ date }: CalendarProps = {}) {
                     const isToday = cellDate === today;
                     const isSelected = cellDate === selectedDate;
                     const dayData = daysMap.get(cellDate);
-                    const count = dayData?.count ?? 0;
-                    const minutes = dayData?.minutes ?? 0;
                     const dayNum = Number(cellDate.slice(8, 10));
 
-                    const intensity = isCurrentMonth
-                      ? computeDayIntensity(
-                          minutes,
-                          count,
-                          monthSummary.maxDayMinutes
-                        )
-                      : 0;
-
-                    const previewItems = dayData
-                      ? pickDayPreviewItems(dayData.items, 3)
-                      : [];
-                    const overflowCount = Math.max(
-                      0,
-                      count - previewItems.length
+                    const cellSummary = summarizeDayCellV2(
+                      dayData,
+                      monthSummary.maxDayMinutes,
+                      2
                     );
-
-                    // Unique kinds present on this day for the bottom accent bar
-                    const dayKinds: MediaKind[] = dayData
-                      ? Array.from(
-                          new Set(
-                            dayData.items.map((it) =>
-                              resolveMediaKind(it.source, it.media_type)
-                            )
-                          )
-                        )
-                      : [];
+                    const count = cellSummary.count;
+                    const minutes = cellSummary.minutes;
+                    const intensity = isCurrentMonth ? cellSummary.intensity : 0;
 
                     const classNames = [
                       "calendar-day",
@@ -657,7 +782,7 @@ export function Calendar({ date }: CalendarProps = {}) {
                       count > 0
                         ? `, ${count} ${
                             count === 1 ? "item" : "items"
-                          }, ${Math.round(minutes)} minutes`
+                          }, ${minutes} minutes`
                         : ", no activity"
                     }`;
 
@@ -684,33 +809,54 @@ export function Calendar({ date }: CalendarProps = {}) {
 
                         {count > 0 && (
                           <div class="calendar-day-media" aria-hidden="true">
-                            <div class="calendar-day-covers">
-                              {previewItems.map((it) => (
-                                <Cover
-                                  key={it.id}
-                                  src={it.cover_url}
-                                  title={it.title ?? it.parent_title}
-                                  source={it.source}
-                                  mediaType={it.media_type}
-                                  size="xs"
-                                  aspect="square"
-                                />
-                              ))}
-                              {overflowCount > 0 && (
-                                <span class="calendar-day-more">
-                                  +{overflowCount}
-                                </span>
-                              )}
-                            </div>
-
-                            {dayKinds.length > 0 && (
-                              <div class="calendar-day-dots">
-                                {dayKinds.map((k) => (
-                                  <span
-                                    key={k}
-                                    class={`calendar-day-dot calendar-day-dot--${k}`}
-                                  />
+                            {/* Desktop/Tablet Title Previews (No cover thumbnails inside cells!) */}
+                            {cellSummary.workTitles.length > 0 && (
+                              <div class="calendar-day-titles">
+                                {cellSummary.workTitles.map((w, idx) => (
+                                  <div
+                                    key={`${w.category}-${idx}`}
+                                    class="calendar-day-title-row"
+                                  >
+                                    <span
+                                      class={`ui-tab-dot ui-tab-dot--${w.category}`}
+                                    />
+                                    <span class="calendar-day-title-text">
+                                      {w.title}
+                                    </span>
+                                  </div>
                                 ))}
+                                {cellSummary.overflowWorks > 0 && (
+                                  <span class="calendar-day-more">
+                                    +{cellSummary.overflowWorks} more
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Proportional Category Time Bar at bottom of cell */}
+                            {cellSummary.categorySegments.length > 0 && (
+                              <div class="calendar-day-bar-track">
+                                <div
+                                  class="calendar-day-bar-fill"
+                                  style={{
+                                    width: `${Math.round(
+                                      cellSummary.barWidthRatio * 100
+                                    )}%`,
+                                  }}
+                                >
+                                  {cellSummary.categorySegments.map((seg) => (
+                                    <span
+                                      key={seg.category}
+                                      class="calendar-day-bar-seg"
+                                      style={{
+                                        width: `${Math.max(8, seg.sharePct)}%`,
+                                        backgroundColor: categoryCssColor(
+                                          seg.category
+                                        ),
+                                      }}
+                                    />
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -723,7 +869,7 @@ export function Calendar({ date }: CalendarProps = {}) {
             </div>
           )}
 
-          {/* Intensity & Kind Legend */}
+          {/* Intensity & Timezone Legend */}
           <div class="calendar-legend" aria-hidden="true">
             <div class="calendar-legend-scale">
               <span>Less</span>
@@ -748,6 +894,7 @@ export function Calendar({ date }: CalendarProps = {}) {
               <DayDetailContent
                 dateStr={selectedDate}
                 day={selectedDay}
+                onOpenAdd={onOpenAdd}
                 onClose={() => setSelectedDate(null)}
               />
             </div>
@@ -755,23 +902,24 @@ export function Calendar({ date }: CalendarProps = {}) {
         )}
       </div>
 
-      {/* Tablet Inline Detail Card (768px .. 1023px) */}
+      {/* Inline Detail Card (< 1024px) so selected day is always visible below the calendar */}
       {selectedDate && (
         <section
-          class="calendar-detail-tablet"
+          class="calendar-detail-inline"
           aria-label="Selected day details"
         >
           <div class="calendar-detail-card">
             <DayDetailContent
               dateStr={selectedDate}
               day={selectedDay}
+              onOpenAdd={onOpenAdd}
               onClose={() => setSelectedDate(null)}
             />
           </div>
         </section>
       )}
 
-      {/* Phone Bottom Sheet (< 768px) */}
+      {/* Phone Bottom Sheet (< 768px, only opened on explicit tap) */}
       {selectedDate && (
         <Sheet
           open={mobileSheetOpen}
@@ -792,6 +940,7 @@ export function Calendar({ date }: CalendarProps = {}) {
           <DayDetailContent
             dateStr={selectedDate}
             day={selectedDay}
+            onOpenAdd={onOpenAdd}
             showHeader={false}
           />
         </Sheet>

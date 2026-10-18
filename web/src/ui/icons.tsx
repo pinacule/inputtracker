@@ -1,4 +1,10 @@
-import { resolveMediaKind, type MediaKind, type Route } from "../lib/ui-helpers";
+import {
+  resolveItemCategory,
+  type Category,
+  type MediaKind,
+  type Route,
+} from "../lib/ui-helpers";
+import type { AppRoute } from "../lib/router";
 
 export interface IconProps {
   size?: number;
@@ -42,7 +48,7 @@ export function CalendarIcon(props: IconProps) {
   );
 }
 
-export function ProgressIcon(props: IconProps) {
+export function LibraryIcon(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -51,6 +57,8 @@ export function ProgressIcon(props: IconProps) {
     </Svg>
   );
 }
+
+export const ProgressIcon = LibraryIcon;
 
 export function HeatmapIcon(props: IconProps) {
   return (
@@ -63,7 +71,7 @@ export function HeatmapIcon(props: IconProps) {
   );
 }
 
-export function StatsIcon(props: IconProps) {
+export function InsightsIcon(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M4 20h16" />
@@ -73,6 +81,8 @@ export function StatsIcon(props: IconProps) {
     </Svg>
   );
 }
+
+export const StatsIcon = InsightsIcon;
 
 export function ImportExportIcon(props: IconProps) {
   return (
@@ -93,7 +103,7 @@ export function AddIcon(props: IconProps) {
   );
 }
 
-export function YearIcon(props: IconProps) {
+export function ReviewIcon(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M12 2l2.4 5.2L20 8l-4 4 .9 5.6L12 15l-4.9 2.6.9-5.6-4-4 5.6-.8L12 2z" />
@@ -101,11 +111,22 @@ export function YearIcon(props: IconProps) {
   );
 }
 
+export const YearIcon = ReviewIcon;
+
 export function SearchIcon(props: IconProps) {
   return (
     <Svg {...props}>
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" />
+    </Svg>
+  );
+}
+
+export function SettingsIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </Svg>
   );
 }
@@ -120,7 +141,15 @@ export function MoreIcon(props: IconProps) {
   );
 }
 
-/* --- Media / Source Kind Icons --- */
+/* --- Category & Media Kind Icons --- */
+
+export function AnimeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 2.5 14.4 9l6.6 2.4-6.6 2.4L12 20.5l-2.4-6.7L3 11.4 9.6 9 12 2.5z" />
+    </Svg>
+  );
+}
 
 export function AudiobookIcon(props: IconProps) {
   return (
@@ -249,40 +278,126 @@ export function SparkleIcon(props: IconProps) {
   );
 }
 
+export function CheckIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M20 6 9 17l-5-5" />
+    </Svg>
+  );
+}
+
+export function EditIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </Svg>
+  );
+}
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M10 11v6M14 11v6" />
+    </Svg>
+  );
+}
+
+export function SunIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+    </Svg>
+  );
+}
+
+export function MoonIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </Svg>
+  );
+}
+
 /* --- Composite Icon Pickers --- */
 
-export function RouteIcon({ route, size = 20, class: className }: { route: Route } & IconProps) {
+export function RouteIcon({
+  route,
+  size = 20,
+  class: className,
+}: { route: Route | AppRoute } & IconProps) {
   switch (route) {
     case "calendar":
       return <CalendarIcon size={size} class={className} />;
     case "progress":
-      return <ProgressIcon size={size} class={className} />;
+    case "library":
+      return <LibraryIcon size={size} class={className} />;
     case "heatmap":
       return <HeatmapIcon size={size} class={className} />;
     case "stats":
-      return <StatsIcon size={size} class={className} />;
+    case "insights":
+      return <InsightsIcon size={size} class={className} />;
     case "importexport":
       return <ImportExportIcon size={size} class={className} />;
+    case "settings":
+      return <SettingsIcon size={size} class={className} />;
     case "add":
       return <AddIcon size={size} class={className} />;
     case "year":
-      return <YearIcon size={size} class={className} />;
+    case "review":
+      return <ReviewIcon size={size} class={className} />;
     case "search":
       return <SearchIcon size={size} class={className} />;
   }
 }
 
+export function CategoryIcon({
+  category,
+  size = 16,
+  class: className,
+}: { category: Category } & IconProps) {
+  switch (category) {
+    case "anime":
+      return <AnimeIcon size={size} class={className} />;
+    case "series":
+      return <TvIcon size={size} class={className} />;
+    case "film":
+      return <FilmIcon size={size} class={className} />;
+    case "book":
+      return <BookIcon size={size} class={className} />;
+    case "audiobook":
+      return <AudiobookIcon size={size} class={className} />;
+    case "youtube":
+      return <YoutubeIcon size={size} class={className} />;
+    case "podcast":
+      return <PodcastIcon size={size} class={className} />;
+    case "music":
+      return <MusicIcon size={size} class={className} />;
+    case "other":
+      return <ManualIcon size={size} class={className} />;
+  }
+}
+
 export function MediaKindIcon({
+  category,
   kind,
   source,
   mediaType,
   size = 16,
   class: className,
 }: {
+  category?: Category | null;
   kind?: MediaKind;
   source?: string | null;
   mediaType?: string | null;
 } & IconProps) {
+  if (category) {
+    return <CategoryIcon category={category} size={size} class={className} />;
+  }
   const m = (mediaType ?? "").toLowerCase().trim();
   if (m === "podcast" || m === "podcast_episode") {
     return <PodcastIcon size={size} class={className} />;
@@ -297,15 +412,22 @@ export function MediaKindIcon({
     return <BookIcon size={size} class={className} />;
   }
 
-  const resolved = kind ?? resolveMediaKind(source, mediaType);
-  switch (resolved) {
-    case "audiobook":
-      return <AudiobookIcon size={size} class={className} />;
-    case "youtube":
-      return <YoutubeIcon size={size} class={className} />;
-    case "film":
-      return <FilmIcon size={size} class={className} />;
-    case "manual":
-      return <ManualIcon size={size} class={className} />;
+  if (kind) {
+    switch (kind) {
+      case "audiobook":
+        return <AudiobookIcon size={size} class={className} />;
+      case "youtube":
+        return <YoutubeIcon size={size} class={className} />;
+      case "film":
+        return <FilmIcon size={size} class={className} />;
+      case "manual":
+        return <ManualIcon size={size} class={className} />;
+    }
   }
+
+  const resolvedCat = resolveItemCategory({
+    source,
+    media_type: mediaType,
+  });
+  return <CategoryIcon category={resolvedCat} size={size} class={className} />;
 }

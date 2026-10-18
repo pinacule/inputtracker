@@ -5,7 +5,23 @@
  * No DOM dependencies; safe to run under Bun or in the browser.
  */
 
-import type { CalendarDay, CalendarItem } from "../api";
+import type { CalendarDay, CalendarItem, Category, CategoryTotal } from "../api";
+import { CATEGORIES, resolveItemCategory } from "./categories";
+
+export {
+  CATEGORIES,
+  CATEGORY_META,
+  categoryColor,
+  categoryCssColor,
+  categoryLabel,
+  categoryOf,
+  categoryPluralLabel,
+  formatCategoryUnits,
+  isCategory,
+  resolveItemCategory,
+  type Category,
+  type CategoryMeta,
+} from "./categories";
 
 // --- Media / Source Kind ---------------------------------------------------
 
@@ -575,3 +591,286 @@ export function parseHash(hash: string): ParsedRoute {
 
   return { route, date, year, q, hitKey };
 }
+
+// --- V2 Category-First Calendar Cell & Month Summaries ---------------------
+
+export interface DayCategorySegment {
+  readonly category: Category;
+  readonly minutes: number;
+  readonly count: number;
+  readonly sharePct: number;
+}
+
+export interface DayWorkPreview {
+  readonly title: string;
+  readonly category: Category;
+  readonly minutes: number;
+  readonly count: number;
+}
+
+export interface DayCellSummaryV2 {
+  readonly count: number;
+  readonly minutes: number;
+  readonly intensity: IntensityLevel;
+  /** Overall bar width ratio (0..1) relative to the month's peak day. */
+  readonly barWidthRatio: number;
+  readonly categorySegments: readonly DayCategorySegment[];
+  readonly workTitles: readonly DayWorkPreview[];
+  readonly overflowWorks: number;
+}
+
+/**
+ * Resolves the work/group title for a calendar item (e.g., show name for an episode,
+ * channel for a YouTube video when parent_title exists, or item title).
+ */
+export function resolveCalendarWorkTitle(item: CalendarItem): string {
+  const cat = resolveItemCategory(item);
+  if (
+    (cat === "anime" ||
+      cat === "series" ||
+      cat === "podcast" ||
+      item.media_type === "episode") &&
+    item.parent_title &&
+    item.parent_title.trim() !== ""
+  ) {
+    return item.parent_title.trim();
+  }
+  return (item.title ?? item.parent_title ?? "Untitled").trim() || "Untitled";
+}
+
+/**
+ * Summarizes one calendar day into a compact, cover-free cell representation:
+ * category time segments (for the bottom proportional bar) + deduplicated work
+ * titles with category dots (for desktop cells).
+ */
+export function summarizeDayCellV2(
+  day: CalendarDay | undefined,
+  maxMonthMinutes: number,
+  maxPreviews = 2
+): DayCellSummaryV2 {
+  const count = Math.max(0, day?.count ?? 0);
+  const minutes = Math.max(0, day?.minutes ?? 0);
+  const items = day?.items ?? [];
+
+  if (count === 0 && minutes === 0 && items.length === 0) {
+    return {
+      count: 0,
+      minutes: 0,
+      intensity: 0,
+      barWidthRatio: 0,
+      categorySegments: [],
+      workTitles: [],
+      overflowWorks: 0,
+    };
+  }
+
+  const intensity = computeDayIntensity(minutes, count, maxMonthMinutes);
+  const effectiveMax = Math.max(maxMonthMinutes, 60);
+  const barWidthRatio =
+    minutes > 0
+      ? Math.max(0.22, Math.min(1, minutes / effectiveMax))
+      : Math.max(0.22, Math.min(1, count / 10));
+
+  const catTotals = new Map<Category, { minutes: number; count: number }>();
+  const worksMap = new Map<
+    string,
+    { title: string; category: Category; minutes: number; count: number }
+  >();
+
+  for (const item of items) {
+    const cat = resolveItemCategory(item);
+    const durMin =
+      item.duration_seconds !== null &&
+      item.duration_seconds !== undefined &&
+      item.duration_seconds > 0
+        ? item.duration_seconds / 60
+        : 0;
+
+    const existingCat = catTotals.get(cat);
+    if (existingCat) {
+      existingCat.minutes += durMin;
+      existingCat.count += 1;
+    } else {
+      catTotals.set(cat, { minutes: durMin, count: 1 });
+    }
+
+    const workTitle =
+      cat === "youtube" && item.parent_title
+        ? item.parent_title.trim()
+        : resolveCalendarWorkTitle(item);
+    const workKey = `${cat}:${workTitle.toLowerCase()}`;
+    const existingWork = worksMap.get(workKey);
+    if (existingWork) {
+      existingWork.minutes += durMin;
+      existingWork.count += 1;
+    } else {
+      worksMap.set(workKey, {
+        title: workTitle,
+        category: cat,
+        minutes: durMin,
+        count: 1,
+      });
+    }
+  }
+
+  // Compute category segment percentages
+  let totalWeight = 0;
+  const useMinutesWeight = [...catTotals.values()].some((c) => c.minutes > 0);
+  for (const entry of catTotals.values()) {
+    totalWeight += useMinutesWeight
+      ? Math.max(1, entry.minutes)
+      : entry.count;
+  }
+
+  const categorySegments: DayCategorySegment[] = [];
+  for (const cat of CATEGORIES) {
+    const entry = catTotals.get(cat);
+    if (!entry) continue;
+    const weight = useMinutesWeight
+      ? Math.max(1, entry.minutes)
+      : entry.count;
+    const sharePct =
+      totalWeight > 0 ? Math.round((weight / totalWeight) * 1000) / 10 : 0;
+    categorySegments.push({
+      category: cat,
+      minutes: Math.round(entry.minutes),
+      count: entry.count,
+      sharePct,
+    });
+  }
+
+  const sortedWorks = [...worksMap.values()].sort((a, b) => {
+    if (b.minutes !== a.minutes) return b.minutes - a.minutes;
+    if (b.count !== a.count) return b.count - a.count;
+    return a.title.localeCompare(b.title);
+  });
+
+  const workTitles = sortedWorks.slice(0, Math.max(0, maxPreviews)).map((w) => ({
+    title: w.title,
+    category: w.category,
+    minutes: Math.round(w.minutes),
+    count: w.count,
+  }));
+  const overflowWorks = Math.max(0, sortedWorks.length - workTitles.length);
+
+  return {
+    count,
+    minutes: Math.round(minutes),
+    intensity,
+    barWidthRatio: Math.round(barWidthRatio * 100) / 100,
+    categorySegments,
+    workTitles,
+    overflowWorks,
+  };
+}
+
+export interface CalendarMonthSummaryV2 {
+  readonly totalMinutes: number;
+  readonly totalItems: number;
+  readonly activeDays: number;
+  readonly daysInMonth: number;
+  readonly maxDayMinutes: number;
+  readonly busiestDay: { date: string; minutes: number; count: number } | null;
+  readonly dailyMinutesSeries: readonly number[];
+  readonly categories: readonly CategoryTotal[];
+}
+
+/**
+ * Aggregates a month's `CalendarDay[]` by `Category` and produces a daily
+ * minutes array for the month sparkline.
+ */
+export function summarizeCalendarMonthV2(
+  days: readonly CalendarDay[],
+  month: string
+): CalendarMonthSummaryV2 {
+  const mMatch = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month);
+  const yearNum = mMatch ? Number.parseInt(mMatch[1]!, 10) : 2026;
+  const monthNum = mMatch ? Number.parseInt(mMatch[2]!, 10) : 10;
+  const daysInMonth = new Date(Date.UTC(yearNum, monthNum, 0)).getUTCDate();
+
+  const dailyMinutes = Array.from({ length: daysInMonth }, () => 0);
+
+  let totalMinutes = 0;
+  let totalItems = 0;
+  let activeDays = 0;
+  let maxDayMinutes = 0;
+  let busiestDay: { date: string; minutes: number; count: number } | null = null;
+
+  const catMap = new Map<
+    Category,
+    { minutes: number; units: number; works: Set<string> }
+  >();
+
+  for (const day of days) {
+    if (!day.date.startsWith(month)) continue;
+    const dayMin = Math.max(0, day.minutes ?? 0);
+    const dayCount = Math.max(0, day.count ?? 0);
+    const dayIndex = Number.parseInt(day.date.slice(8, 10), 10) - 1;
+    if (dayIndex >= 0 && dayIndex < daysInMonth) {
+      dailyMinutes[dayIndex] = Math.round(dayMin);
+    }
+
+    totalMinutes += dayMin;
+    totalItems += dayCount;
+
+    if (dayCount > 0 || dayMin > 0) {
+      activeDays += 1;
+      if (dayMin > maxDayMinutes) {
+        maxDayMinutes = dayMin;
+      }
+      if (
+        busiestDay === null ||
+        dayMin > busiestDay.minutes ||
+        (dayMin === busiestDay.minutes && dayCount > busiestDay.count)
+      ) {
+        busiestDay = { date: day.date, minutes: Math.round(dayMin), count: dayCount };
+      }
+    }
+
+    for (const item of day.items ?? []) {
+      const cat = resolveItemCategory(item);
+      const itemMin =
+        item.duration_seconds !== null &&
+        item.duration_seconds !== undefined &&
+        item.duration_seconds > 0
+          ? item.duration_seconds / 60
+          : 0;
+      const workTitle = resolveCalendarWorkTitle(item).toLowerCase();
+
+      const existing = catMap.get(cat);
+      if (existing) {
+        existing.minutes += itemMin;
+        existing.units += 1;
+        existing.works.add(workTitle);
+      } else {
+        catMap.set(cat, {
+          minutes: itemMin,
+          units: 1,
+          works: new Set([workTitle]),
+        });
+      }
+    }
+  }
+
+  const categories: CategoryTotal[] = CATEGORIES.map((cat) => {
+    const entry = catMap.get(cat);
+    return {
+      category: cat,
+      total_minutes: Math.round(entry?.minutes ?? 0),
+      works: entry?.works.size ?? 0,
+      units: entry?.units ?? 0,
+    };
+  }).filter((c) => c.total_minutes > 0 || c.units > 0);
+
+  return {
+    totalMinutes: Math.round(totalMinutes),
+    totalItems,
+    activeDays,
+    daysInMonth,
+    maxDayMinutes: Math.round(maxDayMinutes),
+    busiestDay,
+    dailyMinutesSeries: dailyMinutes,
+    categories,
+  };
+}
+

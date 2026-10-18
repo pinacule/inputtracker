@@ -8,6 +8,7 @@ export interface SheetProps {
   onClose: () => void;
   title: ComponentChildren;
   subtitle?: ComponentChildren;
+  size?: "md" | "lg";
   children: ComponentChildren;
   class?: string;
 }
@@ -21,6 +22,7 @@ export function Sheet({
   onClose,
   title,
   subtitle,
+  size = "md",
   children,
   class: className,
 }: SheetProps) {
@@ -51,7 +53,7 @@ export function Sheet({
       }}
     >
       <div
-        class={`ui-sheet ${className ?? ""}`.trim()}
+        class={`ui-sheet ${size === "lg" ? "ui-sheet--lg" : ""} ${className ?? ""}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === "string" ? title : "Details"}

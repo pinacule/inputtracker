@@ -1,0 +1,467 @@
+/**
+ * InputTracker Design System — Hand-Made SVG Charts & Rating Editor
+ */
+
+/* ==========================================================================
+   1. Sparkline
+   ========================================================================== */
+
+.ui-sparkline {
+  display: block;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   2. Shared Chart Container, Legend & Inline Tooltip Bar
+   ========================================================================== */
+
+.ui-chart-container,
+.ui-punchcard,
+.ui-heatmap-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ui-chart-meta-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  min-height: 26px;
+  font-size: var(--text-xs);
+}
+
+.ui-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ui-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.ui-chart-legend-empty,
+.ui-chart-hint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.ui-chart-tooltip-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+}
+
+.ui-chart-tooltip-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 10px;
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+.ui-chart-tooltip-total {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.ui-chart-tooltip-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+}
+
+.ui-chart-svg-wrap {
+  width: 100%;
+  overflow: hidden;
+}
+
+.ui-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.ui-chart-axis-text {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  fill: var(--text-muted);
+  user-select: none;
+}
+
+.ui-chart-axis-text--active {
+  fill: var(--text-primary);
+  font-weight: 700;
+}
+
+.ui-chart-bar-group {
+  cursor: pointer;
+  outline: none;
+}
+
+.ui-chart-bar-group:focus-visible rect:first-child {
+  opacity: 0.7;
+  stroke: var(--focus-ring);
+  stroke-width: 1.5px;
+}
+
+.ui-chart-empty {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  background-color: var(--bg-subtle);
+  border-radius: var(--radius-md);
+}
+
+/* ==========================================================================
+   3. Category Share Chart (Compact Bar + Full Donut & Ranked List)
+   ========================================================================== */
+
+.ui-cat-share-empty {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+}
+
+.ui-cat-share-compact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.ui-cat-share-bar-svg {
+  width: 100%;
+  height: 10px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  display: block;
+  background-color: var(--bg-muted);
+}
+
+.ui-cat-share-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ui-cat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  font-size: 0.72rem;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+button.ui-cat-pill:hover {
+  background-color: var(--bg-muted);
+  color: var(--text-primary);
+}
+
+.ui-cat-pill--active {
+  background-color: var(--accent-primary-subtle);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.ui-cat-pill-val {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Full Donut + Ranked Rows */
+.ui-cat-share-full {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+@media (min-width: 540px) {
+  .ui-cat-share-full {
+    grid-template-columns: 156px minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+}
+
+.ui-cat-donut-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-cat-donut-svg {
+  display: block;
+  overflow: visible;
+}
+
+.ui-cat-donut-segment {
+  cursor: pointer;
+  transition: stroke-width var(--duration-fast) var(--ease-standard);
+}
+
+.ui-cat-donut-center-val {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 700;
+  fill: var(--text-primary);
+}
+
+.ui-cat-donut-center-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  fill: var(--text-muted);
+}
+
+.ui-cat-share-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ui-cat-share-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.ui-cat-share-row--active {
+  background-color: var(--bg-subtle);
+}
+
+.ui-cat-share-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.ui-cat-share-row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ui-cat-share-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ui-cat-share-meta {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.ui-cat-share-row-figures {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.ui-cat-share-pct {
+  color: var(--text-muted);
+  min-width: 36px;
+  text-align: right;
+}
+
+.ui-cat-share-track {
+  width: 100%;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-subtle);
+  overflow: hidden;
+}
+
+.ui-cat-share-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+}
+
+/* ==========================================================================
+   4. Punch-Card & 52-Week Heatmap Calendar
+   ========================================================================== */
+
+.ui-punchcard-peaks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ui-punchcard-peak-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.ui-heatmap-scroll {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+  scrollbar-width: thin;
+}
+
+.ui-heatmap-svg {
+  width: 100%;
+  min-width: 620px;
+  height: auto;
+  display: block;
+}
+
+.ui-heatmap-cell {
+  cursor: pointer;
+  transition: stroke var(--duration-fast) var(--ease-standard);
+}
+
+/* ==========================================================================
+   5. Star Rating Input & Rating Editor
+   ========================================================================== */
+
+.ui-rating-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ui-star-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ui-star-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ui-star-unit {
+  position: relative;
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+}
+
+.ui-star-half {
+  position: relative;
+  width: 50%;
+  height: 100%;
+  overflow: hidden;
+  color: var(--border-strong);
+  font-size: 23px;
+  line-height: 26px;
+  padding: 0;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.ui-star-half--filled {
+  color: var(--cat-film-solid);
+}
+
+.ui-star-glyph {
+  position: absolute;
+  top: 0;
+  width: 26px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.ui-star-half--left .ui-star-glyph {
+  left: 0;
+}
+
+.ui-star-half--right .ui-star-glyph {
+  right: 0;
+}
+
+.ui-star-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ui-star-clear {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+
+.ui-rating-note-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ui-rating-note-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ui-rating-counter {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.ui-rating-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ui-rating-saved-pill {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--status-success-fg);
+  background-color: var(--status-success-bg);
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+}

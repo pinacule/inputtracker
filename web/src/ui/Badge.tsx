@@ -1,7 +1,13 @@
 import type { ComponentChildren } from "preact";
-import { resolveMediaKind, type MediaKind } from "../lib/ui-helpers";
+import {
+  isCategory,
+  resolveItemCategory,
+  type Category,
+  type MediaKind,
+} from "../lib/ui-helpers";
 
 export type BadgeVariant =
+  | Category
   | MediaKind
   | "neutral"
   | "success"
@@ -10,7 +16,9 @@ export type BadgeVariant =
 
 export interface BadgeProps {
   variant?: BadgeVariant;
-  /** Automatically resolve MediaKind variant from `source` and `mediaType`. */
+  /** Canonical v2 category (`anime`, `series`, `film`, `book`, `audiobook`, `youtube`, `podcast`, `music`, `other`). */
+  category?: Category | null;
+  /** Automatically resolve category/variant from `source` and `mediaType`. */
   source?: string | null;
   mediaType?: string | null;
   size?: "sm" | "md";
@@ -21,6 +29,7 @@ export interface BadgeProps {
 
 export function Badge({
   variant,
+  category,
   source,
   mediaType,
   size = "md",
@@ -29,7 +38,12 @@ export function Badge({
   children,
 }: BadgeProps) {
   const resolvedVariant: BadgeVariant =
-    variant ?? (source || mediaType ? resolveMediaKind(source, mediaType) : "neutral");
+    variant ??
+    (category && isCategory(category)
+      ? category
+      : source || mediaType
+        ? resolveItemCategory({ source, media_type: mediaType })
+        : "neutral");
 
   const classes = [
     "ui-badge",

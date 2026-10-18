@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import type { MediaKind } from "../lib/ui-helpers";
+import type { Category, MediaKind } from "../lib/ui-helpers";
 
 export interface ProgressBarProps {
   /** Progress value between 0 and 100 (or `max`). */
@@ -8,6 +8,7 @@ export interface ProgressBarProps {
   label?: ComponentChildren;
   valueLabel?: ComponentChildren;
   ariaLabel?: string;
+  category?: Category;
   kind?: MediaKind;
   size?: "sm" | "md" | "lg";
   class?: string;
@@ -19,6 +20,7 @@ export function ProgressBar({
   label,
   valueLabel,
   ariaLabel,
+  category,
   kind,
   size = "md",
   class: className,
@@ -26,11 +28,12 @@ export function ProgressBar({
   const safeMax = max > 0 ? max : 100;
   const clamped = Math.max(0, Math.min(safeMax, Number.isNaN(value) ? 0 : value));
   const percent = Math.round((clamped / safeMax) * 1000) / 10;
+  const accent = category ?? kind;
 
   const classes = [
     "ui-progress",
     `ui-progress--${size}`,
-    kind ? `ui-progress--${kind}` : "",
+    accent ? `ui-progress--${accent}` : "",
     className ?? "",
   ]
     .filter(Boolean)

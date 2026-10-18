@@ -1,10 +1,11 @@
 import type { ComponentChildren } from "preact";
-import type { MediaKind } from "../lib/ui-helpers";
+import type { Category, MediaKind } from "../lib/ui-helpers";
 
 export interface TabOption<T extends string = string> {
   readonly value: T;
   readonly label: string;
-  readonly count?: number;
+  readonly count?: number | string;
+  readonly category?: Category;
   readonly kind?: MediaKind;
   readonly icon?: ComponentChildren;
 }
@@ -38,6 +39,7 @@ export function Tabs<T extends string = string>({
     <div class={classes} role="tablist" aria-label={ariaLabel}>
       {options.map((option) => {
         const isSelected = option.value === value;
+        const dotKey = option.category ?? option.kind;
         return (
           <button
             key={option.value}
@@ -47,16 +49,20 @@ export function Tabs<T extends string = string>({
             class={isSelected ? "ui-tab ui-tab--active" : "ui-tab"}
             onClick={() => onChange(option.value)}
           >
-            {option.kind && (
+            {dotKey && (
               <span
-                class={`ui-tab-dot ui-tab-dot--${option.kind}`}
+                class={`ui-tab-dot ui-tab-dot--${dotKey}`}
                 aria-hidden="true"
               />
             )}
             {option.icon}
             <span>{option.label}</span>
             {option.count !== undefined && (
-              <span class="ui-tab-count">({option.count})</span>
+              <span class="ui-tab-count">
+                {typeof option.count === "number"
+                  ? `(${option.count})`
+                  : option.count}
+              </span>
             )}
           </button>
         );
