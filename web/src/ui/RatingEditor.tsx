@@ -1,17 +1,13 @@
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import { getAnnotation, saveAnnotation, type Annotation } from "../api";
 import {
-  buildAnnotationBody,
   formatNoteCounter,
-  formatRating,
-  ratingToStars,
-  starsToRating,
+  isNoteTooLong,
 } from "../lib/annotations";
+import { formatRating10, validateRating10 } from "../lib/rating";
+import { performWorkEdit, pushToast } from "../lib/work-edits";
 import { Button } from "./Button";
-
-const HALF_VALUES: readonly number[] = [
-  0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5,
-];
+import { RatingInput10 } from "./QuickRating";
 
 export interface StarRatingInputProps {
   rating: number | null;
@@ -20,143 +16,35 @@ export interface StarRatingInputProps {
 }
 
 /**
- * Controlled half-star rating picker (`1..10` internal = `0.5..5` stars).
- * Keyboard accessible (`ArrowLeft`/`ArrowRight`, `Home`, `End`, `Backspace`/`Delete`).
+ * 0–10 one-decimal rating picker (replaces the old 5-star editor in v2.1).
  */
 export function StarRatingInput({
   rating,
   onChange,
   disabled = false,
 }: StarRatingInputProps) {
-  const halfRefs = useRef(new Map<number, HTMLButtonElement>());
-  const stars = ratingToStars(rating);
-
-  function focusHalf(value: number): void {
-    halfRefs.current.get(value)?.focus();
-  }
-
-  function selectHalf(value: number): void {
-    const next = starsToRating(value);
-    onChange(rating === next ? null : next);
-  }
-
-  function stepStars(delta: number): void {
-    const current = stars ?? 0;
-    const next = Math.round((current + delta) * 2) / 2;
-    if (next <= 0) {
-      onChange(null);
-      return;
-    }
-    const clamped = Math.min(5, Math.max(0.5, next));
-    onChange(starsToRating(clamped));
-    focusHalf(clamped);
-  }
-
-  function handleKeyDown(event: KeyboardEvent): void {
-    switch (event.key) {
-      case "ArrowRight":
-      case "ArrowUp":
-        event.preventDefault();
-        stepStars(0.5);
-        break;
-      case "ArrowLeft":
-      case "ArrowDown":
-        event.preventDefault();
-        stepStars(-0.5);
-        break;
-      case "Home":
-        event.preventDefault();
-        onChange(starsToRating(0.5));
-        focusHalf(0.5);
-        break;
-      case "End":
-        event.preventDefault();
-        onChange(starsToRating(5));
-        focusHalf(5);
-        break;
-      case "Delete":
-      case "Backspace":
-        event.preventDefault();
-        onChange(null);
-        break;
-      default:
-        break;
-    }
-  }
-
   return (
-    <div class="ui-star-picker-row">
-      <div
-        class="ui-star-group"
-        role="radiogroup"
-        aria-label={`Rating: ${formatRating(rating)}`}
-        onKeyDown={handleKeyDown}
-      >
-        {[0, 1, 2, 3, 4].map((star) => (
-          <span class="ui-star-unit" key={star}>
-            {[0, 1].map((half) => {
-              const value = HALF_VALUES[star * 2 + half]!;
-              const filled = stars !== null && value <= stars;
-              const side =
-                half === 0 ? "ui-star-half--left" : "ui-star-half--right";
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={stars === value}
-                  aria-label={`${value} of 5 stars`}
-                  class={`ui-star-half ${side}${
-                    filled ? " ui-star-half--filled" : ""
-                  }`}
-                  disabled={disabled}
-                  onClick={() => selectHalf(value)}
-                  ref={(el) => {
-                    if (el) {
-                      halfRefs.current.set(value, el);
-                    } else {
-                      halfRefs.current.delete(value);
-                    }
-                  }}
-                >
-                  <span class="ui-star-glyph" aria-hidden="true">
-                    ★
-                  </span>
-                </button>
-              );
-            })}
-          </span>
-        ))}
-      </div>
-      <span class="ui-star-label tabular-nums">{formatRating(rating)}</span>
-      {rating !== null && (
-        <button
-          type="button"
-          class="ui-star-clear"
-          disabled={disabled}
-          onClick={() => onChange(null)}
-        >
-          Clear
-        </button>
-      )}
-    </div>
+    <RatingInput10 rating={rating} onChange={onChange} disabled={disabled} />
   );
 }
 
 export interface RatingEditorProps {
+  workKey?: string;
   source: string;
   title: string;
   initialRating: number | null;
   initialNote?: string | null;
   skipFetch?: boolean;
-  onSaved?: (annotation: Annotation) => void;
+  onSaved?: (annotation: { rating: number | null; note: string | null } & Partial<Annotation>) => void;
   onCancel?: () => void;
 }
 
 /**
- * Full Rating + Note editor wired to `/api/annotations`.
+ * Full Rating (0..10 one decimal) + Note editor wired to `/api/library/work/edit`
+ * (and falling back to `/api/annotations` when `workKey` is omitted or 404).
  */
 export function RatingEditor({
+  workKey,
   source,
   title,
   initialRating,
@@ -167,7 +55,7 @@ export function RatingEditor({
 }: RatingEditorProps) {
   const [rating, setRating] = useState<number | null>(initialRating);
   const [note, setNote] = useState(initialNote ?? "");
-  const [loading, setLoading] = useState(!skipFetch);
+  const [loading, setLoading] = useState(!skipFetch && !workKey);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -186,7 +74,7 @@ export function RatingEditor({
   }, [initialRating, initialNote]);
 
   useEffect(() => {
-    if (skipFetch) {
+    if (skipFetch || workKey) {
       setLoading(false);
       return;
     }
@@ -212,31 +100,83 @@ export function RatingEditor({
     return () => {
       cancelled = true;
     };
-  }, [source, title, skipFetch]);
+  }, [source, title, skipFetch, workKey]);
 
   async function handleSave(): Promise<void> {
-    const built = buildAnnotationBody({ source, title, rating, note });
-    if (!built.ok) {
-      setValidationErrors(built.errors);
+    const errors: string[] = [];
+    const rCheck = validateRating10(rating);
+    if (!rCheck.ok) {
+      errors.push(rCheck.error);
+    }
+    if (isNoteTooLong(note)) {
+      errors.push("Note is too long (maximum 5000 characters).");
+    }
+    if (errors.length > 0) {
+      setValidationErrors(errors);
       return;
     }
+
+    const cleanRating = rCheck.ok ? rCheck.rating : null;
+    const cleanNote = note.trimEnd().length > 0 ? note.trimEnd() : null;
+
     setValidationErrors([]);
     setServerError(null);
     setSaved(false);
-    if (revIdRef.current === null) {
-      revIdRef.current = crypto.randomUUID();
-    }
     setSaving(true);
+
     try {
-      const result = await saveAnnotation({
-        ...built.body,
-        rev_id: revIdRef.current,
-      });
-      revIdRef.current = null;
-      setRating(result.annotation.rating);
-      setNote(result.annotation.note ?? "");
+      const targetKey = workKey ?? `${source}:${title.toLowerCase().trim()}`;
+      const { undo } = await performWorkEdit(
+        targetKey,
+        {
+          rating: cleanRating,
+          note: cleanNote,
+        },
+        {
+          title,
+          rating: initialRating,
+          note: initialNote ?? null,
+          source,
+        }
+      );
+
+      if (!workKey) {
+        if (revIdRef.current === null) {
+          revIdRef.current = crypto.randomUUID();
+        }
+        const intRating =
+          cleanRating !== null
+            ? Math.max(1, Math.min(10, Math.round(cleanRating)))
+            : null;
+        await saveAnnotation({
+          source,
+          title,
+          rating: intRating,
+          note: cleanNote,
+          rev_id: revIdRef.current,
+        }).catch(() => null);
+        revIdRef.current = null;
+      }
+
+      setRating(cleanRating);
+      setNote(cleanNote ?? "");
       setSaved(true);
-      onSaved?.(result.annotation);
+      onSaved?.({ rating: cleanRating, note: cleanNote });
+
+      pushToast({
+        message:
+          cleanRating !== null
+            ? `Saved rating (${formatRating10(cleanRating)} / 10) for “${title}”`
+            : `Updated note for “${title}”`,
+        variant: "success",
+        actionLabel: "Undo",
+        onAction: () => {
+          setRating(initialRating);
+          setNote(initialNote ?? "");
+          onSaved?.({ rating: initialRating, note: initialNote ?? null });
+          void undo();
+        },
+      });
     } catch (err) {
       setServerError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -252,7 +192,7 @@ export function RatingEditor({
         </p>
       )}
 
-      <StarRatingInput
+      <RatingInput10
         rating={rating}
         onChange={(next) => {
           setRating(next);
@@ -260,6 +200,7 @@ export function RatingEditor({
           setServerError(null);
         }}
         disabled={loading || saving}
+        onCommit={() => void handleSave()}
       />
 
       <div class="ui-rating-note-field">
@@ -306,7 +247,7 @@ export function RatingEditor({
           variant="primary"
           size="sm"
           disabled={loading || saving}
-          onClick={handleSave}
+          onClick={() => void handleSave()}
         >
           {saving ? "Saving…" : "Save Rating & Note"}
         </Button>

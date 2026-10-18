@@ -54,9 +54,9 @@ import {
   CheckIcon,
   Cover,
   EmptyState,
+  RatingInput10,
   SearchIcon,
   Skeleton,
-  StarRatingInput,
   Tabs,
   type TabOption,
 } from "../ui";
@@ -281,6 +281,9 @@ export function Add({
     editingArchiveEntry?.rating ?? null
   );
   const [note, setNote] = useState<string>(editingArchiveEntry?.note ?? "");
+  const [archiveStatus, setArchiveStatus] = useState<
+    "finished" | "in_progress" | "planned" | "dropped"
+  >("finished");
 
   const [archiveErrors, setArchiveErrors] = useState<string[]>([]);
   const [archiveSaving, setArchiveSaving] = useState(false);
@@ -444,8 +447,8 @@ export function Add({
 
   const timePreview = useMemo(() => {
     if (!selectedWork) return null;
-    return computeArchivePreview(selectedWork, effectiveConsumed);
-  }, [selectedWork, effectiveConsumed]);
+    return computeArchivePreview(selectedWork, effectiveConsumed, archiveStatus);
+  }, [selectedWork, effectiveConsumed, archiveStatus]);
 
   const handleToggleSeason = (seasonNumber: number) => {
     setConsumed((prev) => {
@@ -517,6 +520,7 @@ export function Add({
       when: showEndDate ? when : { precision: when.precision, date: when.date },
       rating,
       note,
+      status: archiveStatus,
     });
 
     if (!built.ok) {
@@ -1261,12 +1265,34 @@ export function Add({
                 </div>
               </Card>
 
-              {/* 1. What was consumed */}
+              {/* 1. Status & What was consumed */}
               <Card
                 padding="md"
-                title="1. What did you watch, read, or listen to?"
+                title="1. Status & what you watched, read, or listened to"
               >
-                {(selectedWork.category === "anime" ||
+                <div class="ui-form-stack">
+                  <div class="ui-form-field">
+                    <span class="ui-form-label">Status</span>
+                    <Tabs
+                      ariaLabel="Archive work status"
+                      options={[
+                        { value: "finished", label: "Finished" },
+                        { value: "in_progress", label: "In Progress" },
+                        { value: "planned", label: "Planned (Watchlist)" },
+                        { value: "dropped", label: "Dropped" },
+                      ]}
+                      value={archiveStatus}
+                      onChange={(v) => setArchiveStatus(v)}
+                    />
+                  </div>
+
+                  {archiveStatus === "planned" ? (
+                    <p class="ui-form-hint">
+                      Planned works are added to your Library watchlist with 0
+                      minutes and are excluded from calendar and time totals
+                      until you start or finish them.
+                    </p>
+                  ) : (selectedWork.category === "anime" ||
                   selectedWork.category === "series") &&
                 selectedWork.seasons.length > 0 ? (
                   <div class="add-seasons-section">
@@ -1536,6 +1562,7 @@ export function Add({
                     </div>
                   </div>
                 )}
+                </div>
               </Card>
 
               {/* 2. When */}
@@ -1688,9 +1715,9 @@ export function Add({
               </Card>
 
               {/* 3. Optional Rating & Note */}
-              <Card padding="md" title="3. Rating & Note (optional)">
+              <Card padding="md" title="3. Rating (0–10, one decimal) & Note (optional)">
                 <div class="ui-form-stack">
-                  <StarRatingInput rating={rating} onChange={setRating} />
+                  <RatingInput10 rating={rating} onChange={setRating} />
                   <div class="ui-form-field">
                     <label class="ui-form-label" for="archive-note-input">
                       Note

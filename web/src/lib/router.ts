@@ -22,6 +22,7 @@
 
 import type { Category, LibrarySort, WorkStatus } from "../api";
 import { isCategory } from "./categories";
+import { parseCategorySelection } from "./category-filter";
 import type { InsightsRangePreset } from "./charts";
 
 export type AppRoute =
@@ -120,17 +121,21 @@ export interface ParsedAppLocation {
   readonly hitKey?: string;
   readonly workKey?: string;
   readonly category?: Category;
+  readonly categories?: readonly Category[];
   readonly status?: WorkStatus;
   readonly sort?: LibrarySort;
   readonly range?: InsightsRangePreset;
   readonly reviewView?: "month" | "year";
   readonly entryId?: string;
+  readonly channel?: string;
+  readonly topic?: string;
 }
 
 const VALID_STATUSES: ReadonlySet<string> = new Set([
   "in_progress",
   "finished",
   "dropped",
+  "planned",
   "unknown",
 ]);
 
@@ -196,11 +201,14 @@ export function parseAppRoute(hash: string): ParsedAppLocation {
   let hitKey: string | undefined;
   let workKey: string | undefined;
   let category: Category | undefined;
+  let categories: readonly Category[] | undefined;
   let status: WorkStatus | undefined;
   let sort: LibrarySort | undefined;
   let range: InsightsRangePreset | undefined;
   let reviewView: "month" | "year" | undefined;
   let entryId: string | undefined;
+  let channel: string | undefined;
+  let topic: string | undefined;
 
   if (queryPart) {
     const params = new URLSearchParams(queryPart);
@@ -235,9 +243,16 @@ export function parseAppRoute(hash: string): ParsedAppLocation {
       workKey = workRaw;
     }
 
-    const catRaw = params.get("category");
-    if (catRaw && isCategory(catRaw)) {
-      category = catRaw;
+    const parsedCats = parseCategorySelection(params);
+    if (parsedCats.length > 0) {
+      categories = parsedCats;
+      category = parsedCats[0];
+    } else {
+      const catRaw = params.get("category");
+      if (catRaw && isCategory(catRaw)) {
+        category = catRaw;
+        categories = [catRaw];
+      }
     }
 
     const statusRaw = params.get("status");
@@ -264,6 +279,16 @@ export function parseAppRoute(hash: string): ParsedAppLocation {
     if (entryRaw && entryRaw.length <= 128) {
       entryId = entryRaw;
     }
+
+    const channelRaw = params.get("channel");
+    if (channelRaw && channelRaw.length <= 200) {
+      channel = channelRaw;
+    }
+
+    const topicRaw = params.get("topic");
+    if (topicRaw && topicRaw.length <= 120) {
+      topic = topicRaw;
+    }
   }
 
   return {
@@ -277,10 +302,13 @@ export function parseAppRoute(hash: string): ParsedAppLocation {
     hitKey,
     workKey,
     category,
+    categories,
     status,
     sort,
     range,
     reviewView,
     entryId,
+    channel,
+    topic,
   };
 }

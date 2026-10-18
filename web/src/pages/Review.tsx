@@ -8,19 +8,28 @@ import {
   type SeriesPoint,
   type YearReviewV2,
 } from "../api";
-import { formatStarValue, ratingToStars } from "../lib/annotations";
 import { shiftMonth } from "../lib/calendar";
 import {
+  CATEGORIES,
   categoryLabel,
   formatCategoryUnits,
 } from "../lib/categories";
+import {
+  buildCategoryFilterParams,
+  matchesCategorySelection,
+} from "../lib/category-filter";
 import { formatMinutes } from "../lib/stats";
+import {
+  applyWorkOverridesToList,
+  subscribeWorkEdits,
+} from "../lib/work-edits";
 import { formatChange, formatHours } from "../lib/year-review";
 import {
   AddIcon,
   Badge,
   Button,
   Card,
+  CategoryChips,
   CategoryShareChart,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -28,17 +37,22 @@ import {
   EmptyState,
   IconButton,
   PunchCardChart,
+  QuickRatingPill,
   Skeleton,
   Sparkline,
   StackedSeriesChart,
   Stat,
   Tabs,
+  bindContextMenu,
 } from "../ui";
 
 export interface ReviewProps {
   initialView?: "month" | "year";
   initialMonth?: string;
   initialYear?: string;
+  initialCategory?: Category;
+  initialCategories?: readonly Category[];
+  includeYoutubeInAll?: boolean;
 }
 
 function getCurrentMonthStr(): string {
@@ -87,34 +101,61 @@ function WorkShowcaseGrid({
   return (
     <div class="review-works-grid">
       {works.map((work) => {
-        const stars = ratingToStars(work.rating);
+        const workHref = `#/library?work=${encodeURIComponent(work.key)}`;
+        const menuTarget = {
+          kind: "work" as const,
+          workKey: work.key,
+          title: work.title,
+          category: work.category,
+          status: work.status,
+          rating: work.rating,
+          href: workHref,
+          source: work.sources[0] ?? "manual",
+        };
         return (
-          <a
+          <div
             key={work.key}
-            href={`#/library?work=${encodeURIComponent(work.key)}`}
             class="review-work-card"
-            title={work.title}
+            tabIndex={0}
+            {...bindContextMenu(menuTarget)}
           >
-            <Cover
-              src={work.cover_url}
-              title={work.title}
-              category={work.category}
-              size="lg"
-              aspect="poster"
-            />
+            <a href={workHref} class="review-work-cover-link">
+              <Cover
+                src={work.cover_url}
+                title={work.title}
+                category={work.category}
+                size="lg"
+                aspect="poster"
+              />
+            </a>
             <div class="review-work-info">
-              <Badge size="sm" category={work.category}>
-                {categoryLabel(work.category)}
-              </Badge>
-              <strong class="review-work-title">{work.title}</strong>
+              <div class="review-work-badges">
+                <Badge size="sm" category={work.category}>
+                  {categoryLabel(work.category)}
+                </Badge>
+                <QuickRatingPill
+                  workKey={work.key}
+                  title={work.title}
+                  category={work.category}
+                  rating={work.rating}
+                  source={work.sources[0] ?? "manual"}
+                  variant="inline"
+                />
+              </div>
+              <a
+                href={workHref}
+                class="review-work-title"
+                title={work.title}
+              >
+                {work.title}
+              </a>
               <span class="review-work-meta tabular-nums">
                 {work.total_minutes > 0
                   ? formatMinutes(work.total_minutes)
                   : formatCategoryUnits(work.category, work.units)}
-                {stars !== null ? ` · ★ ${formatStarValue(stars)}` : ""}
               </span>
             </div>
-          </a>
+          </div>
         );
       })}
     </div>
@@ -125,6 +166,9 @@ export function Review({
   initialView = "month",
   initialMonth,
   initialYear,
+  initialCategory,
+  initialCategories,
+  includeYoutubeInAll = false,
 }: ReviewProps) {
   const currentMonth = getCurrentMonthStr();
   const currentYear = Number(currentMonth.slice(0, 4));
@@ -140,11 +184,27 @@ export function Review({
       ? Number(initialYear)
       : currentYear
   );
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>(
+    () => {
+      if (initialCategories && initialCategories.length > 0) {
+        return [...initialCategories];
+      }
+      if (initialCategory) {
+        return [initialCategory];
+      }
+      return [];
+    }
+  );
 
   const [monthData, setMonthData] = useState<MonthReview | null>(null);
   const [yearData, setYearData] = useState<YearReviewV2 | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [overrideTick, setOverrideTick] = useState(0);
+
+  useEffect(() => {
+    return subscribeWorkEdits(() => setOverrideTick((t) => t + 1));
+  }, []);
 
   useEffect(() => {
     if (initialView) setView(initialView);
@@ -162,14 +222,28 @@ export function Review({
     }
   }, [initialYear]);
 
-  // Fetch Month or Year Review
+  useEffect(() => {
+    if (initialCategories !== undefined) {
+      setSelectedCategories([...initialCategories]);
+    } else if (initialCategory !== undefined) {
+      setSelectedCategories(initialCategory ? [initialCategory] : []);
+    }
+  }, [initialCategory, initialCategories]);
+
+  // Fetch Month or Year Review with category/exclude params (graceful fallback on 400/404)
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
 
+    const filterParams = buildCategoryFilterParams(
+      selectedCategories,
+      includeYoutubeInAll
+    );
+
     if (view === "month") {
-      getMonthReview(month)
+      getMonthReview(month, filterParams)
+        .catch(() => getMonthReview(month))
         .then((res) => {
           if (cancelled) return;
           setMonthData(res);
@@ -181,7 +255,8 @@ export function Review({
           setLoading(false);
         });
     } else {
-      getYearReviewV2(year)
+      getYearReviewV2(year, filterParams)
+        .catch(() => getYearReviewV2(year))
         .then((res) => {
           if (cancelled) return;
           setYearData(res);
@@ -197,21 +272,126 @@ export function Review({
     return () => {
       cancelled = true;
     };
-  }, [view, month, year]);
+  }, [view, month, year, selectedCategories, includeYoutubeInAll]);
+
+  // Filtered Month Review view model
+  const filteredMonth = useMemo(() => {
+    if (!monthData) return null;
+    const categories = (monthData.categories ?? []).filter((c) =>
+      matchesCategorySelection(
+        c.category,
+        selectedCategories,
+        includeYoutubeInAll
+      )
+    );
+    const days: SeriesPoint[] = (monthData.days ?? []).map((pt) => {
+      const byCat: Partial<Record<Category, number>> = {};
+      for (const cat of CATEGORIES) {
+        if (
+          matchesCategorySelection(
+            cat,
+            selectedCategories,
+            includeYoutubeInAll
+          )
+        ) {
+          const v = pt.minutes_by_category?.[cat];
+          if (v && v > 0) {
+            byCat[cat] = v;
+          }
+        }
+      }
+      return {
+        bucket: pt.bucket,
+        minutes_by_category: byCat,
+      };
+    });
+    const filterWorks = (list: readonly LibraryWork[]) =>
+      applyWorkOverridesToList(list).filter((w) =>
+        matchesCategorySelection(
+          w.category,
+          selectedCategories,
+          includeYoutubeInAll
+        )
+      );
+
+    const totalMinutes = categories.reduce(
+      (acc, c) => acc + c.total_minutes,
+      0
+    );
+
+    return {
+      ...monthData,
+      total_minutes: totalMinutes,
+      categories,
+      days,
+      top_works: filterWorks(monthData.top_works ?? []),
+      started_works: filterWorks(monthData.started_works ?? []),
+      finished_works: filterWorks(monthData.finished_works ?? []),
+    };
+  }, [monthData, selectedCategories, includeYoutubeInAll, overrideTick]);
+
+  // Filtered Year Review view model
+  const filteredYear = useMemo(() => {
+    if (!yearData) return null;
+    const categories = (yearData.categories ?? []).filter((c) =>
+      matchesCategorySelection(
+        c.category,
+        selectedCategories,
+        includeYoutubeInAll
+      )
+    );
+    const months = (yearData.months ?? []).map((m) => {
+      const cats = (m.categories ?? []).filter((c) =>
+        matchesCategorySelection(
+          c.category,
+          selectedCategories,
+          includeYoutubeInAll
+        )
+      );
+      const tot = cats.reduce((acc, c) => acc + c.total_minutes, 0);
+      return {
+        month: m.month,
+        total_minutes: tot,
+        categories: cats,
+      };
+    });
+    const filterWorks = (list: readonly LibraryWork[]) =>
+      applyWorkOverridesToList(list).filter((w) =>
+        matchesCategorySelection(
+          w.category,
+          selectedCategories,
+          includeYoutubeInAll
+        )
+      );
+
+    const totalMinutes = categories.reduce(
+      (acc, c) => acc + c.total_minutes,
+      0
+    );
+
+    return {
+      ...yearData,
+      total_minutes: totalMinutes,
+      categories,
+      months,
+      top_works: filterWorks(yearData.top_works ?? []),
+      finished_works: filterWorks(yearData.finished_works ?? []),
+    };
+  }, [yearData, selectedCategories, includeYoutubeInAll, overrideTick]);
 
   const monthDailySparkline = useMemo(() => {
-    if (!monthData?.days) return [];
-    return monthData.days.map((pt) =>
+    if (!filteredMonth?.days) return [];
+    return filteredMonth.days.map((pt) =>
       Object.values(pt.minutes_by_category ?? {}).reduce<number>(
         (acc, v) => acc + (typeof v === "number" ? v : 0),
         0
       )
     );
-  }, [monthData]);
+  }, [filteredMonth]);
 
   const yearMonthSeriesPoints = useMemo<SeriesPoint[]>(() => {
-    if (!yearData?.months) return [];
-    return yearData.months.map((m) => {
+    if (!filteredYear?.months) return [];
+    return filteredYear.months.map((m) => {
       const byCat: Partial<Record<Category, number>> = {};
       for (const c of m.categories ?? []) {
         byCat[c.category] = c.total_minutes;
@@ -221,18 +401,22 @@ export function Review({
         minutes_by_category: byCat,
       };
     });
-  }, [yearData]);
+  }, [filteredYear]);
 
   const yearSparkline = useMemo(() => {
-    if (!yearData?.months) return [];
-    return yearData.months.map((m) => m.total_minutes);
-  }, [yearData]);
+    if (!filteredYear?.months) return [];
+    return filteredYear.months.map((m) => m.total_minutes);
+  }, [filteredYear]);
+
+  const allCategoriesTotals =
+    view === "month"
+      ? (monthData?.categories ?? [])
+      : (yearData?.categories ?? []);
 
   return (
     <section class="page-container review-page" aria-label="Review">
       <header class="page-header">
         <div class="page-header-titles">
-          <span class="page-eyebrow">Retrospective & Highlights</span>
           <h1>
             {view === "month"
               ? formatMonthHeading(month)
@@ -313,6 +497,16 @@ export function Review({
         </div>
       </header>
 
+      {/* Multi-select Category Chips */}
+      <CategoryChips
+        selected={selectedCategories}
+        onChange={setSelectedCategories}
+        totals={allCategoriesTotals}
+        includeYoutubeInAll={includeYoutubeInAll}
+        ariaLabel="Filter review by category"
+        showCounts="hours"
+      />
+
       {error && (
         <div class="calendar-error" role="alert">
           <span>
@@ -331,14 +525,14 @@ export function Review({
       {/* --- MONTH IN REVIEW VIEW --- */}
       {view === "month" && (
         <>
-          {loading && !monthData ? (
+          {loading && !filteredMonth ? (
             <div class="ui-form-stack" aria-busy="true">
               <Skeleton height={110} />
               <Skeleton height={240} />
             </div>
-          ) : !monthData ||
-            (monthData.total_minutes === 0 &&
-              monthData.categories.length === 0) ? (
+          ) : !filteredMonth ||
+            (filteredMonth.total_minutes === 0 &&
+              filteredMonth.categories.length === 0) ? (
             <EmptyState
               title={`Nothing recorded in ${formatMonthHeading(month)}`}
               description="Step to another month or archive books, films, or series you finished during this month."
@@ -360,24 +554,24 @@ export function Review({
                 <Card padding="md">
                   <Stat
                     label="Total Time"
-                    value={formatHours(monthData.total_minutes)}
+                    value={formatHours(filteredMonth.total_minutes)}
                     size="lg"
                     sparkline={
                       <Sparkline
                         values={monthDailySparkline}
-                        label={`Daily rhythm in ${monthData.month}`}
+                        label={`Daily rhythm in ${filteredMonth.month}`}
                       />
                     }
                     sublabel={
                       <>
                         <strong>
                           {formatChange(
-                            monthData.total_minutes,
-                            monthData.previous_month_minutes
+                            filteredMonth.total_minutes,
+                            filteredMonth.previous_month_minutes
                           )}
                         </strong>{" "}
-                        vs previous month ({formatMinutes(monthData.total_minutes)}
-                        )
+                        vs previous month (
+                        {formatMinutes(filteredMonth.total_minutes)})
                       </>
                     }
                   />
@@ -386,10 +580,10 @@ export function Review({
                 <Card padding="md">
                   <Stat
                     label="Active Days & Streak"
-                    value={`${monthData.active_days} days`}
+                    value={`${filteredMonth.active_days} days`}
                     size="lg"
-                    sublabel={`Longest streak: ${monthData.longest_streak_days} ${
-                      monthData.longest_streak_days === 1 ? "day" : "days"
+                    sublabel={`Longest streak: ${filteredMonth.longest_streak_days} ${
+                      filteredMonth.longest_streak_days === 1 ? "day" : "days"
                     }`}
                   />
                 </Card>
@@ -398,16 +592,18 @@ export function Review({
                   <Stat
                     label="Works Touched"
                     value={
-                      monthData.categories.reduce((acc, c) => acc + c.works, 0) ||
-                      monthData.top_works.length
+                      filteredMonth.categories.reduce(
+                        (acc, c) => acc + c.works,
+                        0
+                      ) || filteredMonth.top_works.length
                     }
                     size="lg"
                     sublabel={
-                      monthData.undated_minutes > 0
+                      filteredMonth.undated_minutes > 0
                         ? `Includes ${formatMinutes(
-                            monthData.undated_minutes
+                            filteredMonth.undated_minutes
                           )} from month-dated archive entries`
-                        : `${monthData.finished_works.length} finished · ${monthData.started_works.length} started`
+                        : `${filteredMonth.finished_works.length} finished · ${filteredMonth.started_works.length} started`
                     }
                   />
                 </Card>
@@ -420,7 +616,7 @@ export function Review({
                 subtitle="Stacked minutes per category — click any day to open in Calendar"
               >
                 <StackedSeriesChart
-                  points={monthData.days}
+                  points={filteredMonth.days}
                   bucketType="day"
                   onSelectBucket={(dayBucket) => {
                     window.location.hash = `#/calendar?date=${dayBucket}`;
@@ -435,7 +631,7 @@ export function Review({
                   title="Category Breakdown"
                   subtitle="Share of time and works this month"
                 >
-                  <CategoryShareChart categories={monthData.categories} />
+                  <CategoryShareChart categories={filteredMonth.categories} />
                 </Card>
 
                 <Card
@@ -443,7 +639,7 @@ export function Review({
                   title="Monthly Rhythm (Hour × Weekday)"
                   subtitle="Time of day and day of week patterns"
                 >
-                  <PunchCardChart hourWeekday={monthData.hour_weekday} />
+                  <PunchCardChart hourWeekday={filteredMonth.hour_weekday} />
                 </Card>
               </div>
 
@@ -451,35 +647,35 @@ export function Review({
               <Card
                 padding="md"
                 title="Top Works This Month"
-                subtitle="Most time spent in this month"
+                subtitle="Most time spent in this month — rate directly on any card"
               >
                 <WorkShowcaseGrid
-                  works={monthData.top_works}
+                  works={filteredMonth.top_works}
                   emptyLabel="No works recorded this month."
                 />
               </Card>
 
-              {(monthData.finished_works.length > 0 ||
-                monthData.started_works.length > 0) && (
+              {(filteredMonth.finished_works.length > 0 ||
+                filteredMonth.started_works.length > 0) && (
                 <div class="insights-two-col">
                   <Card
                     padding="md"
-                    title={`Finished (${monthData.finished_works.length})`}
+                    title={`Finished (${filteredMonth.finished_works.length})`}
                     subtitle="Completed during this month"
                   >
                     <WorkShowcaseGrid
-                      works={monthData.finished_works}
+                      works={filteredMonth.finished_works}
                       emptyLabel="No works marked finished this month."
                     />
                   </Card>
 
                   <Card
                     padding="md"
-                    title={`Started (${monthData.started_works.length})`}
+                    title={`Started (${filteredMonth.started_works.length})`}
                     subtitle="Begun during this month"
                   >
                     <WorkShowcaseGrid
-                      works={monthData.started_works}
+                      works={filteredMonth.started_works}
                       emptyLabel="No new works started this month."
                     />
                   </Card>
@@ -493,14 +689,14 @@ export function Review({
       {/* --- YEAR IN REVIEW VIEW --- */}
       {view === "year" && (
         <>
-          {loading && !yearData ? (
+          {loading && !filteredYear ? (
             <div class="ui-form-stack" aria-busy="true">
               <Skeleton height={110} />
               <Skeleton height={240} />
             </div>
-          ) : !yearData ||
-            (yearData.total_minutes === 0 &&
-              yearData.categories.length === 0) ? (
+          ) : !filteredYear ||
+            (filteredYear.total_minutes === 0 &&
+              filteredYear.categories.length === 0) ? (
             <EmptyState
               title={`Nothing recorded in ${year}`}
               description="Step to another year or add past works from this year to your archive."
@@ -520,23 +716,23 @@ export function Review({
               <div class="insights-kpi-strip">
                 <Card padding="md">
                   <Stat
-                    label={`Total Time in ${yearData.year}`}
-                    value={formatHours(yearData.total_minutes)}
+                    label={`Total Time in ${filteredYear.year}`}
+                    value={formatHours(filteredYear.total_minutes)}
                     size="lg"
                     sparkline={
                       <Sparkline
                         values={yearSparkline}
-                        label={`Monthly rhythm in ${yearData.year}`}
+                        label={`Monthly rhythm in ${filteredYear.year}`}
                       />
                     }
                     sublabel={
-                      yearData.undated_minutes > 0
+                      filteredYear.undated_minutes > 0
                         ? `${formatMinutes(
-                            yearData.total_minutes
+                            filteredYear.total_minutes
                           )} (includes ${formatMinutes(
-                            yearData.undated_minutes
+                            filteredYear.undated_minutes
                           )} year-dated archive time)`
-                        : formatMinutes(yearData.total_minutes)
+                        : formatMinutes(filteredYear.total_minutes)
                     }
                   />
                 </Card>
@@ -544,10 +740,10 @@ export function Review({
                 <Card padding="md">
                   <Stat
                     label="Active Days & Streak"
-                    value={`${yearData.active_days} days`}
+                    value={`${filteredYear.active_days} days`}
                     size="lg"
-                    sublabel={`Longest streak: ${yearData.longest_streak_days} ${
-                      yearData.longest_streak_days === 1 ? "day" : "days"
+                    sublabel={`Longest streak: ${filteredYear.longest_streak_days} ${
+                      filteredYear.longest_streak_days === 1 ? "day" : "days"
                     }`}
                   />
                 </Card>
@@ -555,10 +751,10 @@ export function Review({
                 <Card padding="md">
                   <Stat
                     label="Completed Works"
-                    value={yearData.finished_works.length}
+                    value={filteredYear.finished_works.length}
                     size="lg"
-                    sublabel={`Across ${yearData.categories.length} ${
-                      yearData.categories.length === 1
+                    sublabel={`Across ${filteredYear.categories.length} ${
+                      filteredYear.categories.length === 1
                         ? "category"
                         : "categories"
                     }`}
@@ -566,10 +762,10 @@ export function Review({
                 </Card>
               </div>
 
-              {/* 12-Month Stacked Bar Chart (click any month to open Month Review) */}
+              {/* 12-Month Stacked Bar Chart */}
               <Card
                 padding="md"
-                title={`Month by Month (${yearData.year})`}
+                title={`Month by Month (${filteredYear.year})`}
                 subtitle="Click any month bar to open that Month in Review"
               >
                 <StackedSeriesChart
@@ -584,31 +780,31 @@ export function Review({
 
               <Card
                 padding="md"
-                title={`Category Share in ${yearData.year}`}
+                title={`Category Share in ${filteredYear.year}`}
                 subtitle="Annual time and works distribution"
               >
-                <CategoryShareChart categories={yearData.categories} />
+                <CategoryShareChart categories={filteredYear.categories} />
               </Card>
 
               <Card
                 padding="md"
-                title={`Top Works of ${yearData.year}`}
+                title={`Top Works of ${filteredYear.year}`}
                 subtitle="Your most-consumed titles of the year"
               >
                 <WorkShowcaseGrid
-                  works={yearData.top_works}
+                  works={filteredYear.top_works}
                   emptyLabel="No top works for this year."
                 />
               </Card>
 
-              {yearData.finished_works.length > 0 && (
+              {filteredYear.finished_works.length > 0 && (
                 <Card
                   padding="md"
-                  title={`Finished in ${yearData.year} (${yearData.finished_works.length})`}
+                  title={`Finished in ${filteredYear.year} (${filteredYear.finished_works.length})`}
                   subtitle="Works completed during the year"
                 >
                   <WorkShowcaseGrid
-                    works={yearData.finished_works}
+                    works={filteredYear.finished_works}
                     emptyLabel="No works finished this year."
                   />
                 </Card>

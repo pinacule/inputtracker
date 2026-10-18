@@ -12,6 +12,7 @@
  */
 
 import type {
+  AchriomImportResult,
   ArchiveConsumed,
   ArchiveEntrySummary,
   ArchiveRequest,
@@ -20,6 +21,7 @@ import type {
   Category,
   CategoryTotal,
   DatePrecision,
+  HiddenWorksResult,
   LibraryResult,
   LibraryWork,
   LibraryWorkDetail,
@@ -34,11 +36,18 @@ import type {
   SettingsView,
   SourceStatus,
   WorkDetails,
+  WorkEdit,
   WorkStatus,
   YearReviewV2,
+  YoutubeChannel,
+  YoutubeOverview,
+  YoutubeTopic,
+  YoutubeVideo,
+  YoutubeVideosResult,
 } from "../../src/core/contract";
 
 export type {
+  AchriomImportResult,
   ArchiveConsumed,
   ArchiveEntrySummary,
   ArchiveRequest,
@@ -47,6 +56,7 @@ export type {
   Category,
   CategoryTotal,
   DatePrecision,
+  HiddenWorksResult,
   LibraryResult,
   LibraryWork,
   LibraryWorkDetail,
@@ -61,9 +71,17 @@ export type {
   SettingsView,
   SourceStatus,
   WorkDetails,
+  WorkEdit,
   WorkStatus,
   YearReviewV2,
+  YoutubeChannel,
+  YoutubeOverview,
+  YoutubeTopic,
+  YoutubeVideo,
+  YoutubeVideosResult,
 };
+
+export type CategoryListParam = Category | readonly Category[] | string;
 
 // --- Response types (mirror src/server/app.ts) -----------------------------
 
@@ -174,6 +192,8 @@ export interface StatsParams {
   from?: string;
   to?: string;
   source?: string;
+  category?: CategoryListParam;
+  exclude?: CategoryListParam;
 }
 
 export interface StreakInfo {
@@ -338,6 +358,8 @@ export interface SearchParams {
   q: string;
   source?: string;
   media_type?: string;
+  category?: CategoryListParam;
+  exclude?: CategoryListParam;
   limit?: number;
   offset?: number;
 }
@@ -562,6 +584,30 @@ function withQuery(
   return qs === "" ? path : `${path}?${qs}`;
 }
 
+/** Format a category or exclusion filter (single string or array) as a comma-separated query param. */
+function formatCategoryList(
+  value: CategoryListParam | undefined
+): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    const joined = value
+      .map((c) => String(c).trim())
+      .filter((c) => c !== "")
+      .join(",");
+    return joined === "" ? undefined : joined;
+  }
+  const trimmed = String(value).trim();
+  return trimmed === "" ? undefined : trimmed;
+}
+
+export interface CategoryFilterOptions {
+  source?: string;
+  category?: CategoryListParam;
+  exclude?: CategoryListParam;
+}
+
 // --- Typed endpoint wrappers ----------------------------------------------
 
 export function getHealth(): Promise<HealthResult> {
@@ -570,28 +616,55 @@ export function getHealth(): Promise<HealthResult> {
 
 export function getCalendar(
   month: string,
-  source?: string
+  sourceOrOptions?: string | CategoryFilterOptions
 ): Promise<CalendarResult> {
+  const opts: CategoryFilterOptions =
+    typeof sourceOrOptions === "string"
+      ? { source: sourceOrOptions }
+      : sourceOrOptions ?? {};
   return getJson<CalendarResult>(
-    withQuery("/api/calendar", { month, source })
+    withQuery("/api/calendar", {
+      month,
+      source: opts.source,
+      category: formatCategoryList(opts.category),
+      exclude: formatCategoryList(opts.exclude),
+    })
   );
 }
 
 export function getHeatmapDays(
   year: string,
-  source?: string
+  sourceOrOptions?: string | CategoryFilterOptions
 ): Promise<HeatmapDaysResult> {
+  const opts: CategoryFilterOptions =
+    typeof sourceOrOptions === "string"
+      ? { source: sourceOrOptions }
+      : sourceOrOptions ?? {};
   return getJson<HeatmapDaysResult>(
-    withQuery("/api/heatmap/days", { year, source })
+    withQuery("/api/heatmap/days", {
+      year,
+      source: opts.source,
+      category: formatCategoryList(opts.category),
+      exclude: formatCategoryList(opts.exclude),
+    })
   );
 }
 
 export function getHeatmapHours(
   year?: string,
-  source?: string
+  sourceOrOptions?: string | CategoryFilterOptions
 ): Promise<HeatmapHoursResult> {
+  const opts: CategoryFilterOptions =
+    typeof sourceOrOptions === "string"
+      ? { source: sourceOrOptions }
+      : sourceOrOptions ?? {};
   return getJson<HeatmapHoursResult>(
-    withQuery("/api/heatmap/hours", { year, source })
+    withQuery("/api/heatmap/hours", {
+      year,
+      source: opts.source,
+      category: formatCategoryList(opts.category),
+      exclude: formatCategoryList(opts.exclude),
+    })
   );
 }
 
@@ -607,22 +680,42 @@ export function getStats(
       from: params.from,
       to: params.to,
       source: params.source,
+      category: formatCategoryList(params.category),
+      exclude: formatCategoryList(params.exclude),
     })
   );
 }
 
-export function getInsights(source?: string): Promise<InsightsResult> {
-  return getJson<InsightsResult>(withQuery("/api/insights", { source }));
+export function getInsights(
+  sourceOrOptions?: string | CategoryFilterOptions
+): Promise<InsightsResult> {
+  const opts: CategoryFilterOptions =
+    typeof sourceOrOptions === "string"
+      ? { source: sourceOrOptions }
+      : sourceOrOptions ?? {};
+  return getJson<InsightsResult>(
+    withQuery("/api/insights", {
+      source: opts.source,
+      category: formatCategoryList(opts.category),
+      exclude: formatCategoryList(opts.exclude),
+    })
+  );
 }
 
 export function getYearReview(
   year?: number,
-  source?: string
+  sourceOrOptions?: string | CategoryFilterOptions
 ): Promise<YearReview> {
+  const opts: CategoryFilterOptions =
+    typeof sourceOrOptions === "string"
+      ? { source: sourceOrOptions }
+      : sourceOrOptions ?? {};
   return getJson<YearReview>(
     withQuery("/api/year-review", {
       year: year !== undefined ? String(year) : undefined,
-      source,
+      source: opts.source,
+      category: formatCategoryList(opts.category),
+      exclude: formatCategoryList(opts.exclude),
     })
   );
 }
@@ -637,6 +730,8 @@ export function search(params: SearchParams): Promise<SearchResult> {
       q: params.q,
       source: params.source,
       media_type: params.media_type,
+      category: formatCategoryList(params.category),
+      exclude: formatCategoryList(params.exclude),
       limit: params.limit !== undefined ? String(params.limit) : undefined,
       offset: params.offset !== undefined ? String(params.offset) : undefined,
     })
@@ -950,15 +1045,21 @@ export function deleteArchiveEntry(
  * List archive entries, newest first (`GET /api/archive?category=`).
  */
 export function listArchive(
-  categoryOrParams?: Category | string | { category?: Category | string }
+  categoryOrParams?:
+    | CategoryListParam
+    | { category?: CategoryListParam; exclude?: CategoryListParam }
 ): Promise<ArchiveEntrySummary[]> {
-  const category =
-    typeof categoryOrParams === "string"
-      ? categoryOrParams
-      : categoryOrParams?.category;
+  const opts: { category?: CategoryListParam; exclude?: CategoryListParam } =
+    typeof categoryOrParams === "string" || Array.isArray(categoryOrParams)
+      ? { category: categoryOrParams }
+      : (categoryOrParams as {
+          category?: CategoryListParam;
+          exclude?: CategoryListParam;
+        }) ?? {};
   return getJson<ArchiveEntrySummary[]>(
     withQuery("/api/archive", {
-      category: category || undefined,
+      category: formatCategoryList(opts.category),
+      exclude: formatCategoryList(opts.exclude),
     })
   );
 }
@@ -966,24 +1067,26 @@ export function listArchive(
 export type LibrarySort = "recent" | "time" | "title";
 
 export interface LibraryParams {
-  category?: Category | string;
+  category?: CategoryListParam;
+  exclude?: CategoryListParam;
   q?: string;
   sort?: LibrarySort;
 }
 
 /**
- * Fetch the unified library (`GET /api/library?category=&q=&sort=`).
+ * Fetch the unified library (`GET /api/library?category=&exclude=&q=&sort=`).
  */
 export function getLibrary(
-  paramsOrCategory?: LibraryParams | Category | string
+  paramsOrCategory?: LibraryParams | CategoryListParam
 ): Promise<LibraryResult> {
   const params: LibraryParams =
-    typeof paramsOrCategory === "string"
+    typeof paramsOrCategory === "string" || Array.isArray(paramsOrCategory)
       ? { category: paramsOrCategory }
-      : paramsOrCategory ?? {};
+      : (paramsOrCategory as LibraryParams) ?? {};
   return getJson<LibraryResult>(
     withQuery("/api/library", {
-      category: params.category || undefined,
+      category: formatCategoryList(params.category),
+      exclude: formatCategoryList(params.exclude),
       q: params.q || undefined,
       sort: params.sort || undefined,
     })
@@ -1004,11 +1107,12 @@ export interface SeriesParams {
   bucket: "day" | "week" | "month";
   from?: string;
   to?: string;
-  category?: Category | string;
+  category?: CategoryListParam;
+  exclude?: CategoryListParam;
 }
 
 /**
- * Fetch stacked category time series (`GET /api/series?bucket=&from=&to=&category=`).
+ * Fetch stacked category time series (`GET /api/series?bucket=&from=&to=&category=&exclude=`).
  */
 export function getSeries(params: SeriesParams): Promise<SeriesResult> {
   return getJson<SeriesResult>(
@@ -1016,29 +1120,45 @@ export function getSeries(params: SeriesParams): Promise<SeriesResult> {
       bucket: params.bucket,
       from: params.from,
       to: params.to,
-      category: params.category || undefined,
+      category: formatCategoryList(params.category),
+      exclude: formatCategoryList(params.exclude),
+    })
+  );
+}
+
+export interface ReviewFilterOptions {
+  category?: CategoryListParam;
+  exclude?: CategoryListParam;
+}
+
+/**
+ * Fetch a monthly review (`GET /api/review/month?month=YYYY-MM[&category=&exclude=]`).
+ */
+export function getMonthReview(
+  month?: string,
+  options?: ReviewFilterOptions
+): Promise<MonthReview> {
+  return getJson<MonthReview>(
+    withQuery("/api/review/month", {
+      month,
+      category: formatCategoryList(options?.category),
+      exclude: formatCategoryList(options?.exclude),
     })
   );
 }
 
 /**
- * Fetch a monthly review (`GET /api/review/month?month=YYYY-MM`).
- */
-export function getMonthReview(month?: string): Promise<MonthReview> {
-  return getJson<MonthReview>(
-    withQuery("/api/review/month", { month })
-  );
-}
-
-/**
- * Fetch a v2 yearly review built from the twelve months (`GET /api/review/year?year=YYYY`).
+ * Fetch a v2 yearly review built from the twelve months (`GET /api/review/year?year=YYYY[&category=&exclude=]`).
  */
 export function getYearReviewV2(
-  year?: number | string
+  year?: number | string,
+  options?: ReviewFilterOptions
 ): Promise<YearReviewV2> {
   return getJson<YearReviewV2>(
     withQuery("/api/review/year", {
       year: year !== undefined && year !== "" ? String(year) : undefined,
+      category: formatCategoryList(options?.category),
+      exclude: formatCategoryList(options?.exclude),
     })
   );
 }
@@ -1048,6 +1168,115 @@ export function getYearReviewV2(
  */
 export function getSettings(): Promise<SettingsView> {
   return getJson<SettingsView>("/api/settings");
+}
+
+// --- V2.1 API: Work Edits, Hidden Works, YouTube, Achriom Import -----------
+
+/**
+ * Apply a partial override to a library work (`POST /api/library/work/edit?key=`).
+ * Returns the updated `LibraryWorkDetail`.
+ */
+export function editWork(
+  key: string,
+  edit: WorkEdit
+): Promise<LibraryWorkDetail> {
+  return postJson<LibraryWorkDetail>(
+    withQuery("/api/library/work/edit", { key }),
+    edit
+  );
+}
+
+/**
+ * List hidden works (`GET /api/library/hidden`).
+ */
+export function getHiddenWorks(): Promise<HiddenWorksResult> {
+  return getJson<HiddenWorksResult>("/api/library/hidden");
+}
+
+export interface YoutubeOverviewParams {
+  from?: string;
+  to?: string;
+}
+
+/**
+ * Fetch YouTube overview by topic and channel (`GET /api/youtube?from=&to=`).
+ */
+export function getYoutubeOverview(
+  params: YoutubeOverviewParams = {}
+): Promise<YoutubeOverview> {
+  return getJson<YoutubeOverview>(
+    withQuery("/api/youtube", {
+      from: params.from,
+      to: params.to,
+    })
+  );
+}
+
+export interface YoutubeVideosParams {
+  channel?: string;
+  topic?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Fetch filtered YouTube videos (`GET /api/youtube/videos?channel=&topic=&from=&to=&q=&limit=&offset=`).
+ */
+export function getYoutubeVideos(
+  params: YoutubeVideosParams = {}
+): Promise<YoutubeVideosResult> {
+  return getJson<YoutubeVideosResult>(
+    withQuery("/api/youtube/videos", {
+      channel: params.channel,
+      topic: params.topic,
+      from: params.from,
+      to: params.to,
+      q: params.q,
+      limit: params.limit !== undefined ? String(params.limit) : undefined,
+      offset: params.offset !== undefined ? String(params.offset) : undefined,
+    })
+  );
+}
+
+export interface SetChannelTopicResult {
+  ok?: boolean;
+  channel: string;
+  topic: string | null;
+}
+
+/**
+ * Set or clear the user topic for a YouTube channel (`POST /api/youtube/channel-topic`).
+ */
+export function setChannelTopic(
+  channel: string,
+  topic: string | null
+): Promise<SetChannelTopicResult> {
+  return postJson<SetChannelTopicResult>("/api/youtube/channel-topic", {
+    channel,
+    topic,
+  });
+}
+
+export interface ImportAchriomOptions {
+  dryRun?: boolean;
+}
+
+/**
+ * Upload an Achriom library export `.zip` or `.csv` (`POST /api/import/achriom[?dry_run=1]`).
+ */
+export function importAchriom(
+  file: File,
+  options: ImportAchriomOptions = {}
+): Promise<AchriomImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const path = withQuery("/api/import/achriom", {
+    dry_run: options.dryRun ? "1" : undefined,
+  });
+  return postForm<AchriomImportResult>(path, form);
 }
 
 

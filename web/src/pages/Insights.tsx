@@ -6,6 +6,7 @@ import {
   getInsights,
   getLibrary,
   getSeries,
+  getYoutubeOverview,
   saveGoal,
   type Category,
   type CategoryTotal,
@@ -13,15 +14,20 @@ import {
   type HeatmapDaysResult,
   type HeatmapHoursResult,
   type InsightsResult,
+  type LibraryWork,
   type SeriesPoint,
   type SeriesResult,
+  type YoutubeOverview,
 } from "../api";
 import {
   CATEGORIES,
   categoryLabel,
-  categoryPluralLabel,
   resolveItemCategory,
 } from "../lib/categories";
+import {
+  buildCategoryFilterParams,
+  matchesCategorySelection,
+} from "../lib/category-filter";
 import {
   resolveInsightsRange,
   type InsightsRangePreset,
@@ -45,9 +51,19 @@ import {
 import { SOURCES, sourceLabel } from "../lib/sources";
 import { formatMinutes } from "../lib/stats";
 import {
+  getChannelTopicOverride,
+  subscribeWorkEdits,
+} from "../lib/work-edits";
+import {
+  buildYoutubeOverviewFromWorks,
+  groupYoutubeByTopic,
+  rankYoutubeChannels,
+} from "../lib/youtube";
+import {
   Badge,
   Button,
   Card,
+  CategoryChips,
   CategoryShareChart,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -61,13 +77,17 @@ import {
   StackedSeriesChart,
   Stat,
   Tabs,
+  YoutubeIcon,
+  bindContextMenu,
   type TabOption,
 } from "../ui";
 
 export interface InsightsProps {
   initialRange?: InsightsRangePreset;
   initialCategory?: Category;
+  initialCategories?: readonly Category[];
   initialYear?: string;
+  includeYoutubeInAll?: boolean;
 }
 
 const RANGE_TABS: ReadonlyArray<TabOption<InsightsRangePreset>> = [
@@ -302,8 +322,17 @@ function GoalsSection({ year }: { year: number }) {
           )}
 
           <div class="ui-form-actions">
-            <Button type="submit" variant="primary" size="sm" disabled={submitting}>
-              {submitting ? "Saving…" : editingGoal ? "Update Goal" : "Save Goal"}
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              disabled={submitting}
+            >
+              {submitting
+                ? "Saving…"
+                : editingGoal
+                  ? "Update Goal"
+                  : "Save Goal"}
             </Button>
             <Button
               variant="ghost"
@@ -401,15 +430,25 @@ function GoalsSection({ year }: { year: number }) {
 export function Insights({
   initialRange = "30d",
   initialCategory,
+  initialCategories,
   initialYear,
+  includeYoutubeInAll = false,
 }: InsightsProps) {
   const todayStr = getTodayStr();
   const currentYear = Number(todayStr.slice(0, 4));
 
   const [rangePreset, setRangePreset] =
     useState<InsightsRangePreset>(initialRange);
-  const [categoryFilter, setCategoryFilter] = useState<Category | "">(
-    initialCategory ?? ""
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>(
+    () => {
+      if (initialCategories && initialCategories.length > 0) {
+        return [...initialCategories];
+      }
+      if (initialCategory) {
+        return [initialCategory];
+      }
+      return [];
+    }
   );
   const [heatmapYear, setHeatmapYear] = useState<number>(
     initialYear ? Number(initialYear) : currentYear
@@ -419,6 +458,9 @@ export function Insights({
   const [libraryCategories, setLibraryCategories] = useState<CategoryTotal[]>(
     []
   );
+  const [libraryWorks, setLibraryWorks] = useState<LibraryWork[]>([]);
+  const [youtubeOverview, setYoutubeOverview] =
+    useState<YoutubeOverview | null>(null);
   const [insightsData, setInsightsData] = useState<InsightsResult | null>(null);
   const [heatmapDays, setHeatmapDays] = useState<HeatmapDaysResult | null>(
     null
@@ -428,6 +470,19 @@ export function Insights({
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [, setOverrideTick] = useState(0);
+
+  useEffect(() => {
+    return subscribeWorkEdits(() => setOverrideTick((t) => t + 1));
+  }, []);
+
+  useEffect(() => {
+    if (initialCategories !== undefined) {
+      setSelectedCategories([...initialCategories]);
+    } else if (initialCategory !== undefined) {
+      setSelectedCategories(initialCategory ? [initialCategory] : []);
+    }
+  }, [initialCategory, initialCategories]);
 
   const resolvedRange = useMemo(
     () => resolveInsightsRange(rangePreset, todayStr),
@@ -439,25 +494,57 @@ export function Insights({
     setLoading(true);
     setError(null);
 
-    Promise.all([
+    const filterParams = buildCategoryFilterParams(
+      selectedCategories,
+      includeYoutubeInAll
+    );
+
+    const fetchSeries = getSeries({
+      bucket: resolvedRange.bucket,
+      from: resolvedRange.from,
+      to: resolvedRange.to,
+      category: filterParams.category,
+      exclude: filterParams.exclude,
+    }).catch(() =>
       getSeries({
         bucket: resolvedRange.bucket,
         from: resolvedRange.from,
         to: resolvedRange.to,
-        category: categoryFilter || undefined,
-      }),
+      })
+    );
+
+    const fetchHours = getHeatmapHours(String(heatmapYear), filterParams).catch(
+      () => getHeatmapHours(String(heatmapYear)).catch(() => null)
+    );
+
+    const fetchIns = getInsights(filterParams).catch(() =>
+      getInsights().catch(() => null)
+    );
+
+    const fetchYt = getYoutubeOverview({
+      from: resolvedRange.from,
+      to: resolvedRange.to,
+    }).catch(() => null);
+
+    Promise.all([
+      fetchSeries,
       getLibrary().catch(() => null),
-      getInsights().catch(() => null),
-      getHeatmapHours(String(heatmapYear)).catch(() => null),
+      fetchIns,
+      fetchHours,
+      fetchYt,
     ])
-      .then(([seriesRes, libRes, insRes, hoursRes]) => {
+      .then(([seriesRes, libRes, insRes, hoursRes, ytRes]) => {
         if (cancelled) return;
         setSeriesData(seriesRes);
         if (libRes?.categories) {
           setLibraryCategories(libRes.categories);
         }
+        if (libRes?.works) {
+          setLibraryWorks(libRes.works);
+        }
         setInsightsData(insRes);
         setHeatmapHours(hoursRes);
+        setYoutubeOverview(ytRes);
         setLoading(false);
       })
       .catch((err) => {
@@ -469,12 +556,17 @@ export function Insights({
     return () => {
       cancelled = true;
     };
-  }, [resolvedRange, categoryFilter, heatmapYear]);
+  }, [resolvedRange, selectedCategories, includeYoutubeInAll, heatmapYear]);
 
-  // Fetch 52-week heatmap days whenever `heatmapYear` changes
+  // Fetch 52-week heatmap days whenever `heatmapYear` or category filter changes
   useEffect(() => {
     let cancelled = false;
-    getHeatmapDays(String(heatmapYear))
+    const filterParams = buildCategoryFilterParams(
+      selectedCategories,
+      includeYoutubeInAll
+    );
+    getHeatmapDays(String(heatmapYear), filterParams)
+      .catch(() => getHeatmapDays(String(heatmapYear)))
       .then((res) => {
         if (!cancelled) {
           setHeatmapDays(res);
@@ -488,9 +580,9 @@ export function Insights({
     return () => {
       cancelled = true;
     };
-  }, [heatmapYear]);
+  }, [heatmapYear, selectedCategories, includeYoutubeInAll]);
 
-  // Compute totals, bucket sparkline series, and category totals from `seriesData`
+  // Compute filtered series points, bucket totals, and category totals
   const {
     points,
     bucketTotals,
@@ -498,18 +590,30 @@ export function Insights({
     avgPerBucket,
     derivedCategoryTotals,
   } = useMemo(() => {
-    const pts: SeriesPoint[] = seriesData?.points ?? [];
+    const rawPts: SeriesPoint[] = seriesData?.points ?? [];
+    const pts: SeriesPoint[] = [];
     const totals: number[] = [];
     let sum = 0;
     const catSums = new Map<Category, { minutes: number; units: number }>();
 
-    for (const pt of pts) {
+    for (const pt of rawPts) {
       let ptSum = 0;
       const byCat = pt.minutes_by_category ?? {};
+      const filteredByCat: Partial<Record<Category, number>> = {};
+
       for (const cat of CATEGORIES) {
-        if (categoryFilter && cat !== categoryFilter) continue;
+        if (
+          !matchesCategorySelection(
+            cat,
+            selectedCategories,
+            includeYoutubeInAll
+          )
+        ) {
+          continue;
+        }
         const v = byCat[cat] ?? 0;
         if (v > 0) {
+          filteredByCat[cat] = v;
           ptSum += v;
           const prev = catSums.get(cat);
           if (prev) {
@@ -520,6 +624,10 @@ export function Insights({
           }
         }
       }
+      pts.push({
+        bucket: pt.bucket,
+        minutes_by_category: filteredByCat,
+      });
       totals.push(Math.round(ptSum));
       sum += ptSum;
     }
@@ -548,35 +656,62 @@ export function Insights({
       derivedCategoryTotals:
         derivedCats.length > 0 ? derivedCats : libraryCategories,
     };
-  }, [seriesData, categoryFilter, libraryCategories, rangePreset]);
+  }, [
+    seriesData,
+    selectedCategories,
+    includeYoutubeInAll,
+    libraryCategories,
+    rangePreset,
+  ]);
 
-  const categoryFilterTabs = useMemo<TabOption<Category | "">[]>(() => {
-    const activeSet = new Set(derivedCategoryTotals.map((c) => c.category));
-    const ordered = CATEGORIES.filter(
-      (c) => activeSet.has(c) || c === categoryFilter
-    );
-    return [
-      { value: "", label: "All Categories" },
-      ...ordered.map((cat) => ({
-        value: cat,
-        label: categoryPluralLabel(cat),
-        category: cat,
+  // YouTube Insights data (with 404 fallback from libraryWorks)
+  const effectiveYoutube = useMemo<YoutubeOverview>(() => {
+    const base =
+      youtubeOverview ?? buildYoutubeOverviewFromWorks(libraryWorks);
+    return {
+      ...base,
+      channels: (base.channels ?? []).map((ch) => ({
+        ...ch,
+        topic: getChannelTopicOverride(ch.channel, ch.topic),
       })),
-    ];
-  }, [derivedCategoryTotals, categoryFilter]);
+    };
+  }, [youtubeOverview, libraryWorks]);
+
+  const youtubeTopicGroups = useMemo(
+    () => groupYoutubeByTopic(effectiveYoutube).slice(0, 8),
+    [effectiveYoutube]
+  );
+
+  const youtubeTopChannels = useMemo(
+    () => rankYoutubeChannels(effectiveYoutube.channels).slice(0, 8),
+    [effectiveYoutube]
+  );
+
+  const youtubeSparkline = useMemo(() => {
+    if (!effectiveYoutube.days || effectiveYoutube.days.length === 0) {
+      return [];
+    }
+    return effectiveYoutube.days.map((pt) =>
+      Object.values(pt.minutes_by_category ?? {}).reduce<number>(
+        (acc, v) => acc + (typeof v === "number" ? v : 0),
+        0
+      )
+    );
+  }, [effectiveYoutube]);
 
   const streakOverall = insightsData?.streaks.overall;
   const onThisDayYears = insightsData?.on_this_day.years ?? [];
+  const singleCategory =
+    selectedCategories.length === 1 ? selectedCategories[0] : undefined;
 
   return (
     <section class="page-container insights-page" aria-label="Insights">
       <header class="page-header">
         <div class="page-header-titles">
-          <span class="page-eyebrow">Visual Patterns & Rhythm</span>
           <h1>Insights</h1>
           <p class="page-subtitle">
-            Stacked category trends, share of time, hourly rhythm, and your
-            52-week streak calendar.
+            Stacked category trends, share of time, hourly rhythm, YouTube
+            topics & channels, and your 52-week streak calendar.
           </p>
         </div>
 
@@ -590,17 +725,15 @@ export function Insights({
         </div>
       </header>
 
-      {categoryFilterTabs.length > 1 && (
-        <div class="insights-filter-row">
-          <Tabs
-            ariaLabel="Filter charts by category"
-            options={categoryFilterTabs}
-            value={categoryFilter}
-            onChange={(val) => setCategoryFilter(val)}
-            variant="pills"
-          />
-        </div>
-      )}
+      {/* Multi-Select Category Chips */}
+      <CategoryChips
+        selected={selectedCategories}
+        onChange={setSelectedCategories}
+        totals={libraryCategories.length > 0 ? libraryCategories : derivedCategoryTotals}
+        includeYoutubeInAll={includeYoutubeInAll}
+        ariaLabel="Filter charts by category"
+        showCounts="hours"
+      />
 
       {error && (
         <div class="calendar-error" role="alert">
@@ -623,11 +756,11 @@ export function Insights({
           <Stat
             label={`Time (${resolvedRange.label})`}
             value={formatMinutes(rangeTotalMinutes)}
-            category={categoryFilter || undefined}
+            category={singleCategory}
             sparkline={
               <Sparkline
                 values={bucketTotals}
-                category={categoryFilter || undefined}
+                category={singleCategory}
                 label={`Time trend (${resolvedRange.label})`}
               />
             }
@@ -639,11 +772,11 @@ export function Insights({
           <Stat
             label={`Average per ${resolvedRange.bucket}`}
             value={formatMinutes(avgPerBucket)}
-            category={categoryFilter || undefined}
+            category={singleCategory}
             sparkline={
               <Sparkline
                 values={bucketTotals}
-                category={categoryFilter || undefined}
+                category={singleCategory}
                 label={`Average per ${resolvedRange.bucket}`}
               />
             }
@@ -713,9 +846,17 @@ export function Insights({
           subtitle="Proportion of time and works across categories"
         >
           <CategoryShareChart
-            categories={derivedCategoryTotals}
-            selectedCategory={categoryFilter}
-            onSelectCategory={(cat) => setCategoryFilter(cat)}
+            categories={derivedCategoryTotals.filter((c) =>
+              matchesCategorySelection(
+                c.category,
+                selectedCategories,
+                includeYoutubeInAll
+              )
+            )}
+            selectedCategory={singleCategory ?? ""}
+            onSelectCategory={(cat) =>
+              setSelectedCategories(cat ? [cat] : [])
+            }
             title="Category share"
           />
         </Card>
@@ -733,7 +874,145 @@ export function Insights({
         </Card>
       </div>
 
-      {/* Chart 4: 52-Week Streak & Activity Heatmap Calendar (lives inside Insights) */}
+      {/* v2.1 YouTube Insights Section (Topics Over Time & Top Channels) */}
+      <Card
+        padding="md"
+        title="YouTube — Topics & Top Channels"
+        subtitle="Breakdown of YouTube watch time by topic and channel"
+        actions={
+          <Button
+            variant="secondary"
+            size="sm"
+            href="#/library?cat=youtube"
+            leadingIcon={<YoutubeIcon size={14} />}
+          >
+            Open YouTube View →
+          </Button>
+        }
+      >
+        {effectiveYoutube.total_minutes === 0 &&
+        youtubeTopicGroups.length === 0 &&
+        youtubeTopChannels.length === 0 ? (
+          <p class="ui-text-muted">
+            No YouTube activity recorded in this period.
+          </p>
+        ) : (
+          <div class="yt-insights-stack">
+            <div class="yt-insights-summary">
+              <Stat
+                label="YouTube Time"
+                value={formatMinutes(effectiveYoutube.total_minutes)}
+                category="youtube"
+                sparkline={
+                  youtubeSparkline.length > 1 ? (
+                    <Sparkline
+                      values={youtubeSparkline}
+                      category="youtube"
+                      label="YouTube daily minutes"
+                    />
+                  ) : undefined
+                }
+                sublabel={`${effectiveYoutube.videos} videos · ${effectiveYoutube.channels.length} channels`}
+              />
+            </div>
+
+            <div class="insights-two-col">
+              {/* Topics Breakdown */}
+              <div class="yt-insights-col">
+                <h3 class="settings-subheading">Topics</h3>
+                {youtubeTopicGroups.length === 0 ? (
+                  <p class="ui-text-muted">No topics assigned yet.</p>
+                ) : (
+                  <ul class="yt-insights-bar-list">
+                    {youtubeTopicGroups.map((t) => (
+                      <li key={t.topic} class="yt-insights-bar-row">
+                        <div class="yt-insights-bar-top tabular-nums">
+                          <a
+                            href={`#/library?cat=youtube&topic=${encodeURIComponent(
+                              t.topic
+                            )}`}
+                            class="yt-insights-bar-name"
+                          >
+                            {t.topic}
+                          </a>
+                          <span>
+                            <strong>{formatMinutes(t.totalMinutes)}</strong> ·{" "}
+                            {t.sharePct}%
+                          </span>
+                        </div>
+                        <div class="yt-bar-track">
+                          <div
+                            class="yt-bar-fill"
+                            style={{
+                              width: `${Math.round(t.barRatio * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Top Channels */}
+              <div class="yt-insights-col">
+                <h3 class="settings-subheading">Top Channels</h3>
+                {youtubeTopChannels.length === 0 ? (
+                  <p class="ui-text-muted">No channels recorded yet.</p>
+                ) : (
+                  <ul class="yt-insights-bar-list">
+                    {youtubeTopChannels.map((ch) => (
+                      <li
+                        key={ch.channel}
+                        class="yt-insights-bar-row"
+                        {...bindContextMenu({
+                          kind: "youtube-channel",
+                          title: ch.channel,
+                          category: "youtube",
+                          channel: ch.channel,
+                          topic: ch.topic,
+                        })}
+                      >
+                        <div class="yt-insights-bar-top tabular-nums">
+                          <span class="yt-insights-channel-left">
+                            <a
+                              href={`#/library?cat=youtube&channel=${encodeURIComponent(
+                                ch.channel
+                              )}`}
+                              class="yt-insights-bar-name"
+                            >
+                              {ch.channel}
+                            </a>
+                            {ch.topic && (
+                              <Badge size="sm" variant="neutral">
+                                {ch.topic}
+                              </Badge>
+                            )}
+                          </span>
+                          <span>
+                            <strong>{formatMinutes(ch.total_minutes)}</strong> ·{" "}
+                            {ch.videos}v
+                          </span>
+                        </div>
+                        <div class="yt-bar-track">
+                          <div
+                            class="yt-bar-fill"
+                            style={{
+                              width: `${Math.round(ch.barRatio * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Chart 4: 52-Week Streak & Activity Heatmap Calendar */}
       <Card
         padding="md"
         title={`52-Week Activity & Streak Calendar (${heatmapYear})`}
@@ -796,11 +1075,22 @@ export function Insights({
                 <div class="insights-otd-items">
                   {group.items.map((item, idx) => {
                     const cat = resolveItemCategory(item);
+                    const href = `#/library?q=${encodeURIComponent(
+                      item.title
+                    )}`;
                     return (
                       <a
                         key={`${item.title}-${idx}`}
-                        href={`#/library?q=${encodeURIComponent(item.title)}`}
+                        href={href}
                         class="insights-otd-card"
+                        {...bindContextMenu({
+                          kind: "work",
+                          workKey: `${cat}:${item.title.toLowerCase()}`,
+                          title: item.title,
+                          category: cat,
+                          href,
+                          source: item.source,
+                        })}
                       >
                         <Cover
                           src={item.cover_url}

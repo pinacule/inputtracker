@@ -1,15 +1,16 @@
 /**
- * InputTracker Design System — Tokens (v2)
+ * InputTracker Design System — Tokens (v2.1 Dark Themes Only)
  *
- * Aesthetic: Calm, warm reading room & personal archive.
- * Warm linen/paper surfaces in light mode, deep espresso/walnut charcoal in dark mode,
- * refined literary serif headings paired with crisp UI sans, soft warm shadows,
- * and 9 distinct, harmonious, WCAG-AA compliant category colour families.
+ * Aesthetic: Calm nocturnal reading room & personal archive.
+ * 5 named dark themes (Espresso / Warm Study, Midnight Ink, Pine & Moss,
+ * Obsidian Archive, Velvet Nocturne), refined literary serif headings paired
+ * with crisp UI sans, soft shadows, and 9 distinct, WCAG-AA compliant
+ * category colour families across every theme.
  */
 
 :root,
-:root[data-theme="light"] {
-  color-scheme: light;
+:root[data-theme="espresso"] {
+  color-scheme: dark;
 
   /* --- Typography --- */
   --font-serif: "Iowan Old Style", "Palatino Linotype", "URW Palladio L", P052,
@@ -72,118 +73,117 @@
   --duration-normal: 220ms;
   --duration-slow: 340ms;
 
-  /* --- Light Theme (Warm Paper & Linen) --- */
-  --bg-canvas: #f6f2ea;
-  --bg-surface: #fffdf9;
-  --bg-surface-raised: #ffffff;
-  --bg-subtle: #ede7dc;
-  --bg-muted: #e2dacb;
-  --bg-overlay: rgba(28, 24, 19, 0.45);
+  /* --- Theme 1: Espresso (Warm Study — Default) --- */
+  --bg-canvas: #14120f;
+  --bg-surface: #1d1a16;
+  --bg-surface-raised: #25211c;
+  --bg-subtle: #29241e;
+  --bg-muted: #352f27;
+  --bg-overlay: rgba(8, 7, 5, 0.72);
 
-  --text-primary: #1f1b16;
-  --text-secondary: #4e463d;
-  --text-muted: #6b6156;
-  --text-on-accent: #fffdf9;
+  --text-primary: #f4efe6;
+  --text-secondary: #c4bba9;
+  --text-muted: #998f7e;
+  --text-on-accent: #14120f;
 
-  --border-subtle: #e5dec9;
-  --border-default: #d5cbb8;
-  --border-strong: #b5a892;
+  --border-subtle: #2b2620;
+  --border-default: #3a332b;
+  --border-strong: #54493e;
 
-  /* Brand / Primary Accent (Warm Terracotta & Library Leather) */
-  --accent-primary: #9c4221;
-  --accent-primary-hover: #7f3418;
-  --accent-primary-subtle: #f6e7e0;
-  --accent-primary-border: #e2beaf;
-  --focus-ring: #9c4221;
+  --accent-primary: #e58564;
+  --accent-primary-hover: #f09b7e;
+  --accent-primary-subtle: #321f18;
+  --accent-primary-border: #5e382b;
+  --focus-ring: #e58564;
 
   /* Semantic Status Colours */
-  --status-success-fg: #1b6545;
-  --status-success-bg: #e6f4ed;
-  --status-success-border: #b4dfc8;
+  --status-success-fg: #8adbb5;
+  --status-success-bg: #162b21;
+  --status-success-border: #28523f;
 
-  --status-warning-fg: #8c4f04;
-  --status-warning-bg: #fdf1de;
-  --status-warning-border: #eccb98;
+  --status-warning-fg: #f5c67a;
+  --status-warning-bg: #2e2211;
+  --status-warning-border: #59401d;
 
-  --status-danger-fg: #a82424;
-  --status-danger-bg: #fcebeb;
-  --status-danger-border: #f0bcbc;
+  --status-danger-fg: #f7a6a6;
+  --status-danger-bg: #321a1a;
+  --status-danger-border: #5e2e2e;
 
-  /* --- 9 Category Colour Families (Light Mode, WCAG AA) --- */
+  /* --- 9 Category Colour Families (WCAG AA on Dark) --- */
 
   /* 1. Anime — Indigo / Ink Blue */
-  --cat-anime-fg: #3b3199;
-  --cat-anime-bg: #edeafd;
-  --cat-anime-border: #c5bef5;
-  --cat-anime-solid: #5248c9;
-  --cat-anime-tile-start: #473db3;
-  --cat-anime-tile-end: #28216e;
+  --cat-anime-fg: #c2beff;
+  --cat-anime-bg: #1e1c38;
+  --cat-anime-border: #3a356e;
+  --cat-anime-solid: #8278f5;
+  --cat-anime-tile-start: #3c3494;
+  --cat-anime-tile-end: #201b54;
 
   /* 2. Series — Slate Teal / Petrol */
-  --cat-series-fg: #0e5866;
-  --cat-series-bg: #e3f4f7;
-  --cat-series-border: #a8dce5;
-  --cat-series-solid: #157a8c;
-  --cat-series-tile-start: #126978;
-  --cat-series-tile-end: #093b44;
+  --cat-series-fg: #8ee0ee;
+  --cat-series-bg: #142a30;
+  --cat-series-border: #25505c;
+  --cat-series-solid: #3cb8cc;
+  --cat-series-tile-start: #125866;
+  --cat-series-tile-end: #093138;
 
   /* 3. Film — Cinema Amber / Warm Ochre */
-  --cat-film-fg: #824905;
-  --cat-film-bg: #fcf0dc;
-  --cat-film-border: #e8c996;
-  --cat-film-solid: #be7112;
-  --cat-film-tile-start: #9c5b0b;
-  --cat-film-tile-end: #633704;
+  --cat-film-fg: #f6c982;
+  --cat-film-bg: #302312;
+  --cat-film-border: #5c421f;
+  --cat-film-solid: #e29a38;
+  --cat-film-tile-start: #824b08;
+  --cat-film-tile-end: #4a2903;
 
   /* 4. Book — Botanical Sage / Forest Green */
-  --cat-book-fg: #1b6144;
-  --cat-book-bg: #e6f3ec;
-  --cat-book-border: #b5dcc8;
-  --cat-book-solid: #267855;
-  --cat-book-tile-start: #226649;
-  --cat-book-tile-end: #123d2a;
+  --cat-book-fg: #8fdcb8;
+  --cat-book-bg: #172b22;
+  --cat-book-border: #2a5441;
+  --cat-book-solid: #4cb888;
+  --cat-book-tile-start: #1d543c;
+  --cat-book-tile-end: #0f3021;
 
   /* 5. Audiobook — Warm Plum / Amethyst */
-  --cat-audiobook-fg: #5e348a;
-  --cat-audiobook-bg: #f1ebf8;
-  --cat-audiobook-border: #d4c1eb;
-  --cat-audiobook-solid: #6d3fa0;
-  --cat-audiobook-tile-start: #5b3386;
-  --cat-audiobook-tile-end: #391d59;
+  --cat-audiobook-fg: #d5bcf9;
+  --cat-audiobook-bg: #271d35;
+  --cat-audiobook-border: #4a3566;
+  --cat-audiobook-solid: #a37bf0;
+  --cat-audiobook-tile-start: #4b2a70;
+  --cat-audiobook-tile-end: #2a1542;
 
   /* 6. YouTube — Warm Vermilion / Terracotta Red */
-  --cat-youtube-fg: #a6261b;
-  --cat-youtube-bg: #fcede9;
-  --cat-youtube-border: #f0c2b8;
-  --cat-youtube-solid: #c23528;
-  --cat-youtube-tile-start: #a82b20;
-  --cat-youtube-tile-end: #6e1810;
+  --cat-youtube-fg: #f8b4ac;
+  --cat-youtube-bg: #331c19;
+  --cat-youtube-border: #61312b;
+  --cat-youtube-solid: #e46356;
+  --cat-youtube-tile-start: #8f251c;
+  --cat-youtube-tile-end: #52120d;
 
   /* 7. Podcast — Warm Copper / Burnt Sienna */
-  --cat-podcast-fg: #8c3d10;
-  --cat-podcast-bg: #fbece3;
-  --cat-podcast-border: #ebbFA6;
-  --cat-podcast-solid: #b8511b;
-  --cat-podcast-tile-start: #9e4314;
-  --cat-podcast-tile-end: #5e2407;
+  --cat-podcast-fg: #f7bc97;
+  --cat-podcast-bg: #301f15;
+  --cat-podcast-border: #5e3b26;
+  --cat-podcast-solid: #e07b42;
+  --cat-podcast-tile-start: #82380f;
+  --cat-podcast-tile-end: #4a1e06;
 
   /* 8. Music — Deep Rose / Berry */
-  --cat-music-fg: #8a2052;
-  --cat-music-bg: #fae8f0;
-  --cat-music-border: #ebb8cf;
-  --cat-music-solid: #b0306a;
-  --cat-music-tile-start: #942457;
-  --cat-music-tile-end: #571131;
+  --cat-music-fg: #f7b2d3;
+  --cat-music-bg: #301925;
+  --cat-music-border: #5e2e46;
+  --cat-music-solid: #de5d97;
+  --cat-music-tile-start: #7d1d49;
+  --cat-music-tile-end: #470e28;
 
   /* 9. Other — Warm Stone / Pewter */
-  --cat-other-fg: #4e463d;
-  --cat-other-bg: #ece7df;
-  --cat-other-border: #cfc5b6;
-  --cat-other-solid: #756a5d;
-  --cat-other-tile-start: #61574b;
-  --cat-other-tile-end: #3b342c;
+  --cat-other-fg: #d2c9bb;
+  --cat-other-bg: #28241f;
+  --cat-other-border: #474037;
+  --cat-other-solid: #9c9080;
+  --cat-other-tile-start: #4f473e;
+  --cat-other-tile-end: #2b2621;
 
-  /* Legacy MediaKind aliases (mapped to their matching category family) */
+  /* Legacy MediaKind aliases */
   --kind-audiobook-fg: var(--cat-audiobook-fg);
   --kind-audiobook-bg: var(--cat-audiobook-bg);
   --kind-audiobook-border: var(--cat-audiobook-border);
@@ -212,258 +212,7 @@
   --kind-manual-tile-start: var(--cat-book-tile-start);
   --kind-manual-tile-end: var(--cat-book-tile-end);
 
-  /* --- Calendar Intensity Heat Wash (Light) --- */
-  --heat-0: var(--bg-surface);
-  --heat-1: #f7efe2;
-  --heat-2: #efe1c8;
-  --heat-3: #e5cca3;
-  --heat-4: #d8b27c;
-  --heat-border-1: #e4d4ba;
-  --heat-border-2: #d8c098;
-  --heat-border-3: #c7a470;
-  --heat-border-4: #b5894c;
-
-  /* --- Shadows --- */
-  --shadow-xs: 0 1px 2px rgba(31, 27, 22, 0.05);
-  --shadow-sm: 0 2px 6px rgba(31, 27, 22, 0.06), 0 1px 2px rgba(31, 27, 22, 0.04);
-  --shadow-md: 0 8px 22px rgba(31, 27, 22, 0.08), 0 2px 6px rgba(31, 27, 22, 0.05);
-  --shadow-lg: 0 18px 42px rgba(31, 27, 22, 0.14), 0 4px 12px rgba(31, 27, 22, 0.08);
-  --shadow-cover: 0 6px 16px rgba(25, 20, 14, 0.16), 0 2px 4px rgba(25, 20, 14, 0.1),
-    inset 1px 0 0 rgba(255, 255, 255, 0.22);
-}
-
-/* --- Dark Theme (Deep Warm Charcoal Study — System or Explicit) --- */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-
-    --bg-canvas: #14120f;
-    --bg-surface: #1d1a16;
-    --bg-surface-raised: #25211c;
-    --bg-subtle: #29241e;
-    --bg-muted: #352f27;
-    --bg-overlay: rgba(8, 7, 5, 0.72);
-
-    --text-primary: #f4efe6;
-    --text-secondary: #c4bba9;
-    --text-muted: #998f7e;
-    --text-on-accent: #14120f;
-
-    --border-subtle: #2b2620;
-    --border-default: #3a332b;
-    --border-strong: #54493e;
-
-    --accent-primary: #e58564;
-    --accent-primary-hover: #f09b7e;
-    --accent-primary-subtle: #321f18;
-    --accent-primary-border: #5e382b;
-    --focus-ring: #e58564;
-
-    --status-success-fg: #8adbb5;
-    --status-success-bg: #162b21;
-    --status-success-border: #28523f;
-
-    --status-warning-fg: #f5c67a;
-    --status-warning-bg: #2e2211;
-    --status-warning-border: #59401d;
-
-    --status-danger-fg: #f7a6a6;
-    --status-danger-bg: #321a1a;
-    --status-danger-border: #5e2e2e;
-
-    /* 1. Anime (Dark) */
-    --cat-anime-fg: #b8b3fc;
-    --cat-anime-bg: #1e1c38;
-    --cat-anime-border: #3a356e;
-    --cat-anime-solid: #8278f5;
-    --cat-anime-tile-start: #3c3494;
-    --cat-anime-tile-end: #201b54;
-
-    /* 2. Series (Dark) */
-    --cat-series-fg: #8ee0ee;
-    --cat-series-bg: #142a30;
-    --cat-series-border: #25505c;
-    --cat-series-solid: #3cb8cc;
-    --cat-series-tile-start: #125866;
-    --cat-series-tile-end: #093138;
-
-    /* 3. Film (Dark) */
-    --cat-film-fg: #f6c982;
-    --cat-film-bg: #302312;
-    --cat-film-border: #5c421f;
-    --cat-film-solid: #e29a38;
-    --cat-film-tile-start: #824b08;
-    --cat-film-tile-end: #4a2903;
-
-    /* 4. Book (Dark) */
-    --cat-book-fg: #8fdcb8;
-    --cat-book-bg: #172b22;
-    --cat-book-border: #2a5441;
-    --cat-book-solid: #4cb888;
-    --cat-book-tile-start: #1d543c;
-    --cat-book-tile-end: #0f3021;
-
-    /* 5. Audiobook (Dark) */
-    --cat-audiobook-fg: #d3b8f8;
-    --cat-audiobook-bg: #271d35;
-    --cat-audiobook-border: #4a3566;
-    --cat-audiobook-solid: #a37bf0;
-    --cat-audiobook-tile-start: #4b2a70;
-    --cat-audiobook-tile-end: #2a1542;
-
-    /* 6. YouTube (Dark) */
-    --cat-youtube-fg: #f8afa6;
-    --cat-youtube-bg: #331c19;
-    --cat-youtube-border: #61312b;
-    --cat-youtube-solid: #e46356;
-    --cat-youtube-tile-start: #8f251c;
-    --cat-youtube-tile-end: #52120d;
-
-    /* 7. Podcast (Dark) */
-    --cat-podcast-fg: #f7bc97;
-    --cat-podcast-bg: #301f15;
-    --cat-podcast-border: #5e3b26;
-    --cat-podcast-solid: #e07b42;
-    --cat-podcast-tile-start: #82380f;
-    --cat-podcast-tile-end: #4a1e06;
-
-    /* 8. Music (Dark) */
-    --cat-music-fg: #f7add0;
-    --cat-music-bg: #301925;
-    --cat-music-border: #5e2e46;
-    --cat-music-solid: #de5d97;
-    --cat-music-tile-start: #7d1d49;
-    --cat-music-tile-end: #470e28;
-
-    /* 9. Other (Dark) */
-    --cat-other-fg: #cfc6b8;
-    --cat-other-bg: #28241f;
-    --cat-other-border: #474037;
-    --cat-other-solid: #9c9080;
-    --cat-other-tile-start: #4f473e;
-    --cat-other-tile-end: #2b2621;
-
-    /* Calendar Intensity Heat Wash (Dark) */
-    --heat-0: var(--bg-surface);
-    --heat-1: #231e17;
-    --heat-2: #2d241a;
-    --heat-3: #3b2d1d;
-    --heat-4: #4d3720;
-    --heat-border-1: #362d22;
-    --heat-border-2: #4a3a28;
-    --heat-border-3: #634b30;
-    --heat-border-4: #7d5d39;
-
-    /* Shadows (Dark) */
-    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.38);
-    --shadow-md: 0 10px 26px rgba(0, 0, 0, 0.45);
-    --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.6);
-    --shadow-cover: 0 8px 20px rgba(0, 0, 0, 0.55), 0 2px 5px rgba(0, 0, 0, 0.4),
-      inset 1px 0 0 rgba(255, 255, 255, 0.14);
-  }
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  --bg-canvas: #14120f;
-  --bg-surface: #1d1a16;
-  --bg-surface-raised: #25211c;
-  --bg-subtle: #29241e;
-  --bg-muted: #352f27;
-  --bg-overlay: rgba(8, 7, 5, 0.72);
-
-  --text-primary: #f4efe6;
-  --text-secondary: #c4bba9;
-  --text-muted: #998f7e;
-  --text-on-accent: #14120f;
-
-  --border-subtle: #2b2620;
-  --border-default: #3a332b;
-  --border-strong: #54493e;
-
-  --accent-primary: #e58564;
-  --accent-primary-hover: #f09b7e;
-  --accent-primary-subtle: #321f18;
-  --accent-primary-border: #5e382b;
-  --focus-ring: #e58564;
-
-  --status-success-fg: #8adbb5;
-  --status-success-bg: #162b21;
-  --status-success-border: #28523f;
-
-  --status-warning-fg: #f5c67a;
-  --status-warning-bg: #2e2211;
-  --status-warning-border: #59401d;
-
-  --status-danger-fg: #f7a6a6;
-  --status-danger-bg: #321a1a;
-  --status-danger-border: #5e2e2e;
-
-  --cat-anime-fg: #b8b3fc;
-  --cat-anime-bg: #1e1c38;
-  --cat-anime-border: #3a356e;
-  --cat-anime-solid: #8278f5;
-  --cat-anime-tile-start: #3c3494;
-  --cat-anime-tile-end: #201b54;
-
-  --cat-series-fg: #8ee0ee;
-  --cat-series-bg: #142a30;
-  --cat-series-border: #25505c;
-  --cat-series-solid: #3cb8cc;
-  --cat-series-tile-start: #125866;
-  --cat-series-tile-end: #093138;
-
-  --cat-film-fg: #f6c982;
-  --cat-film-bg: #302312;
-  --cat-film-border: #5c421f;
-  --cat-film-solid: #e29a38;
-  --cat-film-tile-start: #824b08;
-  --cat-film-tile-end: #4a2903;
-
-  --cat-book-fg: #8fdcb8;
-  --cat-book-bg: #172b22;
-  --cat-book-border: #2a5441;
-  --cat-book-solid: #4cb888;
-  --cat-book-tile-start: #1d543c;
-  --cat-book-tile-end: #0f3021;
-
-  --cat-audiobook-fg: #d3b8f8;
-  --cat-audiobook-bg: #271d35;
-  --cat-audiobook-border: #4a3566;
-  --cat-audiobook-solid: #a37bf0;
-  --cat-audiobook-tile-start: #4b2a70;
-  --cat-audiobook-tile-end: #2a1542;
-
-  --cat-youtube-fg: #f8afa6;
-  --cat-youtube-bg: #331c19;
-  --cat-youtube-border: #61312b;
-  --cat-youtube-solid: #e46356;
-  --cat-youtube-tile-start: #8f251c;
-  --cat-youtube-tile-end: #52120d;
-
-  --cat-podcast-fg: #f7bc97;
-  --cat-podcast-bg: #301f15;
-  --cat-podcast-border: #5e3b26;
-  --cat-podcast-solid: #e07b42;
-  --cat-podcast-tile-start: #82380f;
-  --cat-podcast-tile-end: #4a1e06;
-
-  --cat-music-fg: #f7add0;
-  --cat-music-bg: #301925;
-  --cat-music-border: #5e2e46;
-  --cat-music-solid: #de5d97;
-  --cat-music-tile-start: #7d1d49;
-  --cat-music-tile-end: #470e28;
-
-  --cat-other-fg: #cfc6b8;
-  --cat-other-bg: #28241f;
-  --cat-other-border: #474037;
-  --cat-other-solid: #9c9080;
-  --cat-other-tile-start: #4f473e;
-  --cat-other-tile-end: #2b2621;
-
+  /* --- Calendar Intensity Heat Wash --- */
   --heat-0: var(--bg-surface);
   --heat-1: #231e17;
   --heat-2: #2d241a;
@@ -474,12 +223,161 @@
   --heat-border-3: #634b30;
   --heat-border-4: #7d5d39;
 
+  /* --- Shadows --- */
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.38);
   --shadow-md: 0 10px 26px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.6);
   --shadow-cover: 0 8px 20px rgba(0, 0, 0, 0.55), 0 2px 5px rgba(0, 0, 0, 0.4),
     inset 1px 0 0 rgba(255, 255, 255, 0.14);
+}
+
+/* --- Theme 2: Midnight Ink (Nocturnal Slate-Navy & Sky Blue) --- */
+:root[data-theme="midnight"] {
+  color-scheme: dark;
+
+  --bg-canvas: #0b1017;
+  --bg-surface: #121924;
+  --bg-surface-raised: #192230;
+  --bg-subtle: #1e293a;
+  --bg-muted: #27354a;
+  --bg-overlay: rgba(5, 8, 13, 0.76);
+
+  --text-primary: #eaf0f8;
+  --text-secondary: #b2c0d4;
+  --text-muted: #8496ae;
+  --text-on-accent: #0b1017;
+
+  --border-subtle: #1d2738;
+  --border-default: #2a384d;
+  --border-strong: #3e526f;
+
+  --accent-primary: #68b5ff;
+  --accent-primary-hover: #8ac6ff;
+  --accent-primary-subtle: #142840;
+  --accent-primary-border: #254a75;
+  --focus-ring: #68b5ff;
+
+  --heat-0: var(--bg-surface);
+  --heat-1: #142133;
+  --heat-2: #182b44;
+  --heat-3: #1e3759;
+  --heat-4: #254673;
+  --heat-border-1: #203452;
+  --heat-border-2: #2a456b;
+  --heat-border-3: #36598a;
+  --heat-border-4: #4571ad;
+}
+
+/* --- Theme 3: Pine & Moss (Deep Botanical Evergreen & Sage) --- */
+:root[data-theme="forest"] {
+  color-scheme: dark;
+
+  --bg-canvas: #0c130f;
+  --bg-surface: #131e18;
+  --bg-surface-raised: #1a2820;
+  --bg-subtle: #203027;
+  --bg-muted: #293e32;
+  --bg-overlay: rgba(5, 10, 7, 0.76);
+
+  --text-primary: #e9f2ed;
+  --text-secondary: #b4c8bc;
+  --text-muted: #859e90;
+  --text-on-accent: #0c130f;
+
+  --border-subtle: #1e2e25;
+  --border-default: #2b4235;
+  --border-strong: #3f5e4d;
+
+  --accent-primary: #62c994;
+  --accent-primary-hover: #80d6aa;
+  --accent-primary-subtle: #142d21;
+  --accent-primary-border: #25543d;
+  --focus-ring: #62c994;
+
+  --heat-0: var(--bg-surface);
+  --heat-1: #16261d;
+  --heat-2: #1b3124;
+  --heat-3: #223f2e;
+  --heat-4: #2a503a;
+  --heat-border-1: #243d2f;
+  --heat-border-2: #2f523e;
+  --heat-border-3: #3d6950;
+  --heat-border-4: #4d8565;
+}
+
+/* --- Theme 4: Obsidian Archive (Neutral Carbon Ink & Library Gold) --- */
+:root[data-theme="obsidian"] {
+  color-scheme: dark;
+
+  --bg-canvas: #0e0e11;
+  --bg-surface: #16161b;
+  --bg-surface-raised: #1e1e25;
+  --bg-subtle: #24242c;
+  --bg-muted: #2f2f3a;
+  --bg-overlay: rgba(6, 6, 8, 0.78);
+
+  --text-primary: #f2f1f7;
+  --text-secondary: #bcbac9;
+  --text-muted: #8e8c9e;
+  --text-on-accent: #0e0e11;
+
+  --border-subtle: #23232b;
+  --border-default: #32323d;
+  --border-strong: #494959;
+
+  --accent-primary: #e5b557;
+  --accent-primary-hover: #f0c673;
+  --accent-primary-subtle: #2e2514;
+  --accent-primary-border: #594622;
+  --focus-ring: #e5b557;
+
+  --heat-0: var(--bg-surface);
+  --heat-1: #1f1c16;
+  --heat-2: #292419;
+  --heat-3: #362e1d;
+  --heat-4: #473b22;
+  --heat-border-1: #332c1f;
+  --heat-border-2: #473c27;
+  --heat-border-3: #5e4f31;
+  --heat-border-4: #78643c;
+}
+
+/* --- Theme 5: Velvet Nocturne (Dark Aubergine & Soft Rosewood) --- */
+:root[data-theme="plum"] {
+  color-scheme: dark;
+
+  --bg-canvas: #130e16;
+  --bg-surface: #1c1521;
+  --bg-surface-raised: #251c2c;
+  --bg-subtle: #2c2134;
+  --bg-muted: #392b44;
+  --bg-overlay: rgba(8, 5, 11, 0.76);
+
+  --text-primary: #f3ecf7;
+  --text-secondary: #c5b5cf;
+  --text-muted: #9684a3;
+  --text-on-accent: #130e16;
+
+  --border-subtle: #2b2033;
+  --border-default: #3e2f49;
+  --border-strong: #584368;
+
+  --accent-primary: #df85bc;
+  --accent-primary-hover: #ea9ecd;
+  --accent-primary-subtle: #331c2b;
+  --accent-primary-border: #613350;
+  --focus-ring: #df85bc;
+
+  --heat-0: var(--bg-surface);
+  --heat-1: #24192b;
+  --heat-2: #2f1f38;
+  --heat-3: #3d274a;
+  --heat-4: #4e315e;
+  --heat-border-1: #382644;
+  --heat-border-2: #4c335c;
+  --heat-border-3: #634278;
+  --heat-border-4: #7c5296;
 }
 
 /* Respect reduced motion preferences globally */

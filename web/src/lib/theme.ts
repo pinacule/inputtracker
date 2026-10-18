@@ -1,29 +1,232 @@
 /**
- * Theme preference helpers (`system` | `light` | `dark`), stored in `localStorage`
- * and reflected as `data-theme="light|dark"` on `document.documentElement`.
+ * Dark-only theme registry and persistence helpers for InputTracker v2.1.
  *
- * Pure storage helpers accept an optional storage interface so they are
- * unit-testable under Bun with no DOM.
+ * Light and system modes are removed. Offers 5 named dark themes (including
+ * the original warm dark "espresso"), stored in `localStorage` under
+ * `inputtracker.theme` and applied as `data-theme="<id>"` on
+ * `document.documentElement` before first paint.
+ *
+ * Pure helpers accept an optional storage interface so they are unit-testable
+ * under Bun with no DOM.
  */
 
-export type ThemeMode = "system" | "light" | "dark";
+import type { Category } from "../../../src/core/category";
+
+export type DarkThemeId =
+  | "espresso"
+  | "midnight"
+  | "forest"
+  | "obsidian"
+  | "plum";
+
+/** Alias kept for callers referencing ThemeMode. */
+export type ThemeMode = DarkThemeId;
+
+export const DEFAULT_THEME: DarkThemeId = "espresso";
 
 export const THEME_STORAGE_KEY = "inputtracker.theme";
+
+export interface ThemeSwatches {
+  readonly canvas: string;
+  readonly surface: string;
+  readonly surfaceRaised: string;
+  readonly subtle: string;
+  readonly textPrimary: string;
+  readonly textSecondary: string;
+  readonly accent: string;
+  readonly border: string;
+}
+
+export interface CategoryThemeColors {
+  readonly fg: string;
+  readonly bg: string;
+  readonly border: string;
+  readonly solid: string;
+}
+
+export interface DarkThemeDefinition {
+  readonly id: DarkThemeId;
+  readonly label: string;
+  readonly description: string;
+  readonly swatches: ThemeSwatches;
+  readonly categories: Readonly<Record<Category, CategoryThemeColors>>;
+}
+
+const SHARED_DARK_CATEGORIES: Readonly<Record<Category, CategoryThemeColors>> = {
+  anime: {
+    fg: "#c2beff",
+    bg: "#1e1c38",
+    border: "#3a356e",
+    solid: "#8278f5",
+  },
+  series: {
+    fg: "#8ee0ee",
+    bg: "#142a30",
+    border: "#25505c",
+    solid: "#3cb8cc",
+  },
+  film: {
+    fg: "#f6c982",
+    bg: "#302312",
+    border: "#5c421f",
+    solid: "#e29a38",
+  },
+  book: {
+    fg: "#8fdcb8",
+    bg: "#172b22",
+    border: "#2a5441",
+    solid: "#4cb888",
+  },
+  audiobook: {
+    fg: "#d5bcf9",
+    bg: "#271d35",
+    border: "#4a3566",
+    solid: "#a37bf0",
+  },
+  youtube: {
+    fg: "#f8b4ac",
+    bg: "#331c19",
+    border: "#61312b",
+    solid: "#e46356",
+  },
+  podcast: {
+    fg: "#f7bc97",
+    bg: "#301f15",
+    border: "#5e3b26",
+    solid: "#e07b42",
+  },
+  music: {
+    fg: "#f7b2d3",
+    bg: "#301925",
+    border: "#5e2e46",
+    solid: "#de5d97",
+  },
+  other: {
+    fg: "#d2c9bb",
+    bg: "#28241f",
+    border: "#474037",
+    solid: "#9c9080",
+  },
+};
+
+export const DARK_THEMES: ReadonlyArray<DarkThemeDefinition> = [
+  {
+    id: "espresso",
+    label: "Warm Study",
+    description: "Deep walnut charcoal & warm terracotta leather",
+    swatches: {
+      canvas: "#14120f",
+      surface: "#1d1a16",
+      surfaceRaised: "#25211c",
+      subtle: "#29241e",
+      textPrimary: "#f4efe6",
+      textSecondary: "#c4bba9",
+      accent: "#e58564",
+      border: "#3a332b",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+  {
+    id: "midnight",
+    label: "Midnight Ink",
+    description: "Nocturnal slate-navy study & crisp sky blue",
+    swatches: {
+      canvas: "#0b1017",
+      surface: "#121924",
+      surfaceRaised: "#192230",
+      subtle: "#1e293a",
+      textPrimary: "#eaf0f8",
+      textSecondary: "#b2c0d4",
+      accent: "#68b5ff",
+      border: "#2a384d",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+  {
+    id: "forest",
+    label: "Pine & Moss",
+    description: "Deep botanical evergreen & tranquil sage",
+    swatches: {
+      canvas: "#0c130f",
+      surface: "#131e18",
+      surfaceRaised: "#1a2820",
+      subtle: "#203027",
+      textPrimary: "#e9f2ed",
+      textSecondary: "#b4c8bc",
+      accent: "#62c994",
+      border: "#2b4235",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+  {
+    id: "obsidian",
+    label: "Obsidian Archive",
+    description: "Neutral carbon ink & warm library gold leaf",
+    swatches: {
+      canvas: "#0e0e11",
+      surface: "#16161b",
+      surfaceRaised: "#1e1e25",
+      subtle: "#24242c",
+      textPrimary: "#f2f1f7",
+      textSecondary: "#bcbac9",
+      accent: "#e5b557",
+      border: "#32323d",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+  {
+    id: "plum",
+    label: "Velvet Nocturne",
+    description: "Dark aubergine salon & soft rosewood",
+    swatches: {
+      canvas: "#130e16",
+      surface: "#1c1521",
+      surfaceRaised: "#251c2c",
+      subtle: "#2c2134",
+      textPrimary: "#f3ecf7",
+      textSecondary: "#c5b5cf",
+      accent: "#df85bc",
+      border: "#3e2f49",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+];
+
+export const THEME_REGISTRY: Readonly<Record<DarkThemeId, DarkThemeDefinition>> =
+  {
+    espresso: DARK_THEMES[0]!,
+    midnight: DARK_THEMES[1]!,
+    forest: DARK_THEMES[2]!,
+    obsidian: DARK_THEMES[3]!,
+    plum: DARK_THEMES[4]!,
+  };
 
 export interface ThemeStorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 }
 
-export function isThemeMode(value: unknown): value is ThemeMode {
-  return value === "system" || value === "light" || value === "dark";
+export function isDarkThemeId(value: unknown): value is DarkThemeId {
+  return (
+    value === "espresso" ||
+    value === "midnight" ||
+    value === "forest" ||
+    value === "obsidian" ||
+    value === "plum"
+  );
 }
+
+export const isThemeMode = isDarkThemeId;
 
 function defaultStorage(): ThemeStorageLike | null {
   try {
     const ls = (globalThis as unknown as { localStorage?: ThemeStorageLike })
       .localStorage;
-    if (ls && typeof ls.getItem === "function" && typeof ls.setItem === "function") {
+    if (
+      ls &&
+      typeof ls.getItem === "function" &&
+      typeof ls.setItem === "function"
+    ) {
       return ls;
     }
   } catch {
@@ -32,38 +235,48 @@ function defaultStorage(): ThemeStorageLike | null {
   return null;
 }
 
+export function resolveThemePreference(raw: unknown): DarkThemeId {
+  if (isDarkThemeId(raw)) {
+    return raw;
+  }
+  return DEFAULT_THEME;
+}
+
 export function readThemePreference(
   storage: ThemeStorageLike | null = defaultStorage()
-): ThemeMode {
+): DarkThemeId {
   if (!storage) {
-    return "system";
+    return DEFAULT_THEME;
   }
   try {
     const raw = storage.getItem(THEME_STORAGE_KEY);
-    return isThemeMode(raw) ? raw : "system";
+    return resolveThemePreference(raw);
   } catch {
-    return "system";
+    return DEFAULT_THEME;
   }
 }
 
-export function applyThemeToDocument(theme: ThemeMode): void {
+export function applyThemeToDocument(theme: DarkThemeId): void {
+  const valid = resolveThemePreference(theme);
   try {
     const doc = (
       globalThis as unknown as {
         document?: {
           documentElement?: {
             setAttribute(name: string, value: string): void;
-            removeAttribute(name: string): void;
           };
+          querySelector?(selector: string): {
+            setAttribute(name: string, value: string): void;
+          } | null;
         };
       }
     ).document;
     const root = doc?.documentElement;
     if (!root) return;
-    if (theme === "light" || theme === "dark") {
-      root.setAttribute("data-theme", theme);
-    } else {
-      root.removeAttribute("data-theme");
+    root.setAttribute("data-theme", valid);
+    const meta = doc?.querySelector?.('meta[name="theme-color"]');
+    if (meta) {
+      meta.setAttribute("content", THEME_REGISTRY[valid].swatches.canvas);
     }
   } catch {
     // Ignore when no DOM exists.
@@ -71,10 +284,10 @@ export function applyThemeToDocument(theme: ThemeMode): void {
 }
 
 export function saveThemePreference(
-  theme: ThemeMode,
+  theme: DarkThemeId | string,
   storage: ThemeStorageLike | null = defaultStorage()
-): ThemeMode {
-  const valid: ThemeMode = isThemeMode(theme) ? theme : "system";
+): DarkThemeId {
+  const valid = resolveThemePreference(theme);
   if (storage) {
     try {
       storage.setItem(THEME_STORAGE_KEY, valid);
@@ -84,4 +297,45 @@ export function saveThemePreference(
   }
   applyThemeToDocument(valid);
   return valid;
+}
+
+// --- WCAG 2.1 Contrast Verification Helpers --------------------------------
+
+function parseHexChannel(hex: string): [number, number, number] {
+  const clean = hex.replace(/^#/, "").trim();
+  if (clean.length === 3) {
+    const r = Number.parseInt(clean[0]! + clean[0]!, 16);
+    const g = Number.parseInt(clean[1]! + clean[1]!, 16);
+    const b = Number.parseInt(clean[2]! + clean[2]!, 16);
+    return [r, g, b];
+  }
+  const r = Number.parseInt(clean.slice(0, 2), 16);
+  const g = Number.parseInt(clean.slice(2, 4), 16);
+  const b = Number.parseInt(clean.slice(4, 6), 16);
+  return [r, g, b];
+}
+
+/**
+ * Computes WCAG 2.1 relative luminance (`0..1`) for a `#RRGGBB` colour.
+ */
+export function relativeLuminance(hex: string): number {
+  const [r8, g8, b8] = parseHexChannel(hex);
+  const toLinear = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return (
+    0.2126 * toLinear(r8) + 0.7152 * toLinear(g8) + 0.0722 * toLinear(b8)
+  );
+}
+
+/**
+ * Computes WCAG 2.1 contrast ratio (`1..21`) between two `#RRGGBB` colours.
+ */
+export function contrastRatio(hex1: string, hex2: string): number {
+  const l1 = relativeLuminance(hex1);
+  const l2 = relativeLuminance(hex2);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100;
 }

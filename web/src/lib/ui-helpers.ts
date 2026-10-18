@@ -6,7 +6,8 @@
  */
 
 import type { CalendarDay, CalendarItem, Category, CategoryTotal } from "../api";
-import { CATEGORIES, resolveItemCategory } from "./categories";
+import { formatDuration, formatSeasonEpisode } from "./calendar";
+import { CATEGORIES, formatCategoryUnits, resolveItemCategory } from "./categories";
 
 export {
   CATEGORIES,
@@ -871,6 +872,343 @@ export function summarizeCalendarMonthV2(
     busiestDay,
     dailyMinutesSeries: dailyMinutes,
     categories,
+  };
+}
+
+// --- V2.1 Day Panel Grouping (Grouped by Work + Collapsed YouTube Line) ----
+
+export interface DayWorkGroup {
+  readonly key: string;
+  readonly workTitle: string;
+  readonly category: Category;
+  readonly source: string;
+  readonly mediaType: string;
+  readonly coverUrl: string | null;
+  readonly totalMinutes: number;
+  readonly totalSeconds: number;
+  readonly sessionCount: number;
+  /** Compact episode/subtitle summary, e.g. "S01E03–E05 · 3 episodes" or "S01E03 · The Journey". */
+  readonly detailLabel: string | null;
+  readonly latestLocalTime: string;
+  readonly timeUncertain: boolean;
+  readonly alsoFrom: readonly string[];
+  readonly items: readonly CalendarItem[];
+}
+
+export interface DayYoutubeChannelGroup {
+  readonly channel: string;
+  readonly count: number;
+  readonly minutes: number;
+  readonly items: readonly CalendarItem[];
+}
+
+export interface DayYoutubeSummary {
+  readonly count: number;
+  readonly totalMinutes: number;
+  readonly totalSeconds: number;
+  /** e.g. "12 videos · 48 min" */
+  readonly summaryLabel: string;
+  readonly channels: readonly DayYoutubeChannelGroup[];
+  readonly items: readonly CalendarItem[];
+}
+
+export interface GroupedDayPanel {
+  readonly workGroups: readonly DayWorkGroup[];
+  readonly youtubeSummary: DayYoutubeSummary | null;
+}
+
+function summarizeWorkEpisodesOrSessions(
+  category: Category,
+  workTitle: string,
+  items: readonly CalendarItem[]
+): string | null {
+  if (items.length === 0) return null;
+
+  if (items.length === 1) {
+    const it = items[0]!;
+    const se = formatSeasonEpisode(it.season, it.episode);
+    const rawTitle = (it.title ?? "").trim();
+    const isDifferentTitle =
+      rawTitle !== "" && rawTitle.toLowerCase() !== workTitle.toLowerCase();
+    if (se && isDifferentTitle) {
+      return `${se} · ${rawTitle}`;
+    }
+    if (se) {
+      return se;
+    }
+    if (isDifferentTitle) {
+      return rawTitle;
+    }
+    if (it.parent_title && it.parent_title.trim().toLowerCase() !== workTitle.toLowerCase()) {
+      return it.parent_title.trim();
+    }
+    return null;
+  }
+
+  // Multiple items for the same work on the same day
+  const episodes = items
+    .filter((i) => i.episode !== null && i.episode !== undefined)
+    .sort((a, b) => {
+      if ((a.season ?? 0) !== (b.season ?? 0)) {
+        return (a.season ?? 0) - (b.season ?? 0);
+      }
+      return (a.episode ?? 0) - (b.episode ?? 0);
+    });
+
+  if (episodes.length >= 2) {
+    const first = episodes[0]!;
+    const last = episodes[episodes.length - 1]!;
+    const firstSe = formatSeasonEpisode(first.season, first.episode);
+    if (first.season === last.season && first.episode !== last.episode) {
+      const epPad = String(last.episode).padStart(2, "0");
+      return `${firstSe}–E${epPad} (${items.length} episodes)`;
+    }
+    const lastSe = formatSeasonEpisode(last.season, last.episode);
+    if (firstSe && lastSe && firstSe !== lastSe) {
+      return `${firstSe}–${lastSe} (${items.length} episodes)`;
+    }
+  }
+
+  return formatCategoryUnits(category, items.length);
+}
+
+/**
+ * Groups a day's `CalendarItem[]` for the compact v2.1 Day Panel:
+ * - Non-YouTube items are grouped by work (category + normalized work title).
+ * - YouTube items collapse into one expandable summary line ("12 videos · 48 min").
+ */
+export function groupDayPanelItems(
+  items: readonly CalendarItem[]
+): GroupedDayPanel {
+  const workMap = new Map<
+    string,
+    {
+      workTitle: string;
+      category: Category;
+      source: string;
+      mediaType: string;
+      coverUrl: string | null;
+      totalSeconds: number;
+      latestLocalTime: string;
+      timeUncertain: boolean;
+      alsoFrom: Set<string>;
+      items: CalendarItem[];
+    }
+  >();
+
+  const ytItems: CalendarItem[] = [];
+  let ytTotalSeconds = 0;
+  const ytChannelsMap = new Map<
+    string,
+    { channel: string; seconds: number; items: CalendarItem[] }
+  >();
+
+  for (const item of items) {
+    const cat = resolveItemCategory(item);
+    const sec =
+      item.duration_seconds !== null &&
+      item.duration_seconds !== undefined &&
+      item.duration_seconds > 0
+        ? item.duration_seconds
+        : 0;
+
+    if (cat === "youtube") {
+      ytItems.push(item);
+      ytTotalSeconds += sec;
+      const chName = (item.parent_title ?? "YouTube").trim() || "YouTube";
+      const existingCh = ytChannelsMap.get(chName);
+      if (existingCh) {
+        existingCh.seconds += sec;
+        existingCh.items.push(item);
+      } else {
+        ytChannelsMap.set(chName, {
+          channel: chName,
+          seconds: sec,
+          items: [item],
+        });
+      }
+      continue;
+    }
+
+    const workTitle = resolveCalendarWorkTitle(item);
+    const key = `${cat}:${workTitle.toLowerCase()}`;
+    const existing = workMap.get(key);
+    if (existing) {
+      existing.totalSeconds += sec;
+      if (!existing.coverUrl && item.cover_url) {
+        existing.coverUrl = item.cover_url;
+      }
+      if (item.local_time && item.local_time > existing.latestLocalTime) {
+        existing.latestLocalTime = item.local_time;
+      }
+      if (item.time_uncertain) {
+        existing.timeUncertain = true;
+      }
+      for (const src of item.also_from ?? []) {
+        existing.alsoFrom.add(src);
+      }
+      existing.items.push(item);
+    } else {
+      workMap.set(key, {
+        workTitle,
+        category: cat,
+        source: item.source,
+        mediaType: item.media_type,
+        coverUrl: item.cover_url ?? null,
+        totalSeconds: sec,
+        latestLocalTime: item.local_time ?? "",
+        timeUncertain: Boolean(item.time_uncertain),
+        alsoFrom: new Set(item.also_from ?? []),
+        items: [item],
+      });
+    }
+  }
+
+  const workGroups: DayWorkGroup[] = [...workMap.entries()]
+    .map(([key, g]) => ({
+      key,
+      workTitle: g.workTitle,
+      category: g.category,
+      source: g.source,
+      mediaType: g.mediaType,
+      coverUrl: g.coverUrl,
+      totalMinutes: Math.round(g.totalSeconds / 60),
+      totalSeconds: g.totalSeconds,
+      sessionCount: g.items.length,
+      detailLabel: summarizeWorkEpisodesOrSessions(
+        g.category,
+        g.workTitle,
+        g.items
+      ),
+      latestLocalTime: g.latestLocalTime,
+      timeUncertain: g.timeUncertain,
+      alsoFrom: [...g.alsoFrom],
+      items: g.items,
+    }))
+    .sort((a, b) => {
+      if (b.totalSeconds !== a.totalSeconds) {
+        return b.totalSeconds - a.totalSeconds;
+      }
+      return a.workTitle.localeCompare(b.workTitle);
+    });
+
+  let youtubeSummary: DayYoutubeSummary | null = null;
+  if (ytItems.length > 0) {
+    const ytMin = Math.round(ytTotalSeconds / 60);
+    const countLabel = `${ytItems.length} ${
+      ytItems.length === 1 ? "video" : "videos"
+    }`;
+    const summaryLabel =
+      ytTotalSeconds >= 60
+        ? `${countLabel} · ${formatDuration(ytTotalSeconds)}`
+        : countLabel;
+
+    const channels: DayYoutubeChannelGroup[] = [...ytChannelsMap.values()]
+      .map((c) => ({
+        channel: c.channel,
+        count: c.items.length,
+        minutes: Math.round(c.seconds / 60),
+        items: c.items,
+      }))
+      .sort((a, b) => {
+        if (b.minutes !== a.minutes) return b.minutes - a.minutes;
+        if (b.count !== a.count) return b.count - a.count;
+        return a.channel.localeCompare(b.channel);
+      });
+
+    youtubeSummary = {
+      count: ytItems.length,
+      totalMinutes: ytMin,
+      totalSeconds: ytTotalSeconds,
+      summaryLabel,
+      channels,
+      items: ytItems,
+    };
+  }
+
+  return { workGroups, youtubeSummary };
+}
+
+export interface CurrentWeekSummary {
+  readonly todayMinutes: number;
+  readonly todayItems: number;
+  readonly todayWorks: number;
+  readonly weekMinutes: number;
+  readonly weekActiveDays: number;
+  readonly weekDailyMinutes: readonly number[];
+}
+
+/**
+ * Computes today's activity and the current Monday–Sunday week's summary
+ * from a month's `CalendarDay[]`.
+ */
+export function summarizeCurrentWeek(
+  days: readonly CalendarDay[],
+  todayStr: string
+): CurrentWeekSummary {
+  const dayMap = new Map<string, CalendarDay>();
+  for (const d of days) {
+    dayMap.set(d.date, d);
+  }
+
+  const todayData = dayMap.get(todayStr);
+  const todayGrouped = groupDayPanelItems(todayData?.items ?? []);
+  const todayMinutes = Math.round(todayData?.minutes ?? 0);
+  const todayItems = todayData?.count ?? 0;
+  const todayWorks =
+    todayGrouped.workGroups.length + (todayGrouped.youtubeSummary ? 1 : 0);
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(todayStr);
+  if (!match) {
+    return {
+      todayMinutes,
+      todayItems,
+      todayWorks,
+      weekMinutes: todayMinutes,
+      weekActiveDays: todayMinutes > 0 || todayItems > 0 ? 1 : 0,
+      weekDailyMinutes: [0, 0, 0, 0, 0, 0, 0],
+    };
+  }
+
+  const y = Number.parseInt(match[1]!, 10);
+  const m = Number.parseInt(match[2]!, 10);
+  const d = Number.parseInt(match[3]!, 10);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const monOffset = (dt.getUTCDay() + 6) % 7; // 0 = Mon .. 6 = Sun
+  const monday = new Date(Date.UTC(y, m - 1, d - monOffset));
+
+  let weekMinutes = 0;
+  let weekActiveDays = 0;
+  const weekDailyMinutes: number[] = [];
+
+  for (let i = 0; i < 7; i++) {
+    const cur = new Date(
+      Date.UTC(
+        monday.getUTCFullYear(),
+        monday.getUTCMonth(),
+        monday.getUTCDate() + i
+      )
+    );
+    const ds = `${String(cur.getUTCFullYear()).padStart(4, "0")}-${String(
+      cur.getUTCMonth() + 1
+    ).padStart(2, "0")}-${String(cur.getUTCDate()).padStart(2, "0")}`;
+    const entry = dayMap.get(ds);
+    const mins = Math.round(Math.max(0, entry?.minutes ?? 0));
+    const cnt = Math.max(0, entry?.count ?? 0);
+    weekDailyMinutes.push(mins);
+    weekMinutes += mins;
+    if (mins > 0 || cnt > 0) {
+      weekActiveDays += 1;
+    }
+  }
+
+  return {
+    todayMinutes,
+    todayItems,
+    todayWorks,
+    weekMinutes,
+    weekActiveDays,
+    weekDailyMinutes,
   };
 }
 
