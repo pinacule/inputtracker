@@ -77,7 +77,6 @@ export function Search({
   hitKeyParam,
   initialCategory,
   initialCategories,
-  includeYoutubeInAll = false,
 }: SearchProps) {
   const [inputValue, setInputValue] = useState(qParam ?? "");
   const [query, setQuery] = useState(qParam ?? "");
@@ -144,10 +143,7 @@ export function Search({
     setLoading(true);
     setError(null);
 
-    const filterParams = buildCategoryFilterParams(
-      selectedCategories,
-      includeYoutubeInAll
-    );
+    const filterParams = buildCategoryFilterParams(selectedCategories, "all");
 
     search({
       q: query,
@@ -181,7 +177,7 @@ export function Search({
           setLoadingMore(false);
         }
       });
-  }, [query, source, mediaType, selectedCategories, includeYoutubeInAll]);
+  }, [query, source, mediaType, selectedCategories]);
 
   useEffect(() => {
     if (!hitKeyParam) {
@@ -225,22 +221,15 @@ export function Search({
     const rawHits = result?.hits ?? [];
     return rawHits.filter((hit) => {
       const cat = resolveItemCategory(hit);
-      return matchesCategorySelection(
-        cat,
-        selectedCategories,
-        includeYoutubeInAll
-      );
+      return matchesCategorySelection(cat, selectedCategories, "all");
     });
-  }, [result, selectedCategories, includeYoutubeInAll]);
+  }, [result, selectedCategories]);
 
   const handleLoadMore = () => {
     if (!result || loadingMore || result.hits.length >= result.total) return;
     const seq = ++seqRef.current;
     setLoadingMore(true);
-    const filterParams = buildCategoryFilterParams(
-      selectedCategories,
-      includeYoutubeInAll
-    );
+    const filterParams = buildCategoryFilterParams(selectedCategories, "all");
     search({
       q: query,
       source: source !== "" ? source : undefined,
@@ -360,9 +349,13 @@ export function Search({
             </Card>
 
             <div class="library-work-two-col">
-              <Card padding="md" title="Rating & Note">
+              <Card
+                padding="md"
+                title={histCat === "music" ? "Personal Note" : "Rating & Note"}
+              >
                 <RatingEditor
                   workKey={history.key}
+                  category={histCat}
                   source={history.source}
                   title={history.title}
                   initialRating={history.rating}
@@ -514,7 +507,7 @@ export function Search({
           <CategoryChips
             selected={selectedCategories}
             onChange={setSelectedCategories}
-            includeYoutubeInAll={includeYoutubeInAll}
+            scope="all"
             ariaLabel="Filter search by category"
             syncUrl={false}
           />

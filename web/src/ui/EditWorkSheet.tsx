@@ -118,7 +118,10 @@ export function EditWorkSheet({
     if (!trimmedTitle) {
       errs.push("Title cannot be empty.");
     }
-    const rCheck = validateRating10(rating);
+    const rCheck =
+      category !== "music"
+        ? validateRating10(rating)
+        : { ok: true as const, rating: null };
     if (!rCheck.ok) {
       errs.push(rCheck.error);
     }
@@ -131,7 +134,9 @@ export function EditWorkSheet({
       title: trimmedTitle,
       category,
       status,
-      rating: rCheck.ok ? rCheck.rating : null,
+      ...(category !== "music"
+        ? { rating: rCheck.ok ? rCheck.rating : null }
+        : {}),
       note: note.trim() ? note.trim() : null,
     };
 
@@ -335,11 +340,17 @@ export function EditWorkSheet({
           </div>
         )}
 
-        {/* Rating 0..10 one decimal */}
-        <div class="ui-form-field">
-          <span class="ui-form-label">Rating (0–10, one decimal)</span>
-          <RatingInput10 rating={rating} onChange={setRating} />
-        </div>
+        {/* Rating 0..10 one decimal (hidden for music) */}
+        {category !== "music" && (
+          <div class="ui-form-field">
+            <span class="ui-form-label">Rating (0–10, one decimal)</span>
+            <RatingInput10
+              rating={rating}
+              onChange={setRating}
+              category={category}
+            />
+          </div>
+        )}
 
         {/* Personal Note */}
         <div class="ui-form-field">

@@ -1,12 +1,13 @@
-import { createPortal } from "preact/compat";
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import type { Category } from "../api";
-import { computeContextMenuPlacement } from "../lib/context-menu";
 import {
+  canRateCategory,
+  commitInlineRatingInput,
   formatRating10,
+  nudgeRatingText,
   parseRating10Input,
   resolveRatingKeyAction,
-  stepRating10,
+  resolveRatingWheelDelta,
 } from "../lib/rating";
 import {
   getWorkRatingOverride,
@@ -14,54 +15,66 @@ import {
   pushToast,
   subscribeWorkEdits,
 } from "../lib/work-edits";
-import { Button } from "./Button";
 
 export interface RatingInput10Props {
   rating: number | null;
   onChange: (rating: number | null) => void;
+  category?: Category;
   disabled?: boolean;
   compact?: boolean;
+  autoFocus?: boolean;
   onCommit?: (rating: number | null) => void;
+  onCancel?: () => void;
 }
 
 /**
- * 0–10 one-decimal rating control:
- * - Slider in 0.5 steps (`0..10`)
- * - Number field accepting one decimal (`8.5`)
- * - Keyboard arrows `±0.1` (`Shift+Arrow` or `PageUp`/`PageDown` `±0.5`), `Delete`/`Backspace` clear
- * - Quick step buttons (`-0.5`, `-0.1`, `+0.1`, `+0.5`) and `Clear`
+ * 0–10 one-decimal inline rating text input (no slider, no popover):
+ * - Type `8.5`, Enter commits, Esc cancels
+ * - ↑/↓ and mouse wheel nudge by `±0.1` (`Shift`: `±1.0`)
+ * - Invalid input shows a short inline hint and does not save
+ * - Hidden for music (`category === "music"`)
  */
 export function RatingInput10({
   rating,
   onChange,
+  category,
   disabled = false,
   compact = false,
+  autoFocus = false,
   onCommit,
+  onCancel,
 }: RatingInput10Props) {
   const numId = useId();
-  const sliderId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const [textVal, setTextVal] = useState<string>(() =>
-    rating !== null && rating !== undefined ? formatRating10(rating) : "",
+    rating !== null && rating !== undefined ? formatRating10(rating) : ""
   );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setTextVal(
-      rating !== null && rating !== undefined ? formatRating10(rating) : "",
+      rating !== null && rating !== undefined ? formatRating10(rating) : ""
     );
     setError(null);
   }, [rating]);
 
-  const applyValue = (next: number | null) => {
-    setError(null);
-    setTextVal(next !== null ? formatRating10(next) : "");
-    onChange(next);
-  };
+  useEffect(() => {
+    if (autoFocus && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [autoFocus]);
 
-  const handleStep = (delta: number) => {
-    const next = stepRating10(rating, delta);
-    applyValue(next);
+  if (!canRateCategory(category)) {
+    return null;
+  }
+
+  const applyNudge = (delta: number) => {
+    const nudged = nudgeRatingText(textVal, rating, delta);
+    setError(null);
+    setTextVal(nudged.text);
+    onChange(nudged.rating);
   };
 
   const handleTextInput = (raw: string) => {
@@ -81,42 +94,49 @@ export function RatingInput10({
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && onCommit) {
+    const action = resolveRatingKeyAction(e.key, e.shiftKey);
+    if (!action) return;
+
+    if (action.type === "commit") {
+      if (!onCommit) return;
       e.preventDefault();
+      e.stopPropagation();
       const parsed = parseRating10Input(textVal);
       if (parsed.ok) {
+        setError(null);
+        onChange(parsed.rating);
         onCommit(parsed.rating);
+      } else {
+        setError(parsed.error);
       }
       return;
     }
-    // Let standard text editing work inside the number input except for Up/Down arrows
-    const target = e.target as HTMLElement | null;
-    const isNumberInput =
-      target?.tagName === "INPUT" &&
-      (target as HTMLInputElement).type !== "range";
 
-    if (
-      isNumberInput &&
-      (e.key === "ArrowLeft" ||
-        e.key === "ArrowRight" ||
-        e.key === "Backspace" ||
-        e.key === "Delete" ||
-        e.key === "Home" ||
-        e.key === "End")
-    ) {
+    if (action.type === "cancel") {
+      e.preventDefault();
+      e.stopPropagation();
+      setError(null);
+      setTextVal(
+        rating !== null && rating !== undefined ? formatRating10(rating) : ""
+      );
+      onCancel?.();
       return;
     }
 
-    const action = resolveRatingKeyAction(e.key, e.shiftKey);
-    if (!action) return;
-    e.preventDefault();
     if (action.type === "step") {
-      handleStep(action.delta);
-    } else if (action.type === "set") {
-      applyValue(action.value);
-    } else if (action.type === "clear") {
-      applyValue(null);
+      e.preventDefault();
+      e.stopPropagation();
+      applyNudge(action.delta);
     }
+  };
+
+  const handleWheel = (e: WheelEvent) => {
+    if (disabled) return;
+    const delta = resolveRatingWheelDelta(e.deltaY, e.shiftKey);
+    if (delta === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    applyNudge(delta);
   };
 
   return (
@@ -124,48 +144,31 @@ export function RatingInput10({
       class={compact ? "ui-rating10 ui-rating10--compact" : "ui-rating10"}
       onKeyDown={handleKeyDown}
     >
-      <div class="ui-rating10-main">
-        <div class="ui-rating10-slider-wrap">
-          <label class="sr-only" for={sliderId}>
-            Rating slider (0 to 10 in 0.5 steps)
-          </label>
+      <div class="ui-rating10-inline-row">
+        <label class="sr-only" for={numId}>
+          Rating score (0 to 10, one decimal)
+        </label>
+        <div
+          class={
+            error
+              ? "ui-rating10-field ui-rating10-field--invalid"
+              : "ui-rating10-field"
+          }
+          onWheel={handleWheel}
+        >
+          <span class="ui-rating10-star" aria-hidden="true">
+            ★
+          </span>
           <input
-            id={sliderId}
-            type="range"
-            min="0"
-            max="10"
-            step="0.5"
-            disabled={disabled}
-            class="ui-rating10-slider"
-            value={String(rating ?? 7.5)}
-            onInput={(e) => {
-              const v = Number((e.currentTarget as HTMLInputElement).value);
-              if (Number.isFinite(v)) {
-                applyValue(v);
-              }
-            }}
-          />
-          <div class="ui-rating10-ticks" aria-hidden="true">
-            <span>0</span>
-            <span>2.5</span>
-            <span>5</span>
-            <span>7.5</span>
-            <span>10</span>
-          </div>
-        </div>
-
-        <div class="ui-rating10-number-wrap">
-          <label class="sr-only" for={numId}>
-            Rating score (0 to 10, one decimal)
-          </label>
-          <input
+            ref={inputRef}
             id={numId}
             type="text"
             inputMode="decimal"
             disabled={disabled}
-            class="ui-input ui-rating10-input tabular-nums"
-            placeholder="—"
+            class="ui-rating10-input tabular-nums"
+            placeholder="8.5"
             aria-label="Rating 0 to 10"
+            aria-invalid={error ? "true" : undefined}
             value={textVal}
             onInput={(e) =>
               handleTextInput((e.currentTarget as HTMLInputElement).value)
@@ -173,68 +176,31 @@ export function RatingInput10({
           />
           <span class="ui-rating10-denom tabular-nums">/ 10</span>
         </div>
-      </div>
 
-      <div class="ui-rating10-controls">
-        <div
-          class="ui-rating10-steppers"
-          role="group"
-          aria-label="Adjust rating"
-        >
-          <button
-            type="button"
-            class="ui-rating10-step-btn tabular-nums"
-            disabled={disabled}
-            onClick={() => handleStep(-0.5)}
-            title="Decrease by 0.5 (Shift+ArrowDown)"
-          >
-            −0.5
-          </button>
-          <button
-            type="button"
-            class="ui-rating10-step-btn tabular-nums"
-            disabled={disabled}
-            onClick={() => handleStep(-0.1)}
-            title="Decrease by 0.1 (ArrowDown)"
-          >
-            −0.1
-          </button>
-          <button
-            type="button"
-            class="ui-rating10-step-btn tabular-nums"
-            disabled={disabled}
-            onClick={() => handleStep(0.1)}
-            title="Increase by 0.1 (ArrowUp)"
-          >
-            +0.1
-          </button>
-          <button
-            type="button"
-            class="ui-rating10-step-btn tabular-nums"
-            disabled={disabled}
-            onClick={() => handleStep(0.5)}
-            title="Increase by 0.5 (Shift+ArrowUp)"
-          >
-            +0.5
-          </button>
-        </div>
-
-        {rating !== null && (
+        {(rating !== null || textVal.trim() !== "") && (
           <button
             type="button"
             class="ui-rating10-clear"
             disabled={disabled}
-            onClick={() => applyValue(null)}
+            onClick={() => {
+              setError(null);
+              setTextVal("");
+              onChange(null);
+            }}
           >
             Clear
           </button>
         )}
+
+        <span class="ui-rating10-hint-meta">
+          ↑/↓ or scroll ±0.1 · Shift ±1
+        </span>
       </div>
 
       {error && (
-        <p class="ui-form-error" role="alert">
+        <span class="ui-quick-rate-hint" role="alert">
           {error}
-        </p>
+        </span>
       )}
     </div>
   );
@@ -251,9 +217,13 @@ export interface QuickRatingPillProps {
 }
 
 /**
- * Compact rating pill (`★ 8.5` or `☆ Rate`) reachable on Library cards, list rows,
- * Day panel rows, Review cards, and the Work page without opening the work.
- * Opens a viewport-clamped popover and saves optimistically with an Undo toast.
+ * In-place rating badge (`★ 8.5` or `☆ Rate`).
+ * - Click the badge and it turns in place into a small text field showing the current value.
+ * - Type `8.5`, Enter saves, Esc cancels, blur saves if valid.
+ * - ↑/↓ and mouse wheel nudge by `0.1` (`Shift`: `1.0`).
+ * - Invalid input shows a short inline hint and does not save.
+ * - Saves optimistically through `WorkEdit.rating` with an Undo toast.
+ * - Hidden for music (`category === "music"`).
  */
 export function QuickRatingPill({
   workKey,
@@ -265,9 +235,9 @@ export function QuickRatingPill({
   onRated,
 }: QuickRatingPillProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -275,79 +245,55 @@ export function QuickRatingPill({
   }, []);
 
   const effectiveRating = getWorkRatingOverride(workKey, propRating ?? null);
-  const [draftRating, setDraftRating] = useState<number | null>(
-    effectiveRating,
-  );
-  const [coords, setCoords] = useState<{ left: number; top: number }>({
-    left: 16,
-    top: 16,
-  });
+  const [textVal, setTextVal] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) {
-      setDraftRating(effectiveRating ?? 8.0);
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
     }
-  }, [open, effectiveRating]);
+  }, [editing]);
 
-  const openPopover = (e: MouseEvent) => {
+  // No ratings for music tracks
+  if (
+    !canRateCategory(category) ||
+    workKey.trim().toLowerCase().startsWith("music:")
+  ) {
+    return null;
+  }
+
+  const hasRating = effectiveRating !== null && effectiveRating !== undefined;
+
+  const startEditing = (e: Event) => {
     e.preventDefault();
     e.stopPropagation();
-    const rect = triggerRef.current?.getBoundingClientRect();
-    const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
-    const vh = typeof window !== "undefined" ? window.innerHeight : 768;
-    const anchor = rect
-      ? { x: rect.left, y: rect.bottom + 6 }
-      : { x: e.clientX, y: e.clientY };
-    const placed = computeContextMenuPlacement(
-      anchor,
-      { width: 280, height: 190 },
-      { width: vw, height: vh },
-      12,
-    );
-    setCoords({ left: placed.left, top: placed.top });
-    setOpen(true);
+    setTextVal(hasRating ? formatRating10(effectiveRating) : "");
+    setError(null);
+    setEditing(true);
   };
 
-  const closePopover = (restoreFocus = true) => {
-    setOpen(false);
+  const cancelEditing = (restoreFocus = true) => {
+    setEditing(false);
+    setError(null);
+    setTextVal(hasRating ? formatRating10(effectiveRating) : "");
     if (restoreFocus) {
-      triggerRef.current?.focus();
+      queueMicrotask(() => {
+        triggerRef.current?.focus();
+      });
     }
   };
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        closePopover(true);
-      }
-    };
-    const onPointerDown = (e: MouseEvent) => {
-      const target = e.target as Node | null;
-      if (
-        popoverRef.current &&
-        target &&
-        !popoverRef.current.contains(target) &&
-        triggerRef.current &&
-        !triggerRef.current.contains(target)
-      ) {
-        closePopover(false);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("mousedown", onPointerDown, true);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("mousedown", onPointerDown, true);
-    };
-  }, [open]);
-
-  const commitRating = async (nextRating: number | null) => {
+  const saveRating = async (nextRating: number | null, restoreFocus = true) => {
     const prevRating = effectiveRating;
-    closePopover(true);
+    setEditing(false);
+    setError(null);
     onRated?.(nextRating);
+    if (restoreFocus) {
+      queueMicrotask(() => {
+        triggerRef.current?.focus();
+      });
+    }
 
     const { undo } = await performWorkEdit(
       workKey,
@@ -357,7 +303,7 @@ export function QuickRatingPill({
         category,
         rating: prevRating,
         source,
-      },
+      }
     );
 
     pushToast({
@@ -374,7 +320,57 @@ export function QuickRatingPill({
     });
   };
 
-  const hasRating = effectiveRating !== null && effectiveRating !== undefined;
+  const handleCommitAttempt = (restoreFocus: boolean) => {
+    const res = commitInlineRatingInput(textVal, effectiveRating);
+    if (res.action === "noop") {
+      cancelEditing(restoreFocus);
+      return;
+    }
+    if (res.action === "invalid") {
+      setError(res.error);
+      return;
+    }
+    void saveRating(res.rating, restoreFocus);
+  };
+
+  const handleNudge = (delta: number) => {
+    const nudged = nudgeRatingText(textVal, effectiveRating, delta);
+    setError(null);
+    setTextVal(nudged.text);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    const action = resolveRatingKeyAction(e.key, e.shiftKey);
+    if (!action) return;
+
+    if (action.type === "commit") {
+      e.preventDefault();
+      e.stopPropagation();
+      handleCommitAttempt(true);
+      return;
+    }
+
+    if (action.type === "cancel") {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelEditing(true);
+      return;
+    }
+
+    if (action.type === "step") {
+      e.preventDefault();
+      e.stopPropagation();
+      handleNudge(action.delta);
+    }
+  };
+
+  const handleWheel = (e: WheelEvent) => {
+    const delta = resolveRatingWheelDelta(e.deltaY, e.shiftKey);
+    if (delta === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    handleNudge(delta);
+  };
 
   return (
     <span
@@ -383,92 +379,90 @@ export function QuickRatingPill({
           ? "ui-quick-rate-anchor ui-quick-rate-anchor--overlay"
           : "ui-quick-rate-anchor"
       }
-      onClick={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onContextMenu={(e) => {
+        if (editing) {
+          e.stopPropagation();
+        }
+      }}
     >
-      <button
-        ref={triggerRef}
-        type="button"
-        class={
-          hasRating
-            ? `ui-quick-rate-pill ui-quick-rate-pill--rated ui-quick-rate-pill--${variant} tabular-nums`
-            : `ui-quick-rate-pill ui-quick-rate-pill--unrated ui-quick-rate-pill--${variant}`
-        }
-        aria-label={
-          hasRating
-            ? `Rated ${formatRating10(effectiveRating)} out of 10 for ${title}. Click to change`
-            : `Rate ${title}`
-        }
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={openPopover}
-      >
-        {hasRating ? `★ ${formatRating10(effectiveRating)}` : "☆ Rate"}
-      </button>
-
-      {/* Portalled to <body>: a transformed ancestor (hover lift on cards) would otherwise
-          become the containing block of this position:fixed popover and shift it away. */}
-      {open &&
-        createPortal(
-          <div
-            ref={popoverRef}
-            class="ui-quick-rate-popover"
-            role="dialog"
-            aria-label={`Rate ${title}`}
-            style={{
-              left: `${coords.left}px`,
-              top: `${coords.top}px`,
+      {!editing ? (
+        <button
+          ref={triggerRef}
+          type="button"
+          class={
+            hasRating
+              ? `ui-quick-rate-pill ui-quick-rate-pill--rated ui-quick-rate-pill--${variant} tabular-nums`
+              : `ui-quick-rate-pill ui-quick-rate-pill--unrated ui-quick-rate-pill--${variant}`
+          }
+          aria-label={
+            hasRating
+              ? `Rated ${formatRating10(effectiveRating)} out of 10 for ${title}. Click to edit rating in place`
+              : `Rate ${title}`
+          }
+          onClick={startEditing}
+        >
+          {hasRating ? `★ ${formatRating10(effectiveRating)}` : "☆ Rate"}
+        </button>
+      ) : (
+        <span
+          class={
+            error
+              ? `ui-quick-rate-inline ui-quick-rate-inline--${variant} ui-quick-rate-inline--invalid`
+              : `ui-quick-rate-inline ui-quick-rate-inline--${variant}`
+          }
+          onWheel={handleWheel}
+        >
+          <span class="ui-quick-rate-inline-star" aria-hidden="true">
+            ★
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            inputMode="decimal"
+            class="ui-quick-rate-input tabular-nums"
+            placeholder="8.5"
+            aria-label={`Rating 0 to 10 for ${title}`}
+            aria-invalid={error ? "true" : undefined}
+            value={textVal}
+            onInput={(e) => {
+              const raw = (e.currentTarget as HTMLInputElement).value;
+              setTextVal(raw);
+              if (raw.trim() === "") {
+                setError(null);
+              } else {
+                const check = parseRating10Input(raw);
+                setError(check.ok ? null : check.error);
+              }
             }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <div class="ui-quick-rate-popover-header">
-              <strong class="ui-quick-rate-popover-title" title={title}>
-                {title}
-              </strong>
-              <span class="ui-quick-rate-popover-score tabular-nums">
-                {draftRating !== null
-                  ? `★ ${formatRating10(draftRating)}`
-                  : "Unrated"}
-              </span>
-            </div>
-
-            <RatingInput10
-              rating={draftRating}
-              onChange={setDraftRating}
-              compact
-              onCommit={(val) => void commitRating(val)}
-            />
-
-            <div class="ui-quick-rate-popover-actions">
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => void commitRating(draftRating)}
-              >
-                Save
-              </Button>
-              {hasRating && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void commitRating(null)}
-                >
-                  Clear
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => closePopover(true)}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>,
-          document.body,
-        )}
+            onKeyDown={handleKeyDown}
+            onBlur={() => handleCommitAttempt(false)}
+          />
+          {hasRating && (
+            <button
+              type="button"
+              class="ui-quick-rate-clear-btn"
+              title="Clear rating"
+              aria-label={`Clear rating for ${title}`}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void saveRating(null, true);
+              }}
+            >
+              ×
+            </button>
+          )}
+          {error && (
+            <span class="ui-quick-rate-hint" role="alert">
+              {error}
+            </span>
+          )}
+        </span>
+      )}
     </span>
   );
 }

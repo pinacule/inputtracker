@@ -77,7 +77,6 @@ import {
   StackedSeriesChart,
   Stat,
   Tabs,
-  YoutubeIcon,
   bindContextMenu,
   type TabOption,
 } from "../ui";
@@ -87,6 +86,7 @@ export interface InsightsProps {
   initialCategory?: Category;
   initialCategories?: readonly Category[];
   initialYear?: string;
+  /** @deprecated Insights "All" always includes YouTube and Music. */
   includeYoutubeInAll?: boolean;
 }
 
@@ -432,7 +432,6 @@ export function Insights({
   initialCategory,
   initialCategories,
   initialYear,
-  includeYoutubeInAll = false,
 }: InsightsProps) {
   const todayStr = getTodayStr();
   const currentYear = Number(todayStr.slice(0, 4));
@@ -494,10 +493,7 @@ export function Insights({
     setLoading(true);
     setError(null);
 
-    const filterParams = buildCategoryFilterParams(
-      selectedCategories,
-      includeYoutubeInAll
-    );
+    const filterParams = buildCategoryFilterParams(selectedCategories, "all");
 
     const fetchSeries = getSeries({
       bucket: resolvedRange.bucket,
@@ -556,15 +552,12 @@ export function Insights({
     return () => {
       cancelled = true;
     };
-  }, [resolvedRange, selectedCategories, includeYoutubeInAll, heatmapYear]);
+  }, [resolvedRange, selectedCategories, heatmapYear]);
 
   // Fetch 52-week heatmap days whenever `heatmapYear` or category filter changes
   useEffect(() => {
     let cancelled = false;
-    const filterParams = buildCategoryFilterParams(
-      selectedCategories,
-      includeYoutubeInAll
-    );
+    const filterParams = buildCategoryFilterParams(selectedCategories, "all");
     getHeatmapDays(String(heatmapYear), filterParams)
       .catch(() => getHeatmapDays(String(heatmapYear)))
       .then((res) => {
@@ -580,7 +573,7 @@ export function Insights({
     return () => {
       cancelled = true;
     };
-  }, [heatmapYear, selectedCategories, includeYoutubeInAll]);
+  }, [heatmapYear, selectedCategories]);
 
   // Compute filtered series points, bucket totals, and category totals
   const {
@@ -602,13 +595,7 @@ export function Insights({
       const filteredByCat: Partial<Record<Category, number>> = {};
 
       for (const cat of CATEGORIES) {
-        if (
-          !matchesCategorySelection(
-            cat,
-            selectedCategories,
-            includeYoutubeInAll
-          )
-        ) {
+        if (!matchesCategorySelection(cat, selectedCategories, "all")) {
           continue;
         }
         const v = byCat[cat] ?? 0;
@@ -656,13 +643,7 @@ export function Insights({
       derivedCategoryTotals:
         derivedCats.length > 0 ? derivedCats : libraryCategories,
     };
-  }, [
-    seriesData,
-    selectedCategories,
-    includeYoutubeInAll,
-    libraryCategories,
-    rangePreset,
-  ]);
+  }, [seriesData, selectedCategories, libraryCategories, rangePreset]);
 
   // YouTube Insights data (with 404 fallback from libraryWorks)
   const effectiveYoutube = useMemo<YoutubeOverview>(() => {
@@ -730,7 +711,7 @@ export function Insights({
         selected={selectedCategories}
         onChange={setSelectedCategories}
         totals={libraryCategories.length > 0 ? libraryCategories : derivedCategoryTotals}
-        includeYoutubeInAll={includeYoutubeInAll}
+        scope="all"
         ariaLabel="Filter charts by category"
         showCounts="hours"
       />
@@ -847,11 +828,7 @@ export function Insights({
         >
           <CategoryShareChart
             categories={derivedCategoryTotals.filter((c) =>
-              matchesCategorySelection(
-                c.category,
-                selectedCategories,
-                includeYoutubeInAll
-              )
+              matchesCategorySelection(c.category, selectedCategories, "all")
             )}
             selectedCategory={singleCategory ?? ""}
             onSelectCategory={(cat) =>
@@ -874,21 +851,11 @@ export function Insights({
         </Card>
       </div>
 
-      {/* v2.1 YouTube Insights Section (Topics Over Time & Top Channels) */}
+      {/* YouTube Insights Section (Topics Over Time & Top Channels) */}
       <Card
         padding="md"
         title="YouTube — Topics & Top Channels"
         subtitle="Breakdown of YouTube watch time by topic and channel"
-        actions={
-          <Button
-            variant="secondary"
-            size="sm"
-            href="#/library?cat=youtube"
-            leadingIcon={<YoutubeIcon size={14} />}
-          >
-            Open YouTube View →
-          </Button>
-        }
       >
         {effectiveYoutube.total_minutes === 0 &&
         youtubeTopicGroups.length === 0 &&

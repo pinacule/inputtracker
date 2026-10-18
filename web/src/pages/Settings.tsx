@@ -17,10 +17,6 @@ import {
   type SyncRun,
 } from "../api";
 import { categoryLabel } from "../lib/categories";
-import {
-  readIncludeYoutubeInAll,
-  saveIncludeYoutubeInAll,
-} from "../lib/category-filter";
 import { DEFAULT_TIMEZONE, formatDateTime } from "../lib/format-date";
 import { describeImport } from "../lib/forms";
 import { sourceLabel } from "../lib/sources";
@@ -50,8 +46,6 @@ import {
 export interface SettingsProps {
   theme?: DarkThemeId;
   onThemeChange?: (theme: DarkThemeId) => void;
-  includeYoutubeInAll?: boolean;
-  onIncludeYoutubeChange?: (include: boolean) => void;
 }
 
 const PROVIDER_LABELS: Readonly<Record<MetaProvider, string>> = {
@@ -86,17 +80,12 @@ export function formatBytes(bytes: number | null | undefined): string {
 export function Settings({
   theme,
   onThemeChange,
-  includeYoutubeInAll,
-  onIncludeYoutubeChange,
 }: SettingsProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const achriomFileRef = useRef<HTMLInputElement>(null);
 
   const [localTheme, setLocalTheme] = useState<DarkThemeId>(() =>
     theme ?? readThemePreference()
-  );
-  const [localIncludeYt, setLocalIncludeYt] = useState<boolean>(() =>
-    includeYoutubeInAll ?? readIncludeYoutubeInAll()
   );
 
   const [settings, setSettings] = useState<SettingsView | null>(null);
@@ -135,12 +124,6 @@ export function Settings({
     }
   }, [theme]);
 
-  useEffect(() => {
-    if (includeYoutubeInAll !== undefined) {
-      setLocalIncludeYt(includeYoutubeInAll);
-    }
-  }, [includeYoutubeInAll]);
-
   const loadHidden = async () => {
     const list = await fetchHiddenWorksGraceful();
     setHiddenWorks(list);
@@ -178,12 +161,6 @@ export function Settings({
     const saved = saveThemePreference(next);
     setLocalTheme(saved);
     onThemeChange?.(saved);
-  };
-
-  const handleToggleIncludeYoutube = (next: boolean) => {
-    const saved = saveIncludeYoutubeInAll(next);
-    setLocalIncludeYt(saved);
-    onIncludeYoutubeChange?.(saved);
   };
 
   const handleSyncAbs = async () => {
@@ -336,123 +313,91 @@ export function Settings({
         </div>
       </header>
 
-      {/* 1. Appearance (Dark Theme Swatch Cards + Include YouTube in All) */}
+      {/* 1. Appearance (Dark Theme Swatch Cards) */}
       <Card
         padding="md"
-        title="Appearance & Preferences"
+        title="Appearance"
         subtitle="Five WCAG-AA dark themes applied before first paint"
       >
-        <div class="ui-form-stack">
-          <div
-            class="theme-swatches-grid"
-            role="radiogroup"
-            aria-label="Dark colour theme"
-          >
-            {DARK_THEMES.map((t) => {
-              const isSelected = localTheme === t.id;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={isSelected}
-                  class={
-                    isSelected
-                      ? "theme-swatch-card theme-swatch-card--active"
-                      : "theme-swatch-card"
-                  }
-                  onClick={() => handleThemeSelect(t.id)}
+        <div
+          class="theme-swatches-grid"
+          role="radiogroup"
+          aria-label="Dark colour theme"
+        >
+          {DARK_THEMES.map((t) => {
+            const isSelected = localTheme === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                class={
+                  isSelected
+                    ? "theme-swatch-card theme-swatch-card--active"
+                    : "theme-swatch-card"
+                }
+                onClick={() => handleThemeSelect(t.id)}
+              >
+                <div
+                  class="theme-swatch-preview"
+                  style={{
+                    backgroundColor: t.swatches.canvas,
+                    borderColor: t.swatches.border,
+                  }}
+                  aria-hidden="true"
                 >
                   <div
-                    class="theme-swatch-preview"
+                    class="theme-swatch-surface"
                     style={{
-                      backgroundColor: t.swatches.canvas,
+                      backgroundColor: t.swatches.surface,
                       borderColor: t.swatches.border,
                     }}
-                    aria-hidden="true"
                   >
-                    <div
-                      class="theme-swatch-surface"
-                      style={{
-                        backgroundColor: t.swatches.surface,
-                        borderColor: t.swatches.border,
-                      }}
+                    <span
+                      class="theme-swatch-text"
+                      style={{ color: t.swatches.textPrimary }}
                     >
-                      <span
-                        class="theme-swatch-text"
-                        style={{ color: t.swatches.textPrimary }}
-                      >
-                        Aa
+                      Aa
+                    </span>
+                    <span
+                      class="theme-swatch-pill"
+                      style={{
+                        backgroundColor: t.swatches.accent,
+                        color: t.swatches.canvas,
+                      }}
+                    />
+                  </div>
+                  <div class="theme-swatch-dots">
+                    <span
+                      style={{ backgroundColor: t.categories.anime.solid }}
+                    />
+                    <span
+                      style={{ backgroundColor: t.categories.series.solid }}
+                    />
+                    <span
+                      style={{ backgroundColor: t.categories.film.solid }}
+                    />
+                    <span
+                      style={{ backgroundColor: t.categories.book.solid }}
+                    />
+                  </div>
+                </div>
+
+                <div class="theme-swatch-info">
+                  <div class="theme-swatch-title-row">
+                    <strong>{t.label}</strong>
+                    {isSelected && (
+                      <span class="theme-swatch-check" aria-hidden="true">
+                        <CheckIcon size={14} />
                       </span>
-                      <span
-                        class="theme-swatch-pill"
-                        style={{
-                          backgroundColor: t.swatches.accent,
-                          color: t.swatches.canvas,
-                        }}
-                      />
-                    </div>
-                    <div class="theme-swatch-dots">
-                      <span
-                        style={{ backgroundColor: t.categories.anime.solid }}
-                      />
-                      <span
-                        style={{ backgroundColor: t.categories.series.solid }}
-                      />
-                      <span
-                        style={{ backgroundColor: t.categories.film.solid }}
-                      />
-                      <span
-                        style={{ backgroundColor: t.categories.book.solid }}
-                      />
-                    </div>
+                    )}
                   </div>
-
-                  <div class="theme-swatch-info">
-                    <div class="theme-swatch-title-row">
-                      <strong>{t.label}</strong>
-                      {isSelected && (
-                        <span class="theme-swatch-check" aria-hidden="true">
-                          <CheckIcon size={14} />
-                        </span>
-                      )}
-                    </div>
-                    <span class="theme-swatch-desc">{t.description}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <div class="settings-toggle-row">
-            <div class="settings-toggle-info">
-              <label
-                class="settings-toggle-title"
-                for="settings-include-youtube"
-              >
-                Include YouTube in &ldquo;All&rdquo; views
-              </label>
-              <p class="ui-text-muted">
-                When off (default), &ldquo;All&rdquo; in Calendar, Library,
-                Insights, and Review leaves out YouTube so video plays don&apos;t
-                crowd out books, films, series, and anime. YouTube always has
-                its own view by topic and channel.
-              </p>
-            </div>
-            <label class="ui-switch">
-              <input
-                id="settings-include-youtube"
-                type="checkbox"
-                checked={localIncludeYt}
-                onChange={(e) =>
-                  handleToggleIncludeYoutube(
-                    (e.currentTarget as HTMLInputElement).checked
-                  )
-                }
-              />
-              <span class="ui-switch-track" />
-            </label>
-          </div>
+                  <span class="theme-swatch-desc">{t.description}</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </Card>
 

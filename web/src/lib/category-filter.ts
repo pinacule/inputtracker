@@ -1,67 +1,22 @@
 /**
- * Pure helpers for multi-select category chips (`?cat=anime,film`),
- * API `category=` / `exclude=` parameters, and the "Include YouTube in All"
- * setting (`inputtracker.includeYoutubeInAll`).
+ * Pure helpers for multi-select category chips (`?cat=anime,film`) and
+ * API `category=` / `exclude=` parameters (v2.2 placement rules).
+ *
+ * Placement rules (spec section 15):
+ * - Library "All" excludes YouTube and music (`exclude=youtube,music`).
+ * - Calendar, Insights, Review, and Search include YouTube and music in "All".
  *
  * No DOM dependencies; safe to run under Bun or in the browser.
  */
 
 import { isCategory, type Category } from "./categories";
-import type { ThemeStorageLike } from "./theme";
 
-export const INCLUDE_YOUTUBE_STORAGE_KEY = "inputtracker.includeYoutubeInAll";
+export const LIBRARY_ALL_EXCLUDED_CATEGORIES: readonly Category[] = [
+  "youtube",
+  "music",
+];
 
-function defaultStorage(): ThemeStorageLike | null {
-  try {
-    const ls = (globalThis as unknown as { localStorage?: ThemeStorageLike })
-      .localStorage;
-    if (
-      ls &&
-      typeof ls.getItem === "function" &&
-      typeof ls.setItem === "function"
-    ) {
-      return ls;
-    }
-  } catch {
-    // Ignore storage access errors.
-  }
-  return null;
-}
-
-/**
- * Reads the "Include YouTube in All" setting from storage (default `false`).
- */
-export function readIncludeYoutubeInAll(
-  storage: ThemeStorageLike | null = defaultStorage()
-): boolean {
-  if (!storage) {
-    return false;
-  }
-  try {
-    const raw = storage.getItem(INCLUDE_YOUTUBE_STORAGE_KEY);
-    return raw === "1" || raw === "true";
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Saves the "Include YouTube in All" setting to storage.
- */
-export function saveIncludeYoutubeInAll(
-  include: boolean,
-  storage: ThemeStorageLike | null = defaultStorage()
-): boolean {
-  const valid = Boolean(include);
-  if (storage) {
-    try {
-      storage.setItem(INCLUDE_YOUTUBE_STORAGE_KEY, valid ? "1" : "0");
-    } catch {
-      // Ignore storage write errors.
-    }
-  }
-  return valid;
-}
+export type CategoryFilterScope = "all" | "library";
 
 /**
  * Parses a category selection from a comma-separated list (`"anime,film"`),
@@ -151,38 +106,64 @@ export function toggleCategoryChip(
 
 /**
  * Builds the `category` and `exclude` API query parameters for a given
- * multi-select category state and `includeYoutubeInAll` preference.
+ * multi-select category state.
+ *
+ * - In `"library"` scope, `"All"` (`selected.length === 0`) returns `{ exclude: "youtube,music" }`.
+ * - In `"all"` scope (default: Calendar, Insights, Review, Search), `"All"` returns `{}`
+ *   so YouTube and music are included.
  */
 export function buildCategoryFilterParams(
   selected: readonly Category[],
-  includeYoutubeInAll = false
+  scopeOrLegacy?: CategoryFilterScope | boolean
 ): { category?: string; exclude?: string } {
   const catParam = formatCategorySelectionParam(selected);
   if (catParam) {
     return { category: catParam };
   }
-  if (!includeYoutubeInAll) {
-    return { exclude: "youtube" };
+  if (scopeOrLegacy === "library") {
+    return { exclude: LIBRARY_ALL_EXCLUDED_CATEGORIES.join(",") };
   }
   return {};
 }
 
 /**
+ * Convenience helper for Library's "All" filter (`exclude=youtube,music`).
+ */
+export function buildLibraryCategoryFilterParams(
+  selected: readonly Category[]
+): { category?: string; exclude?: string } {
+  return buildCategoryFilterParams(selected, "library");
+}
+
+/**
  * Client-side predicate matching an item's category against the active
- * multi-select chips and the `includeYoutubeInAll` setting.
+ * multi-select chips.
+ *
+ * - In `"library"` scope, `"All"` (`selected.length === 0`) excludes `youtube` and `music`.
+ * - In `"all"` scope (default: Calendar, Insights, Review, Search), `"All"` includes every category.
  */
 export function matchesCategorySelection(
   category: Category,
   selected: readonly Category[],
-  includeYoutubeInAll = false
+  scopeOrLegacy?: CategoryFilterScope | boolean
 ): boolean {
   if (selected.length > 0) {
     return selected.includes(category);
   }
-  if (!includeYoutubeInAll && category === "youtube") {
-    return false;
+  if (scopeOrLegacy === "library") {
+    return !LIBRARY_ALL_EXCLUDED_CATEGORIES.includes(category);
   }
   return true;
+}
+
+/**
+ * Convenience predicate for Library's "All" filter (excludes YouTube and music when no chip is selected).
+ */
+export function matchesLibraryCategorySelection(
+  category: Category,
+  selected: readonly Category[]
+): boolean {
+  return matchesCategorySelection(category, selected, "library");
 }
 
 /**
