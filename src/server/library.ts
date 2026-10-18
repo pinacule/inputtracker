@@ -706,6 +706,10 @@ export function buildAllLibraryWorks(
         status,
         rating,
         sources,
+        // v2.1 fields; filled by the edit and YouTube work.
+        edited: false,
+        channel: null,
+        topic: null,
       };
 
       const detail: LibraryWorkDetail = {

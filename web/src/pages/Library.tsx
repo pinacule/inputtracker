@@ -92,6 +92,8 @@ function formatWorkStatusLabel(status: WorkStatus): string {
       return "Finished";
     case "dropped":
       return "Dropped";
+    case "planned":
+      return "Planned";
     case "unknown":
       return "Logged";
   }

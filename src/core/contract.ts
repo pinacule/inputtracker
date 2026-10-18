@@ -105,9 +105,11 @@ export interface ArchiveRequest {
   work: WorkDetails | ManualWork;
   consumed: ArchiveConsumed;
   when: ArchiveWhen;
-  /** Optional 1..10 rating and note, stored through the existing annotations table. */
+  /** Optional rating 0..10 with at most one decimal (7.5), and a note. */
   rating?: number | null;
   note?: string | null;
+  /** v2.1: default "finished" (or "in_progress" when progress < 1). "planned" = watchlist, counts no time. */
+  status?: "finished" | "in_progress" | "dropped" | "planned";
 }
 
 /** For things no provider knows: the user types the basics. */
@@ -147,7 +149,8 @@ export interface ArchiveEntrySummary {
 
 // --- library (GET /api/library, /api/library/work) --------------------------
 
-export type WorkStatus = "in_progress" | "finished" | "dropped" | "unknown";
+/** v2.1 adds "planned" (watchlist: in the library, counts no time). */
+export type WorkStatus = "in_progress" | "finished" | "dropped" | "planned" | "unknown";
 
 /** One work across all sources (a show's episodes from Simkl + an archive entry are one work). */
 export interface LibraryWork {
@@ -162,8 +165,14 @@ export interface LibraryWork {
   first_at: string | null;
   last_at: string | null;
   status: WorkStatus;
+  /** 0..10 with at most one decimal. */
   rating: number | null;
   sources: string[];
+  /** v2.1: true when the user changed this work with POST /api/library/work/edit. */
+  edited: boolean;
+  /** v2.1: YouTube only: channel name and topic, else null. */
+  channel: string | null;
+  topic: string | null;
 }
 
 export interface CategoryTotal {
@@ -265,4 +274,108 @@ export interface SettingsView {
   covers_external: boolean;
   ingest_token_set: boolean;
   database: { events: number; size_bytes: number | null; last_backup_at: string | null };
+}
+
+// --- v2.1: editing any work (POST /api/library/work/edit?key=) ---------------
+
+/**
+ * A partial edit of one library work, from the work page, the quick-edit menu or the quick rating.
+ * Omitted fields stay as they are; `null` clears that override (back to the source's value).
+ * Stored append-only (a new row per edit); works from every source can be edited, including
+ * Audiobookshelf/YouTube/Simkl ones (their source rows are never changed).
+ * Response: the updated LibraryWorkDetail.
+ */
+export interface WorkEdit {
+  title?: string | null;
+  category?: Category | null;
+  status?: WorkStatus | null;
+  /** 0..10, at most one decimal. */
+  rating?: number | null;
+  note?: string | null;
+  /** Hidden works disappear from every view, total and chart; Settings lists them to unhide. */
+  hidden?: boolean;
+  /** Link the work to a metadata entry (better cover, seasons, runtime). */
+  meta?: { provider: MetaProvider; provider_id: string } | null;
+  /** YouTube works: the topic of this video (channel topics are set with /api/youtube/channel-topic). */
+  topic?: string | null;
+}
+
+/** GET /api/library/hidden */
+export interface HiddenWorksResult {
+  works: LibraryWork[];
+}
+
+// --- v2.1: YouTube (GET /api/youtube, /api/youtube/videos) -------------------
+
+export interface YoutubeTopic {
+  topic: string;
+  channels: number;
+  videos: number;
+  total_minutes: number;
+}
+
+export interface YoutubeChannel {
+  channel: string;
+  channel_id: string | null;
+  /** The user's topic for this channel, else the most common YouTube category of its videos. */
+  topic: string | null;
+  videos: number;
+  total_minutes: number;
+  last_at: string | null;
+}
+
+export interface YoutubeVideo {
+  /** Library work key of this video. */
+  key: string;
+  video_id: string;
+  title: string;
+  channel: string | null;
+  topic: string | null;
+  watched_minutes: number;
+  plays: number;
+  first_at: string;
+  last_at: string;
+  /** Local URL or null. */
+  thumbnail_url: string | null;
+}
+
+/** GET /api/youtube?from=YYYY-MM-DD&to=YYYY-MM-DD (both optional: all time). */
+export interface YoutubeOverview {
+  from: string | null;
+  to: string | null;
+  total_minutes: number;
+  videos: number;
+  topics: YoutubeTopic[];
+  channels: YoutubeChannel[];
+  /** Minutes per day for a sparkline (local days, only when from/to are given). */
+  days: SeriesPoint[];
+  /** Video-days below the minimum watch time, left out of everything. */
+  short_plays_hidden: number;
+  min_watch_minutes: number;
+}
+
+/** GET /api/youtube/videos?channel=&topic=&from=&to=&q=&limit=50&offset=0, newest first. */
+export interface YoutubeVideosResult {
+  videos: YoutubeVideo[];
+  total: number;
+}
+
+// --- v2.1: Achriom import (POST /api/import/achriom[?dry_run=1], CLI `import achriom`) ---
+
+export interface AchriomImportResult {
+  dry_run: boolean;
+  /** Rows read per file, e.g. { "anime.csv": 30 }. */
+  rows: Record<string, number>;
+  /** Archive entries written now (0 on a repeat import). */
+  created: number;
+  /** Entries already stored unchanged. */
+  unchanged: number;
+  /** Entries whose earlier import changed (re-saved as a new revision). */
+  updated: number;
+  planned: number;
+  /** Rows matched to a metadata provider (better cover, runtime, seasons). */
+  matched: number;
+  /** Rows not imported, with a reason (e.g. games and albums are not tracked categories). */
+  skipped: Array<{ file: string; title: string; reason: string }>;
+  total_minutes: number;
 }
