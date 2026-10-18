@@ -393,6 +393,113 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 8,
+    name: "youtube_takeout_v8",
+    up: (db: Database) => {
+      db.run(`
+        ALTER TABLE youtube_videos
+        ADD COLUMN length_seconds INTEGER;
+      `);
+
+      db.run("DROP VIEW IF EXISTS youtube_videos_latest;");
+      db.run(`
+        CREATE VIEW youtube_videos_latest AS
+        SELECT *
+        FROM youtube_videos
+        WHERE id IN (
+          SELECT MAX(id)
+          FROM youtube_videos
+          GROUP BY video_id
+        );
+      `);
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS youtube_favorites (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          record_hash TEXT NOT NULL UNIQUE,
+          video_id TEXT NOT NULL,
+          added_at TEXT,
+          created_at TEXT NOT NULL
+        );
+      `);
+
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_youtube_favorites_video_id
+        ON youtube_favorites (video_id);
+      `);
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS youtube_favorites_no_update
+        BEFORE UPDATE ON youtube_favorites
+        BEGIN
+          SELECT RAISE(ABORT, 'youtube_favorites is append-only');
+        END;
+      `);
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS youtube_favorites_no_delete
+        BEFORE DELETE ON youtube_favorites
+        BEGIN
+          SELECT RAISE(ABORT, 'youtube_favorites is append-only');
+        END;
+      `);
+
+      db.run(`
+        CREATE VIEW IF NOT EXISTS youtube_favorites_latest AS
+        SELECT *
+        FROM youtube_favorites
+        WHERE id IN (
+          SELECT MAX(id)
+          FROM youtube_favorites
+          GROUP BY video_id
+        );
+      `);
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS youtube_subscriptions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          record_hash TEXT NOT NULL UNIQUE,
+          channel_id TEXT NOT NULL,
+          channel_url TEXT,
+          channel_title TEXT,
+          created_at TEXT NOT NULL
+        );
+      `);
+
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_youtube_subscriptions_channel_id
+        ON youtube_subscriptions (channel_id);
+      `);
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS youtube_subscriptions_no_update
+        BEFORE UPDATE ON youtube_subscriptions
+        BEGIN
+          SELECT RAISE(ABORT, 'youtube_subscriptions is append-only');
+        END;
+      `);
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS youtube_subscriptions_no_delete
+        BEFORE DELETE ON youtube_subscriptions
+        BEGIN
+          SELECT RAISE(ABORT, 'youtube_subscriptions is append-only');
+        END;
+      `);
+
+      db.run(`
+        CREATE VIEW IF NOT EXISTS youtube_subscriptions_latest AS
+        SELECT *
+        FROM youtube_subscriptions
+        WHERE id IN (
+          SELECT MAX(id)
+          FROM youtube_subscriptions
+          GROUP BY channel_id
+        );
+      `);
+    },
+  },
 ];
 
 export function migrate(db: Database): void {

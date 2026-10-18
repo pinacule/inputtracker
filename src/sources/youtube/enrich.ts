@@ -28,10 +28,14 @@ import {
 } from "../../server/metadata/http.ts";
 import { isValidYoutubeVideoId } from "../../server/thumbs.ts";
 import { filterShortYoutubeEvents } from "../../server/youtube-filter.ts";
+import { resaveTakeoutViews } from "./takeout.ts";
+
+export { resaveTakeoutViews };
 
 export const DEFAULT_YOUTUBE_BASE_URL = "https://www.youtube.com";
 export const DEFAULT_ENRICH_PER_SYNC = 50;
 export const DEFAULT_ENRICH_DELAY_MS = 50;
+export const DEFAULT_TAKEOUT_ENRICH_DELAY_MS = 1000;
 
 /** Cooldown for 404 / deleted / private videos: 7 days. */
 export const NOT_FOUND_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
@@ -178,6 +182,74 @@ export function parseWatchPageGenre(html: string): string | null {
   return null;
 }
 
+function parseIsoDurationSeconds(iso: string): number | null {
+  const m =
+    /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i.exec(
+      iso.trim()
+    );
+  if (!m) {
+    return null;
+  }
+  const [, dStr, hStr, mStr, sStr] = m;
+  if (
+    dStr === undefined &&
+    hStr === undefined &&
+    mStr === undefined &&
+    sStr === undefined
+  ) {
+    return null;
+  }
+  const days = dStr ? Number.parseInt(dStr, 10) : 0;
+  const hours = hStr ? Number.parseInt(hStr, 10) : 0;
+  const minutes = mStr ? Number.parseInt(mStr, 10) : 0;
+  const seconds = sStr ? Number.parseFloat(sStr) : 0;
+  const total = Math.round(days * 86400 + hours * 3600 + minutes * 60 + seconds);
+  return Number.isFinite(total) && total > 0 ? total : null;
+}
+
+/**
+ * Extract the video/track length in seconds from a YouTube watch page HTML:
+ * 1. `"lengthSeconds":"123"` in the embedded player JSON, or
+ * 2. `<meta itemprop="duration" content="PT12M3S">` (ISO 8601 duration).
+ */
+export function parseWatchPageLengthSeconds(html: string): number | null {
+  if (typeof html !== "string" || html.length === 0) {
+    return null;
+  }
+
+  const lengthMatch = /"lengthSeconds"\s*:\s*(?:"(\d+)"|(\d+))/.exec(html);
+  if (lengthMatch) {
+    const raw = lengthMatch[1] ?? lengthMatch[2] ?? "";
+    const secs = Number.parseInt(raw, 10);
+    if (Number.isFinite(secs) && secs > 0) {
+      return secs;
+    }
+  }
+
+  const metaTagRe = /<meta\b[^>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = metaTagRe.exec(html)) !== null) {
+    const tag = match[0];
+    if (!/\bitemprop\s*=\s*(?:"duration"|'duration'|duration(?=[>\s/]))/i.test(tag)) {
+      continue;
+    }
+    const contentMatch =
+      /\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"'/]+))/i.exec(tag);
+    if (!contentMatch) {
+      continue;
+    }
+    const rawContent =
+      contentMatch[1] ?? contentMatch[2] ?? contentMatch[3] ?? "";
+    const decoded = decodeHtmlEntities(rawContent).trim();
+    const secs = parseIsoDurationSeconds(decoded);
+    if (secs !== null) {
+      return secs;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Parse an HTTP `Retry-After` header (delta-seconds or HTTP-date) into a
  * positive delay in milliseconds, falling back to `fallbackMs`.
@@ -212,6 +284,7 @@ export interface NewYoutubeVideoEnrichment {
   channel_id: string | null;
   thumbnail_url: string | null;
   genre: string | null;
+  length_seconds?: number | null;
   status: YoutubeEnrichmentStatus;
   http_status: number | null;
   retry_after: string | null;
@@ -232,11 +305,12 @@ export function insertYoutubeVideoEnrichment(
       channel_id,
       thumbnail_url,
       genre,
+      length_seconds,
       status,
       http_status,
       retry_after,
       fetched_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     [
       row.video_id,
       row.title,
@@ -245,6 +319,7 @@ export function insertYoutubeVideoEnrichment(
       row.channel_id,
       row.thumbnail_url,
       row.genre,
+      row.length_seconds ?? null,
       row.status,
       row.http_status,
       row.retry_after,
@@ -330,6 +405,7 @@ export async function fetchVideoEnrichment(
           video_id: videoId,
           ...parsedOembed,
           genre: prev?.genre ?? null,
+          length_seconds: prev?.length_seconds ?? null,
           status: "not_found",
           http_status: 404,
           retry_after: new Date(nowMs + NOT_FOUND_RETRY_MS).toISOString(),
@@ -344,6 +420,7 @@ export async function fetchVideoEnrichment(
         video_id: videoId,
         ...parsedOembed,
         genre: prev?.genre ?? null,
+        length_seconds: prev?.length_seconds ?? null,
         status: "failed",
         http_status: httpStatus,
         retry_after: new Date(nowMs + cooldown).toISOString(),
@@ -364,6 +441,7 @@ export async function fetchVideoEnrichment(
       video_id: videoId,
       ...parsedOembed,
       genre: prev?.genre ?? null,
+      length_seconds: prev?.length_seconds ?? null,
       status: "failed",
       http_status: null,
       retry_after: new Date(nowMs + SERVER_ERROR_RETRY_MS).toISOString(),
@@ -371,7 +449,7 @@ export async function fetchVideoEnrichment(
     };
   }
 
-  // --- Step 2: GET watch page for itemprop="genre" ---
+  // --- Step 2: GET watch page for itemprop="genre" and length ---
   try {
     const watchOutcome = await timedRequest(
       fetchFn,
@@ -397,6 +475,7 @@ export async function fetchVideoEnrichment(
           video_id: videoId,
           ...parsedOembed,
           genre: prev?.genre ?? null,
+          length_seconds: prev?.length_seconds ?? null,
           status: "not_found",
           http_status: 404,
           retry_after: new Date(nowMs + NOT_FOUND_RETRY_MS).toISOString(),
@@ -411,6 +490,7 @@ export async function fetchVideoEnrichment(
         video_id: videoId,
         ...parsedOembed,
         genre: prev?.genre ?? null,
+        length_seconds: prev?.length_seconds ?? null,
         status: "failed",
         http_status: httpStatus,
         retry_after: new Date(nowMs + cooldown).toISOString(),
@@ -419,10 +499,15 @@ export async function fetchVideoEnrichment(
     }
 
     const genre = parseWatchPageGenre(watchOutcome.html) ?? prev?.genre ?? null;
+    const length_seconds =
+      parseWatchPageLengthSeconds(watchOutcome.html) ??
+      prev?.length_seconds ??
+      null;
     return {
       video_id: videoId,
       ...parsedOembed,
       genre,
+      length_seconds,
       status: "ok",
       http_status: 200,
       retry_after: null,
@@ -433,6 +518,7 @@ export async function fetchVideoEnrichment(
       video_id: videoId,
       ...parsedOembed,
       genre: prev?.genre ?? null,
+      length_seconds: prev?.length_seconds ?? null,
       status: "failed",
       http_status: null,
       retry_after: new Date(nowMs + SERVER_ERROR_RETRY_MS).toISOString(),
@@ -451,7 +537,8 @@ export function findVideosToEnrich(
   nowIso: string,
   limit: number,
   tz: string = "Europe/Bratislava",
-  minWatchMinutes?: number
+  minWatchMinutes?: number,
+  opts: { takeout?: boolean } = {}
 ): string[] {
   if (limit <= 0) {
     return [];
@@ -466,6 +553,7 @@ export function findVideosToEnrich(
   );
 
   const existingMap = getYoutubeVideoEnrichmentMap(db);
+  const takeoutOnly = opts.takeout === true;
 
   // Track per video_id: whether any event already has a channel, and latest started_at.
   const candidates = new Map<
@@ -474,9 +562,17 @@ export function findVideosToEnrich(
   >();
 
   for (const ev of visibleEvents) {
-    if (ev.media_type !== "video") {
+    if (takeoutOnly) {
+      if (ev.source_kind !== "history_item") {
+        continue;
+      }
+      if (ev.media_type !== "video" && ev.media_type !== "music") {
+        continue;
+      }
+    } else if (ev.media_type !== "video") {
       continue;
     }
+
     const ext = parseExternalIds(ev.external_ids);
     const vid = ext?.["youtube_video"];
     if (!isValidYoutubeVideoId(vid)) {
@@ -486,7 +582,9 @@ export function findVideosToEnrich(
     const cached = existingMap.get(vid);
     if (cached) {
       if (cached.status === "ok") {
-        continue;
+        if (!takeoutOnly || (cached.length_seconds !== null && cached.length_seconds !== undefined)) {
+          continue;
+        }
       }
       if (cached.retry_after !== null && cached.retry_after > nowIso) {
         continue;
@@ -530,6 +628,7 @@ export interface EnrichYoutubeVideosOptions {
   config?: Config;
   limit?: number;
   delayMs?: number;
+  takeout?: boolean;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   nowMs?: () => number;
@@ -542,6 +641,7 @@ export interface EnrichYoutubeVideosResult {
   enriched: number;
   failed: number;
   notFound: number;
+  resaved?: number;
 }
 
 function defaultSleep(ms: number): Promise<void> {
@@ -554,6 +654,8 @@ function defaultSleep(ms: number): Promise<void> {
 /**
  * Enrich up to `limit` unenriched YouTube videos in `db`, sleeping `delayMs`
  * between videos. Never throws; caches results and failures in `youtube_videos`.
+ * When `takeout` is true (or whenever lengths are known), re-saves affected
+ * Takeout views with their capped durations.
  */
 export async function enrichYoutubeVideos(
   db: Database,
@@ -563,23 +665,39 @@ export async function enrichYoutubeVideos(
   const minWatchMinutes = opts.config?.youtube?.min_watch_minutes ?? 5;
   const limit =
     opts.limit ?? opts.config?.youtube?.enrich_per_sync ?? DEFAULT_ENRICH_PER_SYNC;
-  const delayMs = opts.delayMs ?? DEFAULT_ENRICH_DELAY_MS;
+  const delayMs =
+    opts.delayMs ??
+    (opts.takeout ? DEFAULT_TAKEOUT_ENRICH_DELAY_MS : DEFAULT_ENRICH_DELAY_MS);
   const sleep = opts.sleep ?? defaultSleep;
   const nowMsFn = opts.nowMs ?? Date.now;
   const baseUrl = opts.config?.youtube?.base_url ?? DEFAULT_YOUTUBE_BASE_URL;
 
   if (limit <= 0) {
-    return { attempted: 0, enriched: 0, failed: 0, notFound: 0 };
+    return {
+      attempted: 0,
+      enriched: 0,
+      failed: 0,
+      notFound: 0,
+      ...(opts.takeout ? { resaved: 0 } : {}),
+    };
   }
 
   let videoIds: string[];
   let existingMap: Map<string, YoutubeVideoRow>;
   try {
     const nowIso = new Date(nowMsFn()).toISOString();
-    videoIds = findVideosToEnrich(db, nowIso, limit, tz, minWatchMinutes);
+    videoIds = findVideosToEnrich(db, nowIso, limit, tz, minWatchMinutes, {
+      takeout: opts.takeout,
+    });
     existingMap = getYoutubeVideoEnrichmentMap(db);
   } catch {
-    return { attempted: 0, enriched: 0, failed: 0, notFound: 0 };
+    return {
+      attempted: 0,
+      enriched: 0,
+      failed: 0,
+      notFound: 0,
+      ...(opts.takeout ? { resaved: 0 } : {}),
+    };
   }
 
   let attempted = 0;
@@ -619,5 +737,18 @@ export async function enrichYoutubeVideos(
     }
   }
 
-  return { attempted, enriched, failed, notFound };
+  let resaved = 0;
+  try {
+    resaved = resaveTakeoutViews(db).resaved;
+  } catch {
+    // Best-effort re-save
+  }
+
+  return {
+    attempted,
+    enriched,
+    failed,
+    notFound,
+    ...(opts.takeout ? { resaved } : {}),
+  };
 }
