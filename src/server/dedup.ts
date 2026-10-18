@@ -31,6 +31,7 @@ import {
   type ConsumptionEvent,
 } from "./aggregate.ts";
 import { normalizeForSearch } from "./search.ts";
+import { dropTakeoutCoveredByMeasuredPlays } from "./youtube-filter.ts";
 
 export type DedupedEvent = ConsumptionEvent & {
   also_from?: string[];
@@ -72,9 +73,14 @@ function getDedupKey(event: ConsumptionEvent, tz: string): string | null {
 }
 
 export function dedupeConsumption(
-  events: readonly ConsumptionEvent[],
+   rawEvents: readonly ConsumptionEvent[],
   tz: string
 ): DedupedEvent[] {
+  if (rawEvents.length === 0) {
+    return [];
+  }
+
+  const events = dropTakeoutCoveredByMeasuredPlays(rawEvents, tz);
   if (events.length === 0) {
     return [];
   }

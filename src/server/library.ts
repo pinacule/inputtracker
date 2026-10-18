@@ -62,6 +62,7 @@ import {
   getYoutubeVideoWorkDetail,
   resolveYoutubeLibraryWorkFields,
 } from "./youtube-routes.ts";
+import { getFavoriteVideoIds } from "../sources/youtube/takeout.ts";
 
 export interface InternalLibraryWork {
   work: LibraryWork;
@@ -217,6 +218,7 @@ export function buildAllLibraryWorks(
   }
 
   const overrides = getWorkOverrides(db);
+  const favoriteVideoIds = getFavoriteVideoIds(db);
 
   const progressSignals = readMediaProgressSignals(db);
   const progressByAbsId = new Map<string, MediaProgressSignal>();
@@ -640,6 +642,13 @@ export function buildAllLibraryWorks(
         ? resolveYoutubeLibraryWorkFields(db, workEvents, effectiveTitle, key)
         : { channel: null, topic: override?.topic ?? null };
 
+    const isFavorite =
+      favoriteVideoIds.size > 0 &&
+      workEvents.some((ev) => {
+        const vid = parseExternalIds(ev.external_ids)?.["youtube_video"];
+        return typeof vid === "string" && favoriteVideoIds.has(vid);
+      });
+
     const work: LibraryWork = {
       key,
       category: effectiveCategory,
@@ -658,6 +667,7 @@ export function buildAllLibraryWorks(
       // v2.2 fields; filled by the v2.2 backend work.
       progress: null,
       creator: null,
+      ...(favoriteVideoIds.size > 0 ? { favorite: isFavorite } : {}),
     };
 
     const detail: LibraryWorkDetail = {

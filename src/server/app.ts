@@ -17,6 +17,7 @@ import { detectFormat, importNative } from "../io/import-native.ts";
 import { addManual, type ManualInput } from "../io/manual.ts";
 import { VALID_MEDIA_TYPES } from "../core/events.ts";
 import { createAbsClient } from "../sources/audiobookshelf/client.ts";
+import { isZipBytes } from "../io/zip.ts";
 import {
   importYoutubeTakeout,
   looksLikeTakeout,
@@ -871,25 +872,49 @@ export function createApp(deps: AppDeps): Hono {
       return c.json({ error: "Missing required 'file' in multipart form" }, 400);
     }
 
-    let text: string;
+    let text = "";
+    let rawBytes: Uint8Array | null = null;
     let filename = "";
 
     if (typeof file === "string") {
       text = file;
     } else if (file instanceof Blob || typeof (file as { text?: unknown }).text === "function") {
-      text = await (file as Blob).text();
       if ("name" in (file as object) && typeof (file as { name: unknown }).name === "string") {
         filename = (file as { name: string }).name;
+      }
+      if (typeof (file as Blob).arrayBuffer === "function") {
+        rawBytes = new Uint8Array(await (file as Blob).arrayBuffer());
+        if (!isZipBytes(rawBytes)) {
+          text = new TextDecoder("utf-8").decode(rawBytes);
+        }
+      } else {
+        text = await (file as Blob).text();
       }
     } else {
       return c.json({ error: "Invalid file uploaded" }, 400);
     }
 
+    if (rawBytes !== null && isZipBytes(rawBytes)) {
+      try {
+        const result = importYoutubeTakeout(db, rawBytes, { config });
+        return c.json({ kind: "youtube-takeout", ...result });
+      } catch (caught) {
+        return c.json(
+          { error: caught instanceof Error ? caught.message : String(caught) },
+          400
+        );
+      }
+    }
+
     const format = detectFormat(filename) ?? detectFormat(text);
 
-    if (looksLikeTakeout(text)) {
+    if (
+      looksLikeTakeout(text) ||
+      filename.toLowerCase().endsWith(".html") ||
+      filename.toLowerCase().endsWith(".htm")
+    ) {
       try {
-        const result = importYoutubeTakeout(db, text);
+        const result = importYoutubeTakeout(db, text, { config });
         return c.json({ kind: "youtube-takeout", ...result });
       } catch (caught) {
         return c.json(

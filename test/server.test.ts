@@ -746,7 +746,7 @@ describe("HTTP API", () => {
       expect(body.kind).toBe("youtube-takeout");
       expect(body.records).toBe(12);
       expect(body.seen).toBe(8);
-      expect(body.inserted).toBe(8);
+      expect(body.inserted).toBe(7);
       expect(body.skipped).toEqual({
         ads: 1,
         no_video: 1,
@@ -754,6 +754,36 @@ describe("HTTP API", () => {
         invalid: 1,
       });
       expect(typeof body.runId).toBe("number");
+    });
+
+    test("a Takeout HTML file returns kind youtube-takeout with counts", async () => {
+      const app = createApp({ db, config });
+      const html = `<!DOCTYPE html><html><body>
+        <div class="outer-cell mdl-cell mdl-cell--12-col mdl-shadow--2dp">
+          <div class="mdl-grid">
+            <div class="header-cell mdl-cell mdl-cell--12-col">
+              <p class="mdl-typography--title">YouTube<br></p>
+            </div>
+            <div class="content-cell mdl-cell mdl-cell--6-col mdl-typography--body-1">Watched <a href="https://www.youtube.com/watch?v=HtmlVid0001">Synthetic HTML Video</a><br><a href="https://www.youtube.com/channel/UChtmlchan01">HTML Channel</a><br>Oct 18, 2026, 3:25:57 AM CEST<br></div>
+            <div class="content-cell mdl-cell mdl-cell--12-col mdl-typography--caption"><b>Products:</b><br>&emsp;YouTube<br></div>
+          </div>
+        </div>
+      </body></html>`;
+      const form = new FormData();
+      form.append(
+        "file",
+        new Blob([html], { type: "text/html" }),
+        "watch-history.html"
+      );
+
+      const res = await app.request("/api/import", { method: "POST", body: form });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as TakeoutImportBody;
+
+      expect(body.kind).toBe("youtube-takeout");
+      expect(body.records).toBe(1);
+      expect(body.seen).toBe(1);
+      expect(body.inserted).toBe(1);
     });
 
     test("a malformed Takeout array returns 400", async () => {

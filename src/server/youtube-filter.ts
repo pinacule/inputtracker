@@ -244,6 +244,98 @@ export function dropSupersededActivityWatchPlays<T extends ConsumptionEvent>(
 }
 
 /**
+ * Drop YouTube Takeout views (`source = 'youtube'`, `source_kind = 'history_item'`)
+ * on read when a measured play (`aw_play` or `phone_play`) of the same video
+ * exists on the same local day in `tz`. If the measured play lacks a channel
+ * (`parent_title`), it inherits the channel from the dropped Takeout view.
+ */
+export function dropTakeoutCoveredByMeasuredPlays<T extends ConsumptionEvent>(
+  events: readonly T[],
+  tz: string
+): T[] {
+  const measuredVideoDays = new Set<string>();
+  const takeoutChannelByVideoDay = new Map<
+    string,
+    { parent_title: string | null; youtube_channel: string | null }
+  >();
+  let hasTakeout = false;
+
+  for (const ev of events) {
+    if (ev.source !== "youtube") {
+      continue;
+    }
+    if (ev.source_kind === "aw_play" || ev.source_kind === "phone_play") {
+      const key = `${extractYoutubeVideoKey(ev)}\0${formatLocalParts(ev.started_at, tz).date}`;
+      measuredVideoDays.add(key);
+    } else if (ev.source_kind === "history_item") {
+      hasTakeout = true;
+      const key = `${extractYoutubeVideoKey(ev)}\0${formatLocalParts(ev.started_at, tz).date}`;
+      const ch = ev.parent_title?.trim() || null;
+      const ext = parseExternalIds(ev.external_ids);
+      const ytCh =
+        typeof ext?.["youtube_channel"] === "string" &&
+        ext["youtube_channel"].trim() !== ""
+          ? ext["youtube_channel"].trim()
+          : null;
+      if (ch !== null || ytCh !== null) {
+        const prev = takeoutChannelByVideoDay.get(key);
+        takeoutChannelByVideoDay.set(key, {
+          parent_title: ch ?? prev?.parent_title ?? null,
+          youtube_channel: ytCh ?? prev?.youtube_channel ?? null,
+        });
+      }
+    }
+  }
+
+  if (!hasTakeout || measuredVideoDays.size === 0) {
+    return [...events];
+  }
+
+  const out: T[] = [];
+  for (const ev of events) {
+    if (ev.source === "youtube" && ev.source_kind === "history_item") {
+      const key = `${extractYoutubeVideoKey(ev)}\0${formatLocalParts(ev.started_at, tz).date}`;
+      if (measuredVideoDays.has(key)) {
+        continue;
+      }
+      out.push(ev);
+      continue;
+    }
+
+    if (
+      ev.source === "youtube" &&
+      (ev.source_kind === "aw_play" || ev.source_kind === "phone_play")
+    ) {
+      const key = `${extractYoutubeVideoKey(ev)}\0${formatLocalParts(ev.started_at, tz).date}`;
+      const info = takeoutChannelByVideoDay.get(key);
+      if (info) {
+        const hasChannel = Boolean(ev.parent_title && ev.parent_title.trim() !== "");
+        const nextParent = hasChannel ? ev.parent_title : info.parent_title;
+        let nextExt = ev.external_ids;
+        if (info.youtube_channel) {
+          const extObj = parseExternalIds(ev.external_ids) ?? {};
+          if (!extObj["youtube_channel"]) {
+            nextExt = { ...extObj, youtube_channel: info.youtube_channel };
+          }
+        }
+        if (nextParent !== ev.parent_title || nextExt !== ev.external_ids) {
+          out.push({
+            ...ev,
+            parent_title: nextParent,
+            external_ids: nextExt,
+          });
+          continue;
+        }
+      }
+    }
+
+    out.push(ev);
+  }
+
+  return out;
+}
+
+/**
  * Partition events by the YouTube minimum watch time per video per local day,
  * also applying cached channel enrichment when `db` is provided.
  */
@@ -256,8 +348,11 @@ export function partitionYoutubeEvents<T extends ConsumptionEvent>(
     opts.minWatchMinutes ?? getYoutubeMinWatchMinutesForDb(opts.db);
   const minSeconds = minWatchMinutes * 60;
 
-  const enriched = dropSupersededActivityWatchPlays(
-    applyYoutubeEnrichmentToEvents(events, opts.db),
+  const enriched = dropTakeoutCoveredByMeasuredPlays(
+    dropSupersededActivityWatchPlays(
+      applyYoutubeEnrichmentToEvents(events, opts.db),
+      tz
+    ),
     tz
   );
 
