@@ -22,6 +22,7 @@ export interface ActivityWatchClient {
   getBuckets(): Promise<Record<string, AwBucket>>;
   getEvents(bucketId: string, startIso: string, endIso: string): Promise<AwRawEvent[]>;
   get<T>(path: string, query?: Record<string, string | number | boolean>): Promise<T>;
+  fetch?: typeof fetch | FetchFn;
 }
 
 export type ActivityWatchClientConfig =
@@ -132,5 +133,6 @@ export function createActivityWatchClient(
     getBuckets,
     getEvents,
     get,
+    fetch: fetchFn,
   };
 }

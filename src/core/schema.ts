@@ -88,3 +88,29 @@ export interface WorkOverrideRow {
   topic: string | null;
   created_at: string;
 }
+
+export type YoutubeEnrichmentStatus = "ok" | "not_found" | "failed";
+
+export interface YoutubeVideoRow {
+  id: number;
+  video_id: string;
+  title: string | null;
+  channel: string | null;
+  channel_url: string | null;
+  channel_id: string | null;
+  thumbnail_url: string | null;
+  genre: string | null;
+  status: YoutubeEnrichmentStatus;
+  http_status: number | null;
+  retry_after: string | null;
+  fetched_at: string;
+}
+
+export interface YoutubeChannelTopicRow {
+  id: number;
+  record_hash: string;
+  channel: string;
+  normalized_channel: string;
+  topic: string | null;
+  created_at: string;
+}

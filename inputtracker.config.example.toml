@@ -45,6 +45,10 @@ ntfy_url = ""
 # [youtube]
 # Base URL used to fetch video thumbnails (YouTube Takeout imports carry a video id).
 # thumb_base_url = "https://i.ytimg.com/vi"
+# Minimum watched minutes on one local day for a YouTube video to count (0 disables).
+# min_watch_minutes = 5
+# Max videos enriched (channel + category via oEmbed/watch page) per sync run (0 disables).
+# enrich_per_sync = 50
 
 # [ingest]
 # Token for POST /api/ingest/youtube-plays (the phone apps POST what YouTube

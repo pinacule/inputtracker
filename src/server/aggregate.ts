@@ -31,6 +31,7 @@ import {
   matchesCategoryFilter,
   parseCategoryFilter,
 } from "./overrides.ts";
+import { filterShortYoutubeEvents } from "./youtube-filter.ts";
 
 export const CONSUMPTION_KINDS = new Set([
   "listening_session",
@@ -1039,7 +1040,11 @@ export function getDisplayConsumptionEvents(
   source?: string,
   tz: string = "Europe/Bratislava"
 ): DedupedEvent[] {
-  const events = getLatestConsumptionEvents(db, source);
+  const events = filterShortYoutubeEvents(
+    getLatestConsumptionEvents(db, source),
+    tz,
+    db
+  );
   const deduped = dedupeConsumption(events, tz);
   return applyWorkOverridesToEvents(db, deduped);
 }

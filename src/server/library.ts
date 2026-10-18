@@ -38,6 +38,7 @@ import {
 } from "./aggregate.ts";
 import { saveAnnotation } from "./annotations.ts";
 import { dedupeConsumption, type DedupedEvent } from "./dedup.ts";
+import { filterShortYoutubeEvents } from "./youtube-filter.ts";
 import { readWorkCache } from "./metadata/cache.ts";
 import { lookupWork } from "./metadata/index.ts";
 import {
@@ -57,6 +58,10 @@ import {
 } from "./overrides.ts";
 import { tenthsToRating } from "./ratings.ts";
 import { normalizeForSearch } from "./search.ts";
+import {
+  getYoutubeVideoWorkDetail,
+  resolveYoutubeLibraryWorkFields,
+} from "./youtube-routes.ts";
 
 export interface InternalLibraryWork {
   work: LibraryWork;
@@ -204,7 +209,8 @@ export function buildAllLibraryWorks(
   tz: string = "Europe/Bratislava",
   opts: BuildLibraryWorksOptions = {}
 ): InternalLibraryWork[] {
-  const rawEvents = getLatestConsumptionEvents(db);
+  // Short YouTube video-days (below [youtube] min_watch_minutes) are left out, as in every read.
+  const rawEvents = filterShortYoutubeEvents(getLatestConsumptionEvents(db), tz, db);
   const events = dedupeConsumption(rawEvents, tz);
   if (events.length === 0) {
     return [];
@@ -629,6 +635,11 @@ export function buildAllLibraryWorks(
         };
       });
 
+    const ytFields =
+      effectiveCategory === "youtube"
+        ? resolveYoutubeLibraryWorkFields(db, workEvents, effectiveTitle, key)
+        : { channel: null, topic: override?.topic ?? null };
+
     const work: LibraryWork = {
       key,
       category: effectiveCategory,
@@ -642,8 +653,8 @@ export function buildAllLibraryWorks(
       rating,
       sources,
       edited: override?.edited ?? false,
-      channel: null,
-      topic: override?.topic ?? null,
+      channel: ytFields.channel,
+      topic: ytFields.topic,
     };
 
     const detail: LibraryWorkDetail = {
@@ -775,6 +786,9 @@ export function getLibraryWorkDetail(
   tz: string = "Europe/Bratislava",
   config?: Config
 ): LibraryWorkDetail | null {
+  if (key.startsWith("youtube:video:")) {
+    return getYoutubeVideoWorkDetail(db, key, tz);
+  }
   const allWorks = buildAllLibraryWorks(db, tz, { config });
   const found = allWorks.find((item) => item.work.key === key);
   return found ? found.detail : null;
@@ -831,7 +845,12 @@ export async function editLibraryWork(
     config: opts.config,
   });
   const target = allWorks.find((item) => item.work.key === key);
-  if (!target) {
+  // Single YouTube videos are not library works (those are per channel) but can be edited
+  // (topic, rating, note) through their `youtube:video:<id>` key from /api/youtube/videos.
+  if (
+    !target &&
+    !(key.startsWith("youtube:video:") && getYoutubeVideoWorkDetail(db, key, tz) !== null)
+  ) {
     throw new WorkOverrideNotFoundError(key);
   }
 
@@ -865,10 +884,11 @@ export async function editLibraryWork(
   // path (library, reviews, search, title-history, progress, /api/annotations)
   // returns the exact same rating and note.
   if (
-    parsed.hasRating ||
-    parsed.hasNote ||
-    (parsed.hasTitle &&
-      (target.detail.rating !== null || target.detail.note !== null))
+    target &&
+    (parsed.hasRating ||
+      parsed.hasNote ||
+      (parsed.hasTitle &&
+        (target.detail.rating !== null || target.detail.note !== null)))
   ) {
     const nextRating = parsed.hasRating
       ? parsed.ratingTenths === null
@@ -903,6 +923,11 @@ export async function editLibraryWork(
         );
       }
     }
+  }
+
+  if (!target) {
+    // A single YouTube video (checked above).
+    return getYoutubeVideoWorkDetail(db, key, tz)!;
   }
 
   const updatedWorks = buildAllLibraryWorks(db, tz, {

@@ -43,7 +43,13 @@ import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
 import { addManual, type ManualInput } from "../io/manual.ts";
+import { importAchriom } from "../io/import-achriom.ts";
 import { importYoutubeTakeout } from "../sources/youtube/takeout.ts";
+import {
+  enrichYoutubeVideos,
+  type EnrichYoutubeVideosOptions,
+  type EnrichYoutubeVideosResult,
+} from "../sources/youtube/enrich.ts";
 import { createAbsClient, type AbsClient } from "../sources/audiobookshelf/client.ts";
 import {
   ABS_SOURCE,
@@ -102,11 +108,13 @@ export function usage(): string {
     "Commands:",
     "  sync audiobookshelf|simkl|activitywatch  fetch new source activity into the DB",
     "    sync activitywatch --since <date>      backfill older YouTube plays from ActivityWatch",
+    "    youtube enrich [--limit <n>]           enrich stored YouTube videos with channel and category",
     "  auth simkl [--status]                    connect or inspect Simkl authorization",
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
     "  import <file> [--format json|csv]        import a native export file into the DB",
     "    import youtube-takeout <file>          import a YouTube Takeout watch-history JSON file",
+    "    import achriom <path> [--dry-run]      import an Achriom library export (.zip or .csv)",
     "  backup                                   snapshot the DB + JSON export into backup_dir",
     "  notify test                              test every configured notification channel",
     "  notify weekly                            push the weekly summary (needs notify.weekly_summary)",
@@ -136,6 +144,7 @@ export interface CliDeps {
   runBackup?: (db: Database, options: BackupOptions) => BackupResult;
   writeFile?: (path: string, data: string) => void;
   readFile?: (path: string) => string;
+  readFileBytes?: (path: string) => Uint8Array;
   out?: (line: string) => void;
   err?: (line: string) => void;
   env?: Record<string, string | undefined>;
@@ -158,6 +167,10 @@ export interface CliDeps {
   backfillActivityWatch?: (
     deps: BackfillActivityWatchDeps
   ) => Promise<ActivityWatchSyncResult>;
+  enrichYoutubeVideos?: (
+    db: Database,
+    opts?: EnrichYoutubeVideosOptions
+  ) => Promise<EnrichYoutubeVideosResult>;
   /** Override for `it doctor` (tests inject mocked environment deps). */
   runDoctor?: (overrides?: Partial<DoctorDeps>) => Promise<number>;
   /** Environment deps merged into the doctor defaults. */
@@ -321,6 +334,8 @@ async function runSync(
           config,
           now: nowFn,
           out,
+          fetch: deps.fetch,
+          sleep: deps.sleep,
         });
       } else {
         const doSync = deps.syncActivityWatch ?? syncActivityWatch;
@@ -331,6 +346,8 @@ async function runSync(
           config,
           now: nowFn,
           out,
+          fetch: deps.fetch,
+          sleep: deps.sleep,
         });
         out(
           `activitywatch: ${result.seen} seen, ${result.inserted} new (${result.buckets} ${result.buckets === 1 ? "bucket" : "buckets"})`
@@ -684,11 +701,14 @@ function parseImportArgs(args: string[]): ImportParseResult {
   return { ok: true, value: { file, format: resolved } };
 }
 
-function runImport(args: string[], ctx: SyncContext): number {
+async function runImport(args: string[], ctx: SyncContext): Promise<number> {
   const { deps, out, err } = ctx;
 
   if (args[0] === "youtube-takeout") {
     return runYoutubeTakeoutImport(args.slice(1), ctx);
+  }
+  if (args[0] === "achriom") {
+    return await runAchriomImport(args.slice(1), ctx);
   }
 
   const parsed = parseImportArgs(args);
@@ -800,6 +820,105 @@ function runYoutubeTakeoutImport(args: string[], ctx: SyncContext): number {
         `${result.inserted} new, skipped ${skipped.ads} ads, ` +
         `${skipped.no_video} without video, ${skipped.other} other, ` +
         `${skipped.invalid} invalid`
+    );
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
+async function runAchriomImport(
+  args: string[],
+  ctx: SyncContext
+): Promise<number> {
+  const { deps, out, err } = ctx;
+
+  let file: string | undefined;
+  let dryRun = false;
+
+  for (const arg of args) {
+    if (arg === "--dry-run") {
+      dryRun = true;
+    } else if (arg.startsWith("-")) {
+      err(`Unknown option: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    } else if (file === undefined) {
+      file = arg;
+    } else {
+      err(`Unexpected argument: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+  }
+
+  if (file === undefined || file === "") {
+    err("Missing <path>.");
+    err(usage());
+    return EXIT_USAGE;
+  }
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let input: Uint8Array | string;
+  try {
+    if (deps.readFileBytes) {
+      input = deps.readFileBytes(file);
+    } else if (deps.readFile) {
+      input = deps.readFile(file);
+    } else {
+      input = new Uint8Array(readFileSync(file));
+    }
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const result = await importAchriom({
+      db,
+      config,
+      input,
+      filename: file,
+      dryRun,
+      fetch: deps.fetch as typeof fetch | undefined,
+      now:
+        deps.nowMs ??
+        (deps.now instanceof Date ? () => deps.now!.getTime() : undefined),
+    });
+    const totalRows = Object.values(result.rows).reduce((a, b) => a + b, 0);
+    const filesBreakdown = Object.entries(result.rows)
+      .map(([f, n]) => `${f}: ${n}`)
+      .join(", ");
+    out(
+      `achriom${result.dry_run ? " (dry-run)" : ""}: ${totalRows} rows (${filesBreakdown}), ` +
+        `${result.created} created, ${result.updated} updated, ${result.unchanged} unchanged, ` +
+        `${result.planned} planned, ${result.matched} matched, ` +
+        `${result.skipped.length} skipped, ${result.total_minutes} min`
     );
     return EXIT_OK;
   } catch (caught) {
@@ -1333,6 +1452,87 @@ async function runIngest(args: string[], ctx: SyncContext): Promise<number> {
   return EXIT_USAGE;
 }
 
+async function runYoutube(args: string[], ctx: SyncContext): Promise<number> {
+  const { deps, out, err } = ctx;
+  const [sub, ...rest] = args;
+
+  if (sub !== "enrich") {
+    err("Usage: it youtube enrich [--limit <n>]");
+    return EXIT_USAGE;
+  }
+
+  let limitVal: number | undefined;
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i]!;
+    if (arg === "--limit" || arg.startsWith("--limit=")) {
+      const raw =
+        arg === "--limit" ? rest[i + 1] : arg.slice("--limit=".length);
+      if (arg === "--limit") {
+        i += 1;
+      }
+      if (raw === undefined || raw === "") {
+        err("Missing value for --limit.");
+        return EXIT_USAGE;
+      }
+      if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+        err(`Invalid --limit: "${raw}" (expected a positive integer).`);
+        return EXIT_USAGE;
+      }
+      limitVal = Number(raw);
+    } else {
+      err(`Unknown option: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+  }
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const doEnrich = deps.enrichYoutubeVideos ?? enrichYoutubeVideos;
+    const nowMsFn =
+      deps.nowMs ??
+      (deps.now instanceof Date ? () => deps.now!.getTime() : undefined);
+    const result = await doEnrich(db, {
+      config,
+      limit: limitVal,
+      fetch: deps.fetch as typeof fetch | undefined,
+      sleep: deps.sleep,
+      nowMs: nowMsFn,
+    });
+    out(
+      `youtube enrich: ${result.attempted} attempted, ${result.enriched} enriched, ${result.notFound} not found, ${result.failed} failed`
+    );
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
 /**
  * Run the CLI for the given argument list (without the program name).
  * Returns the process exit code; never calls `process.exit`.
@@ -1372,7 +1572,7 @@ export async function runCli(
   }
 
   if (command === "import") {
-    return runImport(rest, { deps, out, err });
+    return await runImport(rest, { deps, out, err });
   }
 
   if (command === "backup") {
@@ -1393,6 +1593,10 @@ export async function runCli(
 
   if (command === "ingest") {
     return await runIngest(rest, { deps, out, err });
+  }
+
+  if (command === "youtube") {
+    return await runYoutube(rest, { deps, out, err });
   }
 
   if (command === "doctor") {

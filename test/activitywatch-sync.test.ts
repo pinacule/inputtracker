@@ -432,7 +432,7 @@ describe("ActivityWatch sync (src/sources/activitywatch/sync.ts)", () => {
       "aw-watcher-web-chrome_pc": [
         {
           timestamp: "2026-10-17T18:00:00.000Z",
-          duration: 100,
+          duration: 360,
           data: {
             url: `https://www.youtube.com/watch?v=${FAKE_VID_1}`,
             title: "Chrome Video - YouTube",
@@ -443,7 +443,7 @@ describe("ActivityWatch sync (src/sources/activitywatch/sync.ts)", () => {
       "aw-watcher-web-firefox_pc": [
         {
           timestamp: "2026-10-17T18:00:00.000Z",
-          duration: 120,
+          duration: 420,
           data: {
             url: `https://www.youtube.com/watch?v=${FAKE_VID_2}`,
             title: "Firefox Video - YouTube",
