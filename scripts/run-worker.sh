@@ -52,7 +52,9 @@ opencode)
   if [ $stalled -eq 1 ] || [ $rc -eq 124 ]; then r=stuck
   elif jq -r 'select(.type=="error") | .error | tostring' "$out" 2>/dev/null | grep -Eq "$LIMIT_RE" \
        || grep -Eq "$LIMIT_RE" "$T/oc.err" 2>/dev/null; then r=limit
-  elif [ $rc -eq 0 ] && grep -q '"type":"step_finish"' "$out"; then r=ok
+  # A finished run ends with a step whose reason is "stop"; a run cut off mid-way (dropped
+  # connection) can exit 0 after a "tool-calls" step and must not count as ok.
+  elif [ $rc -eq 0 ] && [ "$(jq -rs '[.[] | select(.type=="step_finish")] | last | .part.reason // ""' "$out" 2>/dev/null)" = stop ]; then r=ok
   else r=error; fi
   ;;
 *) echo "unknown worker $WORKER" >&2; exit 2 ;;

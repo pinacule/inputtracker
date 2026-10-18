@@ -7,9 +7,7 @@ InputTracker is both a daily media log and a **long-term personal archive** of e
 1. **Dark Themes Only (`web/src/lib/theme.ts`, `web/src/styles/tokens.css`):**
    - Light and system modes are removed. The app offers 5 named dark themes (**Warm Study** `espresso`, **Midnight Ink** `midnight`, **Pine & Moss** `forest`, **Obsidian Archive** `obsidian`, and **Velvet Nocturne** `plum`), picked via live swatch cards in **Settings › Appearance** and applied before first paint from `localStorage` (`inputtracker.theme`) with zero flash.
    - All 9 category colour families (`anime`, `series`, `film`, `book`, `audiobook`, `youtube`, `podcast`, `music`, `other`) remain distinct and WCAG AA compliant (>= 4.5:1) on every theme.
-2. **Home Page Clarity (`web/src/pages/Calendar.tsx`):**
    - One glance answers: what did I do **Today** and **This week**, how does **This month** look, and what am I in the middle of (**Continue** shelf of `in_progress` works).
-   - Calendar month cells contain no truncated title rows or cover bloat: each cell shows the day number, total duration, active category dots, and a proportional horizontal stacked category bar.
    - Selected day panel header is a single clean line (`Today`, `Yesterday`, or `Saturday 17 October`) with no duplicated numeric date eyebrow.
    - Day panel items are compact, grouped by work (`groupDayPanelItems`), omit heavy letter tiles when no cover art exists, and collapse a day's YouTube plays into one expandable summary line (`12 videos · 48 min`).
 3. **Placement of YouTube and Music (`web/src/lib/category-filter.ts`, `web/src/lib/youtube.ts`):**
@@ -63,3 +61,32 @@ Routes are hash-based and parsed by `parseAppRoute(hash)`:
   - **Import Achriom Library:** Upload `.zip`/`.csv` → **1. Preview (Dry Run)** → **2. Import Achriom Archive**, rendering `AchriomImportResult`.
   - **Hidden Works:** Lists hidden works (`GET /api/library/hidden`) with one-click **Unhide**.
   - **Sources & Sync, Native/Takeout Import & Export, Metadata Providers & Database Diagnostics.**
+
+---
+
+## Home page (`#/calendar`, v2.2 — `web/src/pages/Calendar.tsx`, `web/src/ui/home/`, `web/src/lib/home.ts`, `web/src/styles/home.css`)
+
+The v2.2 Home page is designed from scratch around how the app is used every day on a phone and reviewed across a month on desktop:
+
+1. **Phone-First Flow (375px) & Desktop Two-Column Studio (1440px):**
+   - **On phone (`< 1024px`):** Opens directly to **This week** (the 7-day stacked category bar graph) and the **Selected day detail** (`Today` by default), followed by **In the middle of** (`in_progress` works) and the **Month rhythm & calendar grid**. Checking today's and this week's activity or tapping **+ Add** requires zero scrolling past month-grid chrome.
+   - **On desktop (`>= 1024px`):** Uses a two-column studio layout (`grid-template-areas: "stage inspector"`). The left stage column shows the **In the middle of** shelf, the **Month Rhythm & 31-Day Skyline Graph**, and the **7-Column Month Calendar Grid**. The right column is a sticky inspector (`position: sticky`) holding the **7-Day Week Graph** and **Selected Day Detail** beside the calendar without a modal.
+
+2. **Graphs Over Numbers:**
+   - **7-Day Week Graph (`WeekGraph.tsx`):** Interactive Monday–Sunday vertical stacked category bars scaled to the week's busiest day, showing `Today` and `Week` totals and acting as a 1-tap day switcher. When a week spans two months (e.g. `28 Sep – 4 Oct`), both months are fetched and merged so the week graph is always complete.
+   - **Month Rhythm & 31-Day Skyline (`MonthRhythmCard.tsx`):** Replaces multi-box KPI banners with a proportional horizontal **Category Share Bar**, clickable category breakdown pills, and an interactive **31-day Daily Skyline stacked bar chart** where clicking any day's bar selects that day.
+   - **Visual Month Calendar Grid (`MonthCalendarGrid.tsx`):** Heat-washed day cells (`--heat-0`..`--heat-4`) with a proportional stacked category bar along the bottom of every active cell. Desktop cells show up to 2 calm deduplicated work lines; narrow phone cells show category dots instead of cramped truncated text.
+
+3. **Covers Only Where They Carry Meaning (`HomeWorkThumb.tsx`):**
+   - Calendar cells never render cover images.
+   - In the **Selected Day Detail** and **In the middle of** shelf, a thumbnail (`<img>`) is rendered **only when a real `cover_url` exists** (and loads cleanly). When `cover_url` is `null` or fails to load, a compact 32×32 category icon badge is rendered instead of a heavy gradient letter tile.
+
+4. **YouTube and Music on the Home Page (Spec Section 15):**
+   - On the Home page and Calendar, **"All" (`selectedCategories = []`) includes every category, including YouTube and music**.
+   - **YouTube never floods the calendar or day panel:** In calendar cells, all YouTube plays collapse to a single `"YouTube"` line. In the Selected Day Detail panel, all YouTube plays on that day (even 40 short videos) collapse into **one calm expandable line** (`"40 videos · 2h 40m"` with a top-channels preview). Expanding it groups videos by channel with proportional watch-time bars, channel links, and per-video context menus and ratings.
+   - **Music:** Included in all time totals and bars; when more than 2 tracks are played on a day, they collapse into a calm expandable `"Music · N plays · Xm"` row. **Ratings are never shown on music** (`isRateableCategory("music") === false`).
+
+5. **Plain-Words Day Headers, Deep Links & Keyboard Accessibility:**
+   - Selected day headers use plain words (`"Today"`, `"Yesterday"`, `"Saturday 17 October"`, `"Saturday 3 May 2025"`) via `formatCleanDayHeading` with no duplicate numeric date above them.
+   - Deep links `?date=YYYY-MM-DD`, `?month=YYYY-MM`, and `?cat=anime,film` are synced via `replaceState`.
+   - Full roving keyboard navigation inside the calendar grid (`ArrowLeft`/`Right` ±1 day, `ArrowUp`/`Down` ±7 days, `Home`/`End` start/end of week, `PageUp`/`PageDown` previous/next month) and accessible context menu support (`bindContextMenu`, right-click, long-press, `Shift+F10`).
