@@ -585,28 +585,35 @@ export function getYoutubeVideoWorkDetail(
       entry_id: null,
     }));
 
-  const edited = workTopicOverrides.has(key) || workTopicOverrides.has(targetVideoId);
+  const overridesMap = getWorkOverrides(db);
+  const override = overridesMap.get(key);
+  const edited =
+    Boolean(override?.edited) ||
+    workTopicOverrides.has(key) ||
+    workTopicOverrides.has(targetVideoId);
+
+  const effectiveTitle = override?.title ?? title;
 
   return {
     key,
-    category: "youtube",
-    title,
+    category: override?.category ?? "youtube",
+    title: effectiveTitle,
     cover_url: coverUrl,
     total_minutes: totalSeconds / 60,
     units: matching.length,
     first_at: matching[0]?.started_at ?? null,
     last_at: matching[matching.length - 1]?.started_at ?? null,
-    status: "unknown",
-    rating: null,
+    status: override?.status ?? "unknown",
+    rating: override?.rating ?? null,
     progress: null,
-    creator: null,
+    creator: channel,
     sources: Array.from(sourceSet).sort((a, b) => a.localeCompare(b)),
     edited,
     channel,
     topic,
     seasons: [],
     history,
-    note: null,
+    note: override?.note ?? null,
   };
 }
 
@@ -961,12 +968,30 @@ export function getYoutubeOverview(
   };
 }
 
+export type YoutubeVideosSort = "recent" | "time" | "topic";
+
+export const VALID_YOUTUBE_VIDEO_SORTS: ReadonlySet<YoutubeVideosSort> = new Set([
+  "recent",
+  "time",
+  "topic",
+]);
+
+export function isValidYoutubeVideosSort(
+  value: unknown
+): value is YoutubeVideosSort {
+  return (
+    typeof value === "string" &&
+    VALID_YOUTUBE_VIDEO_SORTS.has(value as YoutubeVideosSort)
+  );
+}
+
 export interface GetYoutubeVideosOptions {
   channel?: string | null;
   topic?: string | null;
   from?: string | null;
   to?: string | null;
   q?: string | null;
+  sort?: YoutubeVideosSort;
   limit?: number;
   offset?: number;
   tz?: string;
@@ -980,6 +1005,7 @@ export function getYoutubeVideos(
   const tz = opts.tz ?? "Europe/Bratislava";
   const from = opts.from && opts.from !== "" ? opts.from : null;
   const to = opts.to && opts.to !== "" ? opts.to : null;
+  const sort = opts.sort ?? "recent";
   const limit = opts.limit ?? 50;
   const offset = opts.offset ?? 0;
 
@@ -1019,13 +1045,35 @@ export function getYoutubeVideos(
     }
   }
 
-  // Newest first (by last_at desc, then watched_minutes desc, then title asc)
-  filtered.sort(
-    (a, b) =>
-      b.last_at.localeCompare(a.last_at) ||
-      b.watched_minutes - a.watched_minutes ||
-      a.title.localeCompare(b.title)
-  );
+  if (sort === "time") {
+    filtered.sort(
+      (a, b) =>
+        b.watched_minutes - a.watched_minutes ||
+        b.plays - a.plays ||
+        b.last_at.localeCompare(a.last_at) ||
+        a.title.localeCompare(b.title)
+    );
+  } else if (sort === "topic") {
+    filtered.sort((a, b) => {
+      const ta = a.topic?.trim() ?? "";
+      const tb = b.topic?.trim() ?? "";
+      if (ta === "" && tb !== "") return 1;
+      if (ta !== "" && tb === "") return -1;
+      return (
+        ta.localeCompare(tb) ||
+        b.watched_minutes - a.watched_minutes ||
+        a.title.localeCompare(b.title)
+      );
+    });
+  } else {
+    // "recent" (default): newest first (by last_at desc, then watched_minutes desc, then title asc)
+    filtered.sort(
+      (a, b) =>
+        b.last_at.localeCompare(a.last_at) ||
+        b.watched_minutes - a.watched_minutes ||
+        a.title.localeCompare(b.title)
+    );
+  }
 
   const total = filtered.length;
   const paged = filtered.slice(offset, offset + limit);
@@ -1086,7 +1134,7 @@ export function registerYoutubeRoutes(app: Hono, deps: AppDeps): void {
     return c.json(result);
   });
 
-  // GET /api/youtube/videos?channel=&topic=&from=&to=&q=&limit=50&offset=0
+  // GET /api/youtube/videos?channel=&topic=&from=&to=&q=&sort=recent|time|topic&limit=50&offset=0
   app.get("/api/youtube/videos", (c) => {
     const err = validateQueryParams(c.req.url, [
       "channel",
@@ -1094,11 +1142,26 @@ export function registerYoutubeRoutes(app: Hono, deps: AppDeps): void {
       "from",
       "to",
       "q",
+      "sort",
       "limit",
       "offset",
     ]);
     if (err) {
       return c.json({ error: err }, 400);
+    }
+
+    const sortRaw = c.req.query("sort");
+    let sort: YoutubeVideosSort = "recent";
+    if (sortRaw !== undefined && sortRaw !== "") {
+      if (!isValidYoutubeVideosSort(sortRaw)) {
+        return c.json(
+          {
+            error: `Invalid sort: '${sortRaw}' (expected recent, time or topic)`,
+          },
+          400
+        );
+      }
+      sort = sortRaw;
     }
 
     const fromRaw = c.req.query("from");
@@ -1177,6 +1240,7 @@ export function registerYoutubeRoutes(app: Hono, deps: AppDeps): void {
       from,
       to,
       q,
+      sort,
       limit,
       offset,
       tz,

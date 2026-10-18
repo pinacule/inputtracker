@@ -18,16 +18,25 @@ import type { Database } from "bun:sqlite";
 import { CATEGORIES, categoryOf, type Category } from "../core/category.ts";
 import type { Config } from "../core/config.ts";
 import type {
+  ArchiveConsumed,
+  ArchiveRequest,
+  ArchiveWhen,
   CategoryTotal,
   DatePrecision,
   HiddenWorksResult,
   LibraryResult,
+  LibrarySortV2,
   LibraryWork,
   LibraryWorkDetail,
+  ManualWork,
+  MetaProvider,
+  RefreshMetadataResult,
   SeasonInfo,
   WorkDetails,
   WorkStatus,
 } from "../core/contract.ts";
+import type { EventRow } from "../core/schema.ts";
+import { computeArchiveRequestMinutes } from "../io/import-achriom.ts";
 import {
   coverUrlFor,
   eventPrecision,
@@ -37,10 +46,26 @@ import {
   type ConsumptionEvent,
 } from "./aggregate.ts";
 import { saveAnnotation } from "./annotations.ts";
+import { saveArchiveEntry } from "./archive.ts";
+import {
+  cleanMusicArtist,
+  cleanMusicTitle,
+  hasCachedCover,
+  hasCachedCoverNone,
+  titleCoverId,
+} from "./covers.ts";
 import { dedupeConsumption, type DedupedEvent } from "./dedup.ts";
-import { filterShortYoutubeEvents } from "./youtube-filter.ts";
+import {
+  filterShortYoutubeEvents,
+  readYoutubeEnrichmentByVideoId,
+} from "./youtube-filter.ts";
 import { readWorkCache } from "./metadata/cache.ts";
-import { lookupWork } from "./metadata/index.ts";
+import {
+  isMetaProvider,
+  isValidProviderId,
+  lookupWork,
+  type MetadataDeps,
+} from "./metadata/index.ts";
 import {
   type CategoryFilterInput,
   eventWorkTitleForGrouping,
@@ -245,6 +270,7 @@ export function buildAllLibraryWorks(
   }
 
   const components = groupEventsIntoWorkComponents(events);
+  const youtubeEnrichmentMap = readYoutubeEnrichmentByVideoId(db);
   const allWorks: InternalLibraryWork[] = [];
 
   for (const comp of components) {
@@ -338,6 +364,44 @@ export function buildAllLibraryWorks(
         }
         if (metaWork.original_title) {
           originalTitle = metaWork.original_title;
+        }
+      }
+    } else if (baseSeasons.length === 0 && opts.config) {
+      // Check on-disk work cache if the events carry a known metadata/external id
+      for (let i = workEvents.length - 1; i >= 0; i--) {
+        const ext = parseExternalIds(workEvents[i]!.external_ids);
+        if (!ext) continue;
+        const candidates: Array<{ provider: MetaProvider; id: string }> = [];
+        if (typeof ext["meta_provider"] === "string" && typeof ext["meta_id"] === "string") {
+          if (isMetaProvider(ext["meta_provider"]) && isValidProviderId(ext["meta_id"])) {
+            candidates.push({ provider: ext["meta_provider"], id: ext["meta_id"] });
+          }
+        }
+        if (typeof ext["anilist"] === "string" || typeof ext["anilist"] === "number") {
+          candidates.push({ provider: "anilist", id: String(ext["anilist"]) });
+        }
+        if (typeof ext["tvmaze"] === "string" || typeof ext["tvmaze"] === "number") {
+          candidates.push({ provider: "tvmaze", id: String(ext["tvmaze"]) });
+        }
+        if (typeof ext["imdb"] === "string" && /^tt\d+$/i.test(ext["imdb"])) {
+          candidates.push({ provider: "cinemeta", id: ext["imdb"].toLowerCase() });
+        }
+        let foundCached: WorkDetails | null = null;
+        for (const cand of candidates) {
+          foundCached = readWorkCache(opts.config, cand.provider, cand.id, Date.now());
+          if (foundCached) break;
+        }
+        if (foundCached) {
+          if (Array.isArray(foundCached.seasons) && foundCached.seasons.length > 0) {
+            baseSeasons = foundCached.seasons;
+          }
+          if (creators.length === 0 && Array.isArray(foundCached.creators) && foundCached.creators.length > 0) {
+            creators = foundCached.creators;
+          }
+          if (!originalTitle && foundCached.original_title) {
+            originalTitle = foundCached.original_title;
+          }
+          break;
         }
       }
     }
@@ -606,7 +670,9 @@ export function buildAllLibraryWorks(
       }
     }
 
-    const rating = bestAnnotation ? bestAnnotation.rating : (override?.rating ?? null);
+    const rawRating = bestAnnotation ? bestAnnotation.rating : (override?.rating ?? null);
+    // No ratings for music tracks (spec section 15).
+    const rating = effectiveCategory === "music" ? null : rawRating;
     const note = bestAnnotation ? bestAnnotation.note : (override?.note ?? null);
 
     // History items (newest first).
@@ -640,6 +706,150 @@ export function buildAllLibraryWorks(
         ? resolveYoutubeLibraryWorkFields(db, workEvents, effectiveTitle, key)
         : { channel: null, topic: override?.topic ?? null };
 
+    // Resolve `creator`: author (books/audiobooks), artist (music), channel (YouTube), studio/creator, else null.
+    let creator: string | null = null;
+    if (effectiveCategory === "youtube") {
+      creator = ytFields.channel ?? (creators.length > 0 ? creators.join(", ") : null);
+    } else if (creators.length > 0) {
+      creator = creators.join(", ");
+    } else {
+      for (let i = workEvents.length - 1; i >= 0; i--) {
+        const ev = workEvents[i]!;
+        const raw = parseJsonObject(ev.raw);
+        const rawMeta = parseJsonObject(raw?.["mediaMetadata"]);
+        const absAuthor =
+          (typeof rawMeta?.["authorName"] === "string" && rawMeta["authorName"].trim() !== ""
+            ? rawMeta["authorName"].trim()
+            : null) ??
+          (typeof raw?.["displayAuthor"] === "string" && raw["displayAuthor"].trim() !== ""
+            ? raw["displayAuthor"].trim()
+            : null);
+        if (absAuthor) {
+          creator = absAuthor;
+          break;
+        }
+        const pt = ev.parent_title?.trim() ?? "";
+        if (pt !== "") {
+          const isEpisodeLike =
+            ev.media_type === "episode" ||
+            ev.media_type === "show" ||
+            (ev.season !== null && ev.season !== undefined) ||
+            (ev.episode !== null && ev.episode !== undefined);
+          if (!isEpisodeLike || normalizeForSearch(pt) !== normalizeForSearch(effectiveTitle)) {
+            creator = pt;
+            break;
+          }
+        }
+        if (ev.source === "youtube") {
+          const ext = parseExternalIds(ev.external_ids);
+          const vid = ext?.["youtube_video"];
+          if (typeof vid === "string") {
+            const enr = youtubeEnrichmentMap.get(vid);
+            if (enr?.channel && enr.channel.trim() !== "") {
+              creator = enr.channel.trim();
+              break;
+            }
+          }
+        }
+      }
+      if (effectiveCategory === "music") {
+        const cleaned = cleanMusicArtist(creator);
+        if (cleaned) {
+          creator = cleaned;
+        } else {
+          const { embeddedArtist } = cleanMusicTitle(effectiveTitle);
+          creator = embeddedArtist;
+        }
+      }
+    }
+
+    if (creator && creators.length === 0) {
+      creators = [creator];
+    }
+
+    // Title-based cover URL for music tracks and unlinked books/audiobooks
+    if (
+      (effectiveCategory === "music" ||
+        effectiveCategory === "book" ||
+        effectiveCategory === "audiobook") &&
+      (override?.meta === null || override?.meta === undefined)
+    ) {
+      const tCoverId = titleCoverId(effectiveCategory, effectiveTitle, creator);
+      if (opts.config && hasCachedCover(opts.config, tCoverId)) {
+        if (effectiveCategory === "music" || coverUrl === null) {
+          coverUrl = `/api/cover/${tCoverId}`;
+        }
+      } else if (
+        coverUrl === null &&
+        effectiveCategory === "music" &&
+        opts.config?.covers?.external !== false &&
+        (!opts.config || !hasCachedCoverNone(opts.config, tCoverId))
+      ) {
+        coverUrl = `/api/cover/${tCoverId}`;
+      }
+    }
+
+    // Explicit `progress` for works with seasons (series/anime), else null.
+    const isMovieOnlyAnime =
+      effectiveCategory === "anime" &&
+      baseSeasons.length === 0 &&
+      detailSeasons.length === 0 &&
+      workEvents.every(
+        (e) =>
+          e.media_type === "movie" &&
+          (e.season === null || e.season === undefined)
+      );
+
+    let progress: LibraryWork["progress"] = null;
+    if (
+      (effectiveCategory === "series" || effectiveCategory === "anime") &&
+      !isMovieOnlyAnime
+    ) {
+      if (baseSeasons.length > 0) {
+        const seasonsTotal = baseSeasons.length;
+        const epTotalSum = baseSeasons.reduce(
+          (acc, s) => acc + (s.episodes > 0 ? s.episodes : 0),
+          0
+        );
+        const episodesTotal = epTotalSum > 0 ? epTotalSum : null;
+        const episodesWatched =
+          status === "planned"
+            ? 0
+            : detailSeasons.reduce((acc, s) => acc + s.watched_episodes, 0);
+        const seasonsWatched =
+          status === "planned"
+            ? 0
+            : detailSeasons.filter(
+                (s) =>
+                  archiveWholeSeasons.has(s.number) ||
+                  (s.episodes > 0 && s.watched_episodes >= s.episodes)
+              ).length;
+        progress = {
+          seasons_watched: seasonsWatched,
+          seasons_total: seasonsTotal,
+          episodes_watched: episodesWatched,
+          episodes_total: episodesTotal,
+        };
+      } else {
+        const epFromDetail = detailSeasons.reduce(
+          (acc, s) => acc + s.watched_episodes,
+          0
+        );
+        const epFallback =
+          epFromDetail > 0
+            ? epFromDetail
+            : workEvents.filter(
+                (e) => !isPlannedArchiveEvent(e) && e.media_type === "episode"
+              ).length;
+        progress = {
+          seasons_watched: status === "planned" ? 0 : archiveWholeSeasons.size,
+          seasons_total: null,
+          episodes_watched: status === "planned" ? 0 : epFallback,
+          episodes_total: null,
+        };
+      }
+    }
+
     const work: LibraryWork = {
       key,
       category: effectiveCategory,
@@ -655,9 +865,8 @@ export function buildAllLibraryWorks(
       edited: override?.edited ?? false,
       channel: ytFields.channel,
       topic: ytFields.topic,
-      // v2.2 fields; filled by the v2.2 backend work.
-      progress: null,
-      creator: null,
+      progress,
+      creator,
     };
 
     const detail: LibraryWorkDetail = {
@@ -679,13 +888,28 @@ export function buildAllLibraryWorks(
   return allWorks;
 }
 
-export type LibrarySort = "recent" | "time" | "title";
+export type LibrarySort = LibrarySortV2;
+
+export const VALID_LIBRARY_SORTS: ReadonlySet<LibrarySortV2> = new Set([
+  "recent",
+  "time",
+  "title",
+  "category",
+  "creator",
+]);
+
+export function isValidLibrarySort(value: unknown): value is LibrarySortV2 {
+  return (
+    typeof value === "string" &&
+    VALID_LIBRARY_SORTS.has(value as LibrarySortV2)
+  );
+}
 
 export interface GetLibraryOptions {
   category?: CategoryFilterInput;
   exclude?: CategoryFilterInput;
   q?: string;
-  sort?: LibrarySort;
+  sort?: LibrarySortV2;
   tz?: string;
   config?: Config;
 }
@@ -744,6 +968,7 @@ export function getLibrary(
           [
             item.work.title,
             item.originalTitle ?? "",
+            item.work.creator ?? "",
             ...item.creators,
           ].join(" ")
         );
@@ -764,6 +989,20 @@ export function getLibrary(
     );
   } else if (sort === "title") {
     works.sort((a, b) => a.title.localeCompare(b.title));
+  } else if (sort === "category") {
+    works.sort(
+      (a, b) =>
+        CATEGORIES.indexOf(a.category) - CATEGORIES.indexOf(b.category) ||
+        a.title.localeCompare(b.title)
+    );
+  } else if (sort === "creator") {
+    works.sort((a, b) => {
+      const ca = a.creator?.trim() ?? "";
+      const cb = b.creator?.trim() ?? "";
+      if (ca === "" && cb !== "") return 1;
+      if (ca !== "" && cb === "") return -1;
+      return ca.localeCompare(cb) || a.title.localeCompare(b.title);
+    });
   } else {
     // "recent"
     works.sort(
@@ -942,4 +1181,458 @@ export async function editLibraryWork(
     throw new WorkOverrideNotFoundError(key);
   }
   return updated.detail;
+}
+
+export interface RefreshMetadataOptions {
+  tz?: string;
+  config: Config;
+  fetch?: typeof fetch;
+  now?: () => number;
+  nowIso?: string;
+  dryRun?: boolean;
+}
+
+interface SingleEntryRefreshOutcome {
+  entryId: string;
+  title: string;
+  changed: boolean;
+  minutesBefore: number;
+  minutesAfter: number;
+}
+
+function getActiveArchiveRowsForEntry(db: Database, entryId: string): EventRow[] {
+  const likePattern = `archive:${entryId}:%`;
+  return db
+    .query<EventRow, [string]>(
+      `SELECT * FROM events_latest
+       WHERE source = 'manual'
+         AND source_kind = 'archive'
+         AND source_id LIKE ?
+       ORDER BY id ASC;`
+    )
+    .all(likePattern);
+}
+
+function extractEntryMetaTarget(
+  workObj: Record<string, unknown> | null,
+  rows: readonly EventRow[],
+  overrideMeta?: { provider: MetaProvider; provider_id: string } | null
+): { provider: MetaProvider; id: string } | null {
+  if (
+    overrideMeta &&
+    isMetaProvider(overrideMeta.provider) &&
+    isValidProviderId(overrideMeta.provider_id)
+  ) {
+    return { provider: overrideMeta.provider, id: overrideMeta.provider_id };
+  }
+
+  if (
+    workObj &&
+    isMetaProvider(workObj["provider"]) &&
+    isValidProviderId(workObj["provider_id"])
+  ) {
+    return {
+      provider: workObj["provider"],
+      id: workObj["provider_id"],
+    };
+  }
+
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const ext = parseExternalIds(rows[i]!.external_ids);
+    if (!ext) continue;
+    if (isMetaProvider(ext["meta_provider"]) && isValidProviderId(ext["meta_id"])) {
+      return { provider: ext["meta_provider"], id: ext["meta_id"] };
+    }
+    if (typeof ext["anilist"] === "string" && isValidProviderId(ext["anilist"])) {
+      return { provider: "anilist", id: ext["anilist"] };
+    }
+    if (typeof ext["tvmaze"] === "string" && isValidProviderId(ext["tvmaze"])) {
+      return { provider: "tvmaze", id: ext["tvmaze"] };
+    }
+    if (typeof ext["imdb"] === "string" && /^tt\d+$/i.test(ext["imdb"])) {
+      return { provider: "cinemeta", id: ext["imdb"].toLowerCase() };
+    }
+  }
+
+  return null;
+}
+
+async function refreshSingleArchiveEntry(
+  db: Database,
+  entryId: string,
+  tz: string,
+  metaDeps: MetadataDeps,
+  opts: {
+    dryRun: boolean;
+    nowIso: string;
+    overrideMeta?: { provider: MetaProvider; provider_id: string } | null;
+  }
+): Promise<SingleEntryRefreshOutcome | null> {
+  const activeRows = getActiveArchiveRowsForEntry(db, entryId);
+  if (activeRows.length === 0) {
+    return null;
+  }
+
+  const newestRow = activeRows[activeRows.length - 1]!;
+  const raw = parseJsonObject(newestRow.raw);
+  const workObj = parseJsonObject(raw?.["work"]);
+  const existingConsumed = (parseJsonObject(
+    raw?.["consumed"]
+  ) as ArchiveConsumed | null) ?? {};
+  const existingWhen = (parseJsonObject(
+    raw?.["when"]
+  ) as ArchiveWhen | null) ?? { precision: "unknown" };
+  const existingStatus = isValidWorkStatus(raw?.["status"])
+    ? (raw!["status"] as Exclude<WorkStatus, "unknown">)
+    : undefined;
+  const existingCategory = categoryOf(newestRow);
+
+  const title =
+    (typeof workObj?.["title"] === "string" && workObj["title"].trim() !== ""
+      ? workObj["title"].trim()
+      : newestRow.title) ?? "Untitled";
+
+  const minutesBefore =
+    existingStatus === "planned"
+      ? 0
+      : activeRows.reduce((sum, r) => sum + (r.duration_seconds ?? 0), 0) / 60;
+
+  const metaTarget = extractEntryMetaTarget(
+    workObj,
+    activeRows,
+    opts.overrideMeta
+  );
+  if (!metaTarget) {
+    return {
+      entryId,
+      title,
+      changed: false,
+      minutesBefore,
+      minutesAfter: minutesBefore,
+    };
+  }
+
+  const freshWork = await lookupWork(
+    metaTarget.provider,
+    metaTarget.id,
+    { ...metaDeps, bypassCache: true },
+    existingCategory
+  );
+  if (!freshWork) {
+    return {
+      entryId,
+      title,
+      changed: false,
+      minutesBefore,
+      minutesAfter: minutesBefore,
+    };
+  }
+
+  const existingExtIds =
+    workObj &&
+    typeof workObj["external_ids"] === "object" &&
+    workObj["external_ids"] !== null &&
+    !Array.isArray(workObj["external_ids"])
+      ? (workObj["external_ids"] as Record<string, string>)
+      : {};
+
+  const nextWork: WorkDetails = {
+    ...freshWork,
+    category: existingCategory,
+    external_ids: {
+      ...existingExtIds,
+      ...freshWork.external_ids,
+    },
+  };
+
+  const nextConsumed: ArchiveConsumed = { ...existingConsumed };
+  if (
+    Array.isArray(nextConsumed.seasons) &&
+    nextConsumed.seasons.length > 0 &&
+    nextWork.seasons.length > 0
+  ) {
+    const prevSeasons = Array.isArray(workObj?.["seasons"])
+      ? (workObj!["seasons"] as SeasonInfo[])
+      : [];
+    const allWhole = nextConsumed.seasons.every((s) => s.episodes === undefined);
+    const watchedAllPrevSeasons =
+      existingCategory === "series" &&
+      (existingStatus === "finished" || existingStatus === undefined) &&
+      allWhole &&
+      prevSeasons.length > 0 &&
+      nextConsumed.seasons.length === prevSeasons.length;
+
+    if (watchedAllPrevSeasons) {
+      nextConsumed.seasons = nextWork.seasons.map((s) => ({ number: s.number }));
+    } else {
+      const validNums = new Set(nextWork.seasons.map((s) => s.number));
+      const kept = nextConsumed.seasons.filter((s) => validNums.has(s.number));
+      nextConsumed.seasons =
+        kept.length > 0 ? kept : [{ number: nextWork.seasons[0]!.number }];
+    }
+  }
+
+  const nextReq: ArchiveRequest = {
+    entry_id: entryId,
+    work: nextWork,
+    consumed: nextConsumed,
+    when: existingWhen,
+    ...(existingStatus !== undefined ? { status: existingStatus } : {}),
+  };
+
+  const sim = computeArchiveRequestMinutes(nextReq);
+  const minutesAfter = existingStatus === "planned" ? 0 : sim.totalMinutes;
+
+  const workChanged =
+    JSON.stringify(workObj) !== JSON.stringify(nextWork) ||
+    JSON.stringify(existingConsumed) !== JSON.stringify(nextConsumed);
+  const minutesChanged = Math.abs(minutesBefore - minutesAfter) > 0.001;
+  const changed = workChanged || minutesChanged;
+
+  if (!opts.dryRun && changed) {
+    saveArchiveEntry(db, nextReq, tz, { nowIso: opts.nowIso });
+  }
+
+  return {
+    entryId,
+    title: nextWork.title || title,
+    changed,
+    minutesBefore,
+    minutesAfter,
+  };
+}
+
+export type RefreshWorkResponse = LibraryWorkDetail & RefreshMetadataResult;
+
+/**
+ * Re-look up linked metadata for one library work (`POST /api/library/work/refresh-metadata?key=`),
+ * bypassing the work cache, and re-save any changed archive entries as new append-only revisions.
+ */
+export async function refreshLibraryWorkMetadata(
+  db: Database,
+  key: string,
+  opts: RefreshMetadataOptions
+): Promise<RefreshWorkResponse> {
+  if (typeof key !== "string" || key.trim() === "") {
+    throw new WorkOverrideValidationError(
+      "Missing required query parameter: key"
+    );
+  }
+  if (key.length > 500) {
+    throw new WorkOverrideValidationError(
+      `Invalid key: too long (${key.length} characters, max 500)`
+    );
+  }
+
+  const tz = opts.tz ?? opts.config.timezone ?? "Europe/Bratislava";
+  const nowIso = opts.nowIso ?? new Date().toISOString();
+  const dryRun = Boolean(opts.dryRun);
+
+  const allWorks = buildAllLibraryWorks(db, tz, {
+    includeHidden: true,
+    config: opts.config,
+  });
+  const target = allWorks.find((item) => item.work.key === key);
+  if (!target) {
+    throw new WorkOverrideNotFoundError(key);
+  }
+
+  const minutesBefore = target.work.total_minutes;
+  const overrides = getWorkOverrides(db);
+  const currentOverride = overrides.get(key) ?? null;
+
+  const metaDeps: MetadataDeps = {
+    config: opts.config,
+    fetch: opts.fetch,
+    now: opts.now,
+    bypassCache: true,
+  };
+
+  let overrideChanged = false;
+  if (currentOverride?.meta !== null && currentOverride?.meta !== undefined) {
+    const freshMeta = await lookupWork(
+      currentOverride.meta.provider,
+      currentOverride.meta.provider_id,
+      metaDeps,
+      target.work.category
+    );
+    if (
+      freshMeta !== null &&
+      JSON.stringify(currentOverride.meta_work) !== JSON.stringify(freshMeta)
+    ) {
+      overrideChanged = true;
+      if (!dryRun) {
+        const parsed = parseWorkEdit({
+          meta: {
+            provider: currentOverride.meta.provider,
+            provider_id: currentOverride.meta.provider_id,
+          },
+        });
+        saveWorkOverride(db, key, parsed, currentOverride, freshMeta, nowIso);
+      }
+    }
+  }
+
+  // Collect all distinct archive entry_ids for this work
+  const entryIds = new Set<string>();
+  for (const ev of target.events) {
+    if (ev.source_kind !== "archive") continue;
+    const raw = parseJsonObject(ev.raw);
+    const eid =
+      typeof raw?.["entry_id"] === "string"
+        ? raw["entry_id"]
+        : typeof ev.source_id === "string"
+          ? ev.source_id.split(":")[1]
+          : undefined;
+    if (eid) {
+      entryIds.add(eid);
+    }
+  }
+
+  let anyEntryChanged = false;
+  let simulatedDeltaMinutes = 0;
+
+  for (const entryId of entryIds) {
+    const outcome = await refreshSingleArchiveEntry(db, entryId, tz, metaDeps, {
+      dryRun,
+      nowIso,
+      overrideMeta: currentOverride?.meta ?? null,
+    });
+    if (outcome) {
+      if (outcome.changed) {
+        anyEntryChanged = true;
+      }
+      simulatedDeltaMinutes += outcome.minutesAfter - outcome.minutesBefore;
+    }
+  }
+
+  // If the work had no archive entries and no override.meta, but has an external metadata ID,
+  // refresh the on-disk work cache for that external ID.
+  if (entryIds.size === 0 && !currentOverride?.meta) {
+    for (let i = target.events.length - 1; i >= 0; i--) {
+      const ext = parseExternalIds(target.events[i]!.external_ids);
+      if (!ext) continue;
+      let prov: MetaProvider | null = null;
+      let pid: string | null = null;
+      if (isMetaProvider(ext["meta_provider"]) && isValidProviderId(ext["meta_id"])) {
+        prov = ext["meta_provider"];
+        pid = ext["meta_id"];
+      } else if (typeof ext["anilist"] === "string" || typeof ext["anilist"] === "number") {
+        prov = "anilist";
+        pid = String(ext["anilist"]);
+      } else if (typeof ext["tvmaze"] === "string" || typeof ext["tvmaze"] === "number") {
+        prov = "tvmaze";
+        pid = String(ext["tvmaze"]);
+      } else if (typeof ext["imdb"] === "string" && /^tt\d+$/i.test(ext["imdb"])) {
+        prov = "cinemeta";
+        pid = ext["imdb"].toLowerCase();
+      }
+      if (prov && pid) {
+        const fresh = await lookupWork(prov, pid, metaDeps, target.work.category);
+        if (fresh) {
+          overrideChanged = true;
+        }
+        break;
+      }
+    }
+  }
+
+  if (dryRun) {
+    const minutesAfter = Math.max(0, minutesBefore + simulatedDeltaMinutes);
+    return {
+      ...target.detail,
+      key: target.detail.key,
+      changed: overrideChanged || anyEntryChanged,
+      minutes_before: minutesBefore,
+      minutes_after: minutesAfter,
+    };
+  }
+
+  const updatedWorks = buildAllLibraryWorks(db, tz, {
+    includeHidden: true,
+    config: opts.config,
+  });
+  let updated = updatedWorks.find((item) => item.work.key === key);
+  if (!updated && entryIds.size > 0) {
+    updated = updatedWorks.find((item) =>
+      item.detail.history.some((h) => h.entry_id !== null && entryIds.has(h.entry_id))
+    );
+  }
+  const finalDetail = updated ? updated.detail : target.detail;
+  const minutesAfter = finalDetail.total_minutes;
+  const changed =
+    overrideChanged ||
+    anyEntryChanged ||
+    Math.abs(minutesBefore - minutesAfter) > 0.001;
+
+  return {
+    ...finalDetail,
+    key: finalDetail.key,
+    changed,
+    minutes_before: minutesBefore,
+    minutes_after: minutesAfter,
+  };
+}
+
+export interface RefreshArchiveSummaryItem extends RefreshMetadataResult {
+  title: string;
+}
+
+export function formatRefreshHours(minutes: number): string {
+  const hours = minutes / 60;
+  if (Math.abs(hours - Math.round(hours)) < 0.05 || hours >= 10) {
+    return `${Math.round(hours)} h`;
+  }
+  return `${Math.round(hours * 10) / 10} h`;
+}
+
+export function formatRefreshHoursLine(item: {
+  title: string;
+  minutes_before: number;
+  minutes_after: number;
+}): string {
+  return `${item.title}: ${formatRefreshHours(item.minutes_before)} → ${formatRefreshHours(
+    item.minutes_after
+  )}`;
+}
+
+/**
+ * Refresh linked metadata for every archive entry in `db`
+ * (`it archive refresh-metadata [--dry-run]`).
+ */
+export async function refreshAllArchiveMetadata(
+  db: Database,
+  opts: RefreshMetadataOptions
+): Promise<RefreshArchiveSummaryItem[]> {
+  const tz = opts.tz ?? opts.config.timezone ?? "Europe/Bratislava";
+  const nowIso = opts.nowIso ?? new Date().toISOString();
+  const dryRun = Boolean(opts.dryRun);
+
+  const allWorks = buildAllLibraryWorks(db, tz, {
+    includeHidden: true,
+    config: opts.config,
+  });
+
+  const archiveWorks = allWorks.filter((w) =>
+    w.events.some((e) => e.source_kind === "archive")
+  );
+
+  const results: RefreshArchiveSummaryItem[] = [];
+  for (const item of archiveWorks) {
+    const res = await refreshLibraryWorkMetadata(db, item.work.key, {
+      ...opts,
+      tz,
+      nowIso,
+      dryRun,
+    });
+    results.push({
+      key: res.key,
+      title: item.work.title,
+      changed: res.changed,
+      minutes_before: res.minutes_before,
+      minutes_after: res.minutes_after,
+    });
+  }
+
+  return results;
 }

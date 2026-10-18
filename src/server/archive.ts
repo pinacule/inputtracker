@@ -594,11 +594,29 @@ function buildExternalIdsForWork(
   return ids;
 }
 
+function resolveFallbackEpisodeRuntime(
+  workRuntime: number | null,
+  seasons: readonly SeasonInfo[]
+): number | null {
+  if (workRuntime !== null && workRuntime > 0) {
+    return workRuntime;
+  }
+  const known = seasons
+    .map((s) => s.episode_minutes)
+    .filter((m): m is number => typeof m === "number" && Number.isFinite(m) && m > 0);
+  if (known.length > 0) {
+    return Math.round(known.reduce((a, b) => a + b, 0) / known.length);
+  }
+  return null;
+}
+
 function computeSeasonNaturalMinutes(
   s: { number: number; episodes?: number },
   seasonInfo: SeasonInfo | undefined,
-  workRuntime: number | null
+  workRuntime: number | null,
+  allSeasons: readonly SeasonInfo[] = []
 ): number | null {
+  const effectiveFallback = resolveFallbackEpisodeRuntime(workRuntime, allSeasons);
   const isWhole =
     s.episodes === undefined ||
     (seasonInfo !== undefined &&
@@ -606,19 +624,24 @@ function computeSeasonNaturalMinutes(
       s.episodes >= seasonInfo.episodes);
 
   if (isWhole) {
-    if (seasonInfo?.total_minutes !== null && seasonInfo?.total_minutes !== undefined) {
+    if (
+      seasonInfo?.total_minutes !== null &&
+      seasonInfo?.total_minutes !== undefined &&
+      seasonInfo.total_minutes > 0
+    ) {
       return seasonInfo.total_minutes;
     }
     if (
       seasonInfo?.episode_minutes !== null &&
-      seasonInfo?.episode_minutes !== undefined
+      seasonInfo?.episode_minutes !== undefined &&
+      seasonInfo.episode_minutes > 0
     ) {
       const epCount = s.episodes ?? seasonInfo.episodes;
       return epCount > 0 ? epCount * seasonInfo.episode_minutes : null;
     }
-    if (workRuntime !== null && workRuntime > 0) {
+    if (effectiveFallback !== null && effectiveFallback > 0) {
       const epCount = s.episodes ?? seasonInfo?.episodes ?? 0;
-      return epCount > 0 ? epCount * workRuntime : null;
+      return epCount > 0 ? epCount * effectiveFallback : null;
     }
     return null;
   }
@@ -626,19 +649,21 @@ function computeSeasonNaturalMinutes(
   const watchedEps = s.episodes!;
   if (
     seasonInfo?.episode_minutes !== null &&
-    seasonInfo?.episode_minutes !== undefined
+    seasonInfo?.episode_minutes !== undefined &&
+    seasonInfo.episode_minutes > 0
   ) {
     return watchedEps * seasonInfo.episode_minutes;
   }
   if (
     seasonInfo?.total_minutes !== null &&
     seasonInfo?.total_minutes !== undefined &&
+    seasonInfo.total_minutes > 0 &&
     seasonInfo.episodes > 0
   ) {
     return (seasonInfo.total_minutes / seasonInfo.episodes) * watchedEps;
   }
-  if (workRuntime !== null && workRuntime > 0) {
-    return watchedEps * workRuntime;
+  if (effectiveFallback !== null && effectiveFallback > 0) {
+    return watchedEps * effectiveFallback;
   }
   return null;
 }
@@ -720,7 +745,7 @@ function buildUnits(
       const naturalMinutes =
         s.episodes === 0
           ? 0
-          : computeSeasonNaturalMinutes(s, seasonInfo, work.runtime_minutes);
+          : computeSeasonNaturalMinutes(s, seasonInfo, work.runtime_minutes, work.seasons);
       const unit = `s${s.number}`;
       units.push({
         unit,

@@ -979,7 +979,9 @@ export function createApp(deps: AppDeps): Hono {
       // Cache covers while the items still exist on the server (never throws).
       await prefetchCovers(db, result.runId, {
         config,
+        db,
         createAbsClient: deps.createAbsClient,
+        fetch: deps.fetchImage,
       });
       return c.json({
         runId: result.runId,

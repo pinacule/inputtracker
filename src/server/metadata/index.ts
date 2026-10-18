@@ -45,8 +45,16 @@ import {
 } from "./openlibrary.ts";
 import { computeMatchTier, MAX_LOOKUP_RESULTS, rankLookupHits } from "./rank.ts";
 import { fetchTmdbCover, getTmdbWork, searchTmdb } from "./tmdb.ts";
-import { fetchTvmazeCover, getTvmazeWork, searchTvmaze } from "./tvmaze.ts";
-import { fetchCinemetaCover, getCinemetaWork, searchCinemeta } from "./cinemeta.ts";
+import { detectTvmazeSlotRuntime, fetchTvmazeCover, getTvmazeWork, searchTvmaze } from "./tvmaze.ts";
+import {
+  BROADCAST_SLOTS,
+  BROADCAST_SLOT_MULTIPLES,
+  fetchCinemetaCover,
+  fetchCinemetaSeriesRuntime,
+  getCinemetaWork,
+  isClearlyLowerThanSlot,
+  searchCinemeta,
+} from "./cinemeta.ts";
 import {
   cleanDescription,
   isMetaProvider,
@@ -65,10 +73,15 @@ import {
 } from "./types.ts";
 
 export {
+  BROADCAST_SLOTS,
+  BROADCAST_SLOT_MULTIPLES,
   cleanDescription,
   cleanOpenLibraryId,
   computeMatchTier,
   defaultMetadataLimiter,
+  detectTvmazeSlotRuntime,
+  fetchCinemetaSeriesRuntime,
+  isClearlyLowerThanSlot,
   isMetaProvider,
   isTmdbConfigured,
   isValidProviderId,
@@ -101,6 +114,8 @@ export interface MetadataDeps {
   limiter?: Limiter;
   timeoutMs?: number;
   now?: () => number;
+  /** When true, skip reading from the on-disk work cache and overwrite it with fresh details. */
+  bypassCache?: boolean;
 }
 
 function buildContext(deps: MetadataDeps): ProviderContext {
@@ -271,9 +286,11 @@ export async function lookupWork(
   const ctx = buildContext(deps);
   const nowMs = ctx.now();
 
-  const cached = readWorkCache(deps.config, provider, id, nowMs, categoryOverride);
-  if (cached !== null) {
-    return cached;
+  if (!deps.bypassCache) {
+    const cached = readWorkCache(deps.config, provider, id, nowMs, categoryOverride);
+    if (cached !== null) {
+      return cached;
+    }
   }
 
   if (!ctx.metaConfig.enabled) {

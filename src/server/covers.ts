@@ -24,8 +24,10 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { categoryOf } from "../core/category.ts";
 import type { Config } from "../core/config.ts";
 import {
   type AbsBinaryResponse,
@@ -33,8 +35,19 @@ import {
   SourceUnavailable,
 } from "../sources/audiobookshelf/client.ts";
 import type { SyncClient } from "../sources/audiobookshelf/sync.ts";
+import { parseExternalIds, parseJsonObject } from "./aggregate.ts";
+import { upscaleItunesArtwork } from "./metadata/itunes.ts";
+import { resolveMetadataConfig } from "./metadata/types.ts";
 import { normalizeForSearch } from "./search.ts";
-import { fetchOpenLibraryCover, searchOpenLibrary } from "./openlibrary.ts";
+import {
+  authorMatches,
+  defaultOpenLibraryLimiter,
+  fetchOpenLibraryCover,
+  OPEN_LIBRARY_MAX_BYTES,
+  OPEN_LIBRARY_TIMEOUT_MS,
+  searchOpenLibrary,
+} from "./openlibrary.ts";
+import { readYoutubeEnrichmentByVideoId } from "./youtube-filter.ts";
 
 /** Library-item ids we are willing to turn into a filename and ABS path. */
 export const COVER_ID_RE = /^[A-Za-z0-9_-]+$/;
@@ -213,6 +226,459 @@ function writeCachedCover(
   }
 }
 
+export type TitleCoverCategory = "book" | "audiobook" | "music";
+
+export interface TitleCoverTarget {
+  category: TitleCoverCategory;
+  title: string;
+  creator: string | null;
+}
+
+const titleCoverRegistry = new Map<string, TitleCoverTarget>();
+
+/**
+ * Deterministic cover id for a work looked up by title (+ author/artist).
+ * Safe to use in `/api/cover/<id>` and `<dirname(db_path)>/covers/<id>.img`.
+ */
+export function titleCoverId(
+  category: TitleCoverCategory,
+  title: string,
+  creator?: string | null
+): string {
+  const normTitle = normalizeForSearch(title);
+  const normCreator = normalizeForSearch(creator ?? "");
+  const hash = createHash("sha256")
+    .update(`${category}\0${normTitle}\0${normCreator}`)
+    .digest("hex")
+    .slice(0, 24);
+  const id = `t_${category}_${hash}`;
+  titleCoverRegistry.set(id, {
+    category,
+    title: title.trim(),
+    creator: creator && creator.trim() !== "" ? creator.trim() : null,
+  });
+  return id;
+}
+
+export function isTitleCoverId(itemId: string): boolean {
+  return /^t_(?:book|audiobook|music)_[0-9a-f]{24}$/.test(itemId);
+}
+
+/** True when `<itemId>.img` and `<itemId>.type` exist in the permanent cover cache. */
+export function hasCachedCover(config: Config, itemId: string): boolean {
+  if (!isValidCoverId(itemId)) return false;
+  const { imgPath, typePath } = cachePaths(config, itemId);
+  return existsSync(imgPath) && existsSync(typePath);
+}
+
+/** True when `<itemId>.none` exists and has not expired. */
+export function hasCachedCoverNone(
+  config: Config,
+  itemId: string,
+  nowMs: number = Date.now()
+): boolean {
+  if (!isValidCoverId(itemId)) return false;
+  const { nonePath } = cachePaths(config, itemId);
+  return readCachedNone(nonePath, nowMs);
+}
+
+/**
+ * Clean a music track title, stripping common YouTube suffixes like
+ * "(Official Video)", "(Official Audio)", "(Lyrics)", and splitting
+ * "Artist - Track" when present.
+ */
+export function cleanMusicTitle(rawTitle: string): {
+  cleanTrack: string;
+  embeddedArtist: string | null;
+} {
+  let s = rawTitle.trim();
+  // Strip trailing video/audio tags in (...) or [...]
+  s = s
+    .replace(
+      /\s*[\(\[](?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video|visualizer)|music\s*video|lyric\s*video|lyrics?|audio|visualizer|hd|hq|4k|remastered(?:\s+\d{4})?)[\]\)]\s*$/gi,
+      ""
+    )
+    .trim();
+
+  const sepMatch = /^(.+?)\s+[-–—]\s+(.+)$/.exec(s);
+  if (sepMatch && sepMatch[1] && sepMatch[2]) {
+    return {
+      embeddedArtist: sepMatch[1].trim(),
+      cleanTrack: sepMatch[2].trim(),
+    };
+  }
+  return {
+    cleanTrack: s,
+    embeddedArtist: null,
+  };
+}
+
+/** Clean a YouTube Music channel / artist name (e.g. "Daft Punk - Topic" -> "Daft Punk"). */
+export function cleanMusicArtist(rawArtist: string | null | undefined): string {
+  if (typeof rawArtist !== "string") return "";
+  return rawArtist
+    .trim()
+    .replace(/\s+-\s*Topic$/i, "")
+    .replace(/\s+VEVO$/i, "")
+    .trim();
+}
+
+function normalizeTrackForMatch(s: string): string {
+  const withoutFeat = s
+    .replace(/\s*[\(\[](?:feat\.?|ft\.?|with)\s+[^)\]]+[\]\)]/gi, "")
+    .replace(/\s+-\s+(?:single|ep|remastered.*)$/i, "");
+  return normalizeForSearch(withoutFeat)
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function artistWords(name: string): string[] {
+  return normalizeForSearch(name)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length > 0);
+}
+
+export function artistMatches(
+  targetArtist: string | null | undefined,
+  candidateArtist: string | null | undefined
+): boolean {
+  const targetClean = cleanMusicArtist(targetArtist);
+  const candClean = cleanMusicArtist(candidateArtist);
+  if (!targetClean || !candClean) return false;
+
+  const normTarget = normalizeTrackForMatch(targetClean);
+  const normCand = normalizeTrackForMatch(candClean);
+  if (!normTarget || !normCand) return false;
+  if (normTarget === normCand) return true;
+
+  // Compare primary artist (before comma, &, feat.)
+  const primaryTarget = (targetClean.split(/,|&|;|\band\b|\bfeat\.?\b|\bft\.?\b/i)[0] ?? "").trim();
+  const primaryCand = (candClean.split(/,|&|;|\band\b|\bfeat\.?\b|\bft\.?\b/i)[0] ?? "").trim();
+  const tWords = artistWords(primaryTarget);
+  const cWords = artistWords(primaryCand);
+  if (tWords.length === 0 || cWords.length === 0) return false;
+
+  const cSet = new Set(artistWords(candClean));
+  if (tWords.every((w) => cSet.has(w))) return true;
+
+  const tSet = new Set(artistWords(targetClean));
+  if (cWords.every((w) => tSet.has(w))) return true;
+
+  return authorMatches(targetClean, [candClean]);
+}
+
+interface ItunesCoverHit {
+  id: string;
+  artworkUrl: string;
+}
+
+async function fetchExternalImage(
+  url: string,
+  fetchFn: typeof fetch
+): Promise<CoverResult | null> {
+  return defaultOpenLibraryLimiter.run(async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort(new DOMException("Cover image request timed out", "TimeoutError"));
+    }, OPEN_LIBRARY_TIMEOUT_MS);
+    try {
+      const response = await fetchFn(url, {
+        method: "GET",
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        if (response.status >= 500) {
+          throw new Error(`Cover image server error: HTTP ${response.status}`);
+        }
+        return null;
+      }
+      const contentType = normalizeImageType(response.headers.get("content-type"));
+      if (contentType === null) {
+        return null;
+      }
+      const clHeader = response.headers.get("content-length");
+      if (clHeader) {
+        const cl = Number(clHeader);
+        if (Number.isFinite(cl) && cl > OPEN_LIBRARY_MAX_BYTES) {
+          return null;
+        }
+      }
+      const arrayBuf = await response.arrayBuffer();
+      if (arrayBuf.byteLength === 0 || arrayBuf.byteLength > OPEN_LIBRARY_MAX_BYTES) {
+        return null;
+      }
+      return {
+        bytes: new Uint8Array(arrayBuf),
+        contentType,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+}
+
+async function searchItunesAudiobook(
+  title: string,
+  author: string,
+  config: Config,
+  fetchFn: typeof fetch
+): Promise<ItunesCoverHit | null> {
+  const itunesBase = resolveMetadataConfig(config).itunes_url;
+  const url = new URL(`${itunesBase}/search`);
+  url.searchParams.set("media", "audiobook");
+  url.searchParams.set("entity", "audiobook");
+  url.searchParams.set("term", author ? `${title} ${author}` : title);
+  url.searchParams.set("limit", "10");
+
+  return defaultOpenLibraryLimiter.run(async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort(new DOMException("iTunes request timed out", "TimeoutError"));
+    }, OPEN_LIBRARY_TIMEOUT_MS);
+    try {
+      const response = await fetchFn(url.toString(), {
+        method: "GET",
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        if (response.status >= 500) {
+          throw new Error(`iTunes server error: HTTP ${response.status}`);
+        }
+        return null;
+      }
+      let data: any;
+      try {
+        data = await response.json();
+      } catch {
+        return null;
+      }
+      const results = Array.isArray(data?.results) ? data.results : [];
+      const normQuery = normalizeTrackForMatch(cleanTitle(title));
+      const queryColonIdx = title.indexOf(":");
+      const normStripped =
+        queryColonIdx >= 4 ? normalizeTrackForMatch(title.slice(0, queryColonIdx)) : "";
+
+      for (const item of results) {
+        if (!item || typeof item !== "object") continue;
+        const rawId = item.collectionId ?? item.trackId;
+        if (typeof rawId !== "number" || rawId <= 0) continue;
+
+        const itemTitleRaw = String(item.collectionName ?? item.trackName ?? "").trim();
+        const itemAuthorRaw = String(item.artistName ?? "").trim();
+        if (!itemTitleRaw || !itemAuthorRaw) continue;
+
+        const cleanedItemTitle = cleanTitle(itemTitleRaw);
+        const normItem = normalizeTrackForMatch(cleanedItemTitle);
+        const itemColonIdx = cleanedItemTitle.indexOf(":");
+        const normItemStripped =
+          itemColonIdx >= 4
+            ? normalizeTrackForMatch(cleanedItemTitle.slice(0, itemColonIdx))
+            : "";
+
+        const titleMatch =
+          normItem === normQuery ||
+          (normStripped.length >= 4 && normItem === normStripped) ||
+          (normItemStripped.length >= 4 && normItemStripped === normQuery);
+        if (!titleMatch) continue;
+
+        if (!authorMatches(author, [itemAuthorRaw]) && !artistMatches(author, itemAuthorRaw)) {
+          continue;
+        }
+
+        const artworkUrl = upscaleItunesArtwork(item.artworkUrl100 ?? item.artworkUrl60);
+        if (artworkUrl) {
+          return { id: String(rawId), artworkUrl };
+        }
+      }
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+}
+
+async function searchItunesSong(
+  rawTitle: string,
+  rawArtist: string | null | undefined,
+  config: Config,
+  fetchFn: typeof fetch
+): Promise<ItunesCoverHit | null> {
+  const { cleanTrack, embeddedArtist } = cleanMusicTitle(rawTitle);
+  const effectiveArtist = cleanMusicArtist(rawArtist) || cleanMusicArtist(embeddedArtist);
+  const trackToSearch = cleanTrack || rawTitle.trim();
+  if (!trackToSearch) return null;
+
+  const itunesBase = resolveMetadataConfig(config).itunes_url;
+  const url = new URL(`${itunesBase}/search`);
+  url.searchParams.set("media", "music");
+  url.searchParams.set("entity", "song");
+  url.searchParams.set(
+    "term",
+    effectiveArtist ? `${trackToSearch} ${effectiveArtist}` : trackToSearch
+  );
+  url.searchParams.set("limit", "10");
+
+  return defaultOpenLibraryLimiter.run(async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort(new DOMException("iTunes request timed out", "TimeoutError"));
+    }, OPEN_LIBRARY_TIMEOUT_MS);
+    try {
+      const response = await fetchFn(url.toString(), {
+        method: "GET",
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        if (response.status >= 500) {
+          throw new Error(`iTunes server error: HTTP ${response.status}`);
+        }
+        return null;
+      }
+      let data: any;
+      try {
+        data = await response.json();
+      } catch {
+        return null;
+      }
+      const results = Array.isArray(data?.results) ? data.results : [];
+      const normTargetTrack = normalizeTrackForMatch(trackToSearch);
+      const normFullTitle = normalizeTrackForMatch(rawTitle);
+      if (!normTargetTrack) return null;
+
+      for (const item of results) {
+        if (!item || typeof item !== "object") continue;
+        const rawId = item.trackId ?? item.collectionId;
+        if (typeof rawId !== "number" || rawId <= 0) continue;
+
+        const itemTrack = String(item.trackName ?? item.collectionName ?? "").trim();
+        const itemArtist = String(item.artistName ?? "").trim();
+        if (!itemTrack) continue;
+
+        const normItemTrack = normalizeTrackForMatch(itemTrack);
+        const trackMatched =
+          normItemTrack === normTargetTrack || normItemTrack === normFullTitle;
+        if (!trackMatched) continue;
+
+        if (effectiveArtist) {
+          if (!artistMatches(effectiveArtist, itemArtist)) {
+            continue;
+          }
+        } else {
+          // Without a known artist, require a distinctive multi-word or >= 8 char title
+          const words = normTargetTrack.split(" ").filter(Boolean);
+          if (words.length < 2 && normTargetTrack.length < 8) {
+            continue;
+          }
+        }
+
+        const artworkUrl = upscaleItunesArtwork(item.artworkUrl100 ?? item.artworkUrl60);
+        if (artworkUrl) {
+          return { id: String(rawId), artworkUrl };
+        }
+      }
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+}
+
+function findTitleCoverTargetInDb(
+  db: Database,
+  itemId: string
+): TitleCoverTarget | null {
+  const fromMem = titleCoverRegistry.get(itemId);
+  if (fromMem) return fromMem;
+
+  const enrichmentMap = readYoutubeEnrichmentByVideoId(db);
+  const rows = db
+    .query<
+      {
+        source: string;
+        source_kind: string;
+        media_type: string;
+        title: string | null;
+        parent_title: string | null;
+        external_ids: string | null;
+        raw: string | null;
+      },
+      []
+    >(
+      `SELECT source, source_kind, media_type, title, parent_title, external_ids, raw
+       FROM events_latest
+       ORDER BY id DESC;`
+    )
+    .all();
+
+  for (const row of rows) {
+    const cat = categoryOf(row);
+    if (cat !== "book" && cat !== "audiobook" && cat !== "music") {
+      continue;
+    }
+    const rawObj = parseJsonObject(row.raw);
+    const workSnap = parseJsonObject(rawObj?.["work"]);
+    const rawMeta = parseJsonObject(rawObj?.["mediaMetadata"]);
+
+    let title = (
+      (typeof workSnap?.["title"] === "string" ? workSnap["title"] : null) ??
+      (typeof rawMeta?.["title"] === "string" ? rawMeta["title"] : null) ??
+      (typeof rawObj?.["displayTitle"] === "string" ? rawObj["displayTitle"] : null) ??
+      row.title ??
+      ""
+    ).trim();
+    if (!title) continue;
+
+    let creator: string | null = null;
+    if (Array.isArray(workSnap?.["creators"]) && workSnap["creators"].length > 0) {
+      const cList = (workSnap["creators"] as unknown[]).filter(
+        (c): c is string => typeof c === "string" && c.trim() !== ""
+      );
+      if (cList.length > 0) creator = cList.join(", ");
+    }
+    if (!creator && typeof rawMeta?.["authorName"] === "string" && rawMeta["authorName"].trim() !== "") {
+      creator = rawMeta["authorName"].trim();
+    }
+    if (!creator && typeof rawObj?.["displayAuthor"] === "string" && rawObj["displayAuthor"].trim() !== "") {
+      creator = rawObj["displayAuthor"].trim();
+    }
+    if (!creator && row.parent_title && row.parent_title.trim() !== "") {
+      creator = row.parent_title.trim();
+    }
+    if (!creator && row.source === "youtube") {
+      const ext = parseExternalIds(row.external_ids);
+      const vid = ext?.["youtube_video"];
+      if (typeof vid === "string") {
+        const enr = enrichmentMap.get(vid);
+        if (enr?.channel && enr.channel.trim() !== "") {
+          creator = enr.channel.trim();
+        }
+      }
+    }
+    if (cat === "music") {
+      const cleanedArtist = cleanMusicArtist(creator);
+      if (cleanedArtist) {
+        creator = cleanedArtist;
+      } else {
+        const { embeddedArtist } = cleanMusicTitle(title);
+        if (embeddedArtist) creator = embeddedArtist;
+      }
+    }
+
+    const candidateId = titleCoverId(cat, title, creator);
+    if (candidateId === itemId) {
+      return { category: cat, title, creator };
+    }
+    // Also register with null creator in case the caller built the id before enrichment
+    const bareId = titleCoverId(cat, title, null);
+    if (bareId === itemId) {
+      return { category: cat, title, creator };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Strip trailing "(Unabridged)" / "(1 of 5)"-style suffixes and leading series
  * prefixes like "The Stormlight Archive 2: " for the fallback lookup try.
@@ -314,6 +780,95 @@ export async function getCover(
   return lookup;
 }
 
+async function resolveExternalBookOrAudiobookCover(
+  titleCandidates: readonly string[],
+  targetAuthor: string,
+  deps: CoverDeps,
+  imgPath: string,
+  typePath: string,
+  srcPath: string,
+  nonePath: string
+): Promise<{ cover: CoverResult | null; hadNetworkError: boolean }> {
+  const coversConfig = deps.config.covers ?? {
+    external: true,
+    openlibrary_url: "https://openlibrary.org",
+    openlibrary_covers_url: "https://covers.openlibrary.org",
+  };
+  if (!coversConfig.external || targetAuthor === "") {
+    return { cover: null, hadNetworkError: false };
+  }
+
+  let hadNetworkError = false;
+  const fetchFn = deps.fetch ?? globalThis.fetch;
+
+  // 1. Open Library
+  for (const titleCandidate of titleCandidates) {
+    try {
+      const coverId = await searchOpenLibrary(titleCandidate, targetAuthor, {
+        fetch: fetchFn,
+        baseUrl: coversConfig.openlibrary_url,
+      });
+
+      if (coverId !== null) {
+        const fetched = await fetchOpenLibraryCover(coverId, {
+          fetch: fetchFn,
+          coversBaseUrl: coversConfig.openlibrary_covers_url,
+        });
+
+        if (fetched !== null) {
+          writeCachedCover(
+            imgPath,
+            typePath,
+            srcPath,
+            nonePath,
+            fetched,
+            `openlibrary:${coverId}`
+          );
+          return { cover: fetched, hadNetworkError };
+        }
+      }
+    } catch (err) {
+      if (isNetworkOrServerError(err)) {
+        hadNetworkError = true;
+      }
+    }
+  }
+
+  // 2. iTunes Audiobook search fallback when Open Library did not have the cover
+  if (!hadNetworkError) {
+    for (const titleCandidate of titleCandidates) {
+      try {
+        const hit = await searchItunesAudiobook(
+          titleCandidate,
+          targetAuthor,
+          deps.config,
+          fetchFn
+        );
+        if (hit !== null) {
+          const fetched = await fetchExternalImage(hit.artworkUrl, fetchFn);
+          if (fetched !== null) {
+            writeCachedCover(
+              imgPath,
+              typePath,
+              srcPath,
+              nonePath,
+              fetched,
+              `itunes:${hit.id}`
+            );
+            return { cover: fetched, hadNetworkError };
+          }
+        }
+      } catch (err) {
+        if (isNetworkOrServerError(err)) {
+          hadNetworkError = true;
+        }
+      }
+    }
+  }
+
+  return { cover: null, hadNetworkError };
+}
+
 async function getCoverInternal(
   itemId: string,
   deps: CoverDeps
@@ -333,13 +888,98 @@ async function getCoverInternal(
     return null;
   }
 
+  // Handle title-based cover IDs (`t_music_<hash>`, `t_book_<hash>`, `t_audiobook_<hash>`):
+  // never contact Audiobookshelf for these.
+  if (isTitleCoverId(itemId)) {
+    const coversConfig = deps.config.covers ?? {
+      external: true,
+      openlibrary_url: "https://openlibrary.org",
+      openlibrary_covers_url: "https://covers.openlibrary.org",
+    };
+    if (!coversConfig.external) {
+      writeCachedNone(nonePath, nowMs);
+      return null;
+    }
+
+    const target = deps.db
+      ? findTitleCoverTargetInDb(deps.db, itemId)
+      : (titleCoverRegistry.get(itemId) ?? null);
+    if (!target || !target.title) {
+      return null;
+    }
+
+    const fetchFn = deps.fetch ?? globalThis.fetch;
+
+    if (target.category === "music") {
+      let hadNetworkError = false;
+      try {
+        const hit = await searchItunesSong(
+          target.title,
+          target.creator,
+          deps.config,
+          fetchFn
+        );
+        if (hit !== null) {
+          const fetched = await fetchExternalImage(hit.artworkUrl, fetchFn);
+          if (fetched !== null) {
+            writeCachedCover(
+              imgPath,
+              typePath,
+              srcPath,
+              nonePath,
+              fetched,
+              `itunes:${hit.id}`
+            );
+            return fetched;
+          }
+        }
+      } catch (err) {
+        if (isNetworkOrServerError(err)) {
+          hadNetworkError = true;
+        }
+      }
+      if (!hadNetworkError) {
+        writeCachedNone(nonePath, nowMs);
+      }
+      return null;
+    }
+
+    const exactTitle = target.title;
+    const cleaned = cleanTitle(exactTitle);
+    const candidates = [exactTitle];
+    if (cleaned !== exactTitle && cleaned.length > 0) {
+      candidates.push(cleaned);
+    }
+
+    const { cover, hadNetworkError } = await resolveExternalBookOrAudiobookCover(
+      candidates,
+      target.creator ?? "",
+      deps,
+      imgPath,
+      typePath,
+      srcPath,
+      nonePath
+    );
+    if (cover !== null) {
+      return cover;
+    }
+    if (!hadNetworkError) {
+      writeCachedNone(nonePath, nowMs);
+    }
+    return null;
+  }
+
   let hadNetworkError = false;
 
   const factory: CoverClientFactory =
     deps.createAbsClient ?? ((cfg) => createAbsClient(cfg));
 
+  // If this itemId is already known to be missing on ABS (from a previous 404),
+  // never contact Audiobookshelf again (neither Step 1 nor Step 2).
+  const alreadyKnownAbsMiss = readCachedAbsMiss(absMissPath, nowMs);
+
   // --- Step 1: ABS /api/items/<id>/cover ---
-  if (!readCachedAbsMiss(absMissPath, nowMs)) {
+  if (!alreadyKnownAbsMiss) {
     try {
       const client = factory(deps.config);
       if (typeof client.getBinary === "function") {
@@ -447,165 +1087,141 @@ async function getCoverInternal(
     titleCandidates.push(cleanedTitle);
   }
 
-  // --- Step 2: Same book in current ABS library ---
-  try {
-    const client = factory(deps.config);
-    if (typeof client.get === "function" && typeof client.getBinary === "function") {
-      let libRes: any;
-      try {
-        libRes = await client.get("/api/libraries");
-      } catch (err) {
-        if (isNetworkOrServerError(err)) {
-          hadNetworkError = true;
-        }
-      }
-
-      const libraries = Array.isArray(libRes)
-        ? libRes
-        : Array.isArray(libRes?.libraries)
-        ? libRes.libraries
-        : [];
-      const bookLibraries = libraries.filter(
-        (lib: any) => lib?.mediaType === "book" && typeof lib?.id === "string"
-      );
-
-      for (const titleCandidate of titleCandidates) {
-        for (const lib of bookLibraries) {
-          let searchRes: any;
-          try {
-            searchRes = await client.get(`/api/libraries/${lib.id}/search`, {
-              q: titleCandidate,
-              limit: 5,
-            });
-          } catch (err) {
-            if (isNetworkOrServerError(err)) {
-              hadNetworkError = true;
-            }
-            continue;
+  // --- Step 2: Same book in current ABS library (only on first miss, never when already known missing) ---
+  if (!alreadyKnownAbsMiss) {
+    try {
+      const client = factory(deps.config);
+      if (typeof client.get === "function" && typeof client.getBinary === "function") {
+        let libRes: any;
+        try {
+          libRes = await client.get("/api/libraries");
+        } catch (err) {
+          if (isNetworkOrServerError(err)) {
+            hadNetworkError = true;
           }
+        }
 
-          const bookResults: any[] = Array.isArray(searchRes?.book)
-            ? searchRes.book
-            : Array.isArray(searchRes?.books)
-            ? searchRes.books
-            : Array.isArray(searchRes)
-            ? searchRes
-            : [];
+        const libraries = Array.isArray(libRes)
+          ? libRes
+          : Array.isArray(libRes?.libraries)
+          ? libRes.libraries
+          : [];
+        const bookLibraries = libraries.filter(
+          (lib: any) => lib?.mediaType === "book" && typeof lib?.id === "string"
+        );
 
-          for (const item of bookResults) {
-            const candidateId = item?.libraryItem?.id ?? item?.id;
-            if (!isValidCoverId(candidateId)) continue;
-            const cTitle =
-              item?.libraryItem?.media?.metadata?.title ??
-              item?.media?.metadata?.title ??
-              item?.libraryItem?.title ??
-              item?.title ??
-              "";
-            const cAuthor =
-              item?.libraryItem?.media?.metadata?.authorName ??
-              item?.media?.metadata?.authorName ??
-              item?.libraryItem?.media?.metadata?.authors?.[0]?.name ??
-              item?.author ??
-              "";
-
-            // Title must match normalized title candidate
-            if (normalizeForSearch(cTitle) !== normalizeForSearch(titleCandidate)) {
-              continue;
-            }
-
-            // Author match: if both have an author, normalize(author) matches too
-            const hasTargetAuthor = Boolean(targetAuthor && targetAuthor.trim().length > 0);
-            const hasCandidateAuthor = Boolean(cAuthor && cAuthor.trim().length > 0);
-            if (hasTargetAuthor && hasCandidateAuthor) {
-              if (normalizeForSearch(cAuthor) !== normalizeForSearch(targetAuthor)) {
-                continue; // Relink rejected on author mismatch!
-              }
-            }
-
-            // Match! Fetch cover for candidateId (unless it is the same itemId or known 404)
-            if (candidateId === itemId) {
-              continue;
-            }
-            const candidateMissPath = cachePaths(deps.config, candidateId).absMissPath;
-            if (readCachedAbsMiss(candidateMissPath, nowMs)) {
-              continue;
-            }
+        for (const titleCandidate of titleCandidates) {
+          for (const lib of bookLibraries) {
+            let searchRes: any;
             try {
-              const fetched = await client.getBinary(`/api/items/${candidateId}/cover`);
-              const contentType = normalizeImageType(fetched?.contentType);
-              if (contentType !== null) {
-                const bytes =
-                  fetched.bytes instanceof Uint8Array ? fetched.bytes : new Uint8Array();
-                const cover: CoverResult = { bytes, contentType };
-                writeCachedCover(
-                  imgPath,
-                  typePath,
-                  srcPath,
-                  nonePath,
-                  cover,
-                  `abs-relinked:${candidateId}`,
-                  absMissPath
-                );
-                return cover;
-              }
+              searchRes = await client.get(`/api/libraries/${lib.id}/search`, {
+                q: titleCandidate,
+                limit: 5,
+              });
             } catch (err) {
               if (isNetworkOrServerError(err)) {
                 hadNetworkError = true;
-              } else if (!isAuthError(err)) {
-                writeCachedAbsMiss(candidateMissPath, nowMs);
+              }
+              continue;
+            }
+
+            const bookResults: any[] = Array.isArray(searchRes?.book)
+              ? searchRes.book
+              : Array.isArray(searchRes?.books)
+              ? searchRes.books
+              : Array.isArray(searchRes)
+              ? searchRes
+              : [];
+
+            for (const item of bookResults) {
+              const candidateId = item?.libraryItem?.id ?? item?.id;
+              if (!isValidCoverId(candidateId)) continue;
+              const cTitle =
+                item?.libraryItem?.media?.metadata?.title ??
+                item?.media?.metadata?.title ??
+                item?.libraryItem?.title ??
+                item?.title ??
+                "";
+              const cAuthor =
+                item?.libraryItem?.media?.metadata?.authorName ??
+                item?.media?.metadata?.authorName ??
+                item?.libraryItem?.media?.metadata?.authors?.[0]?.name ??
+                item?.author ??
+                "";
+
+              // Title must match normalized title candidate
+              if (normalizeForSearch(cTitle) !== normalizeForSearch(titleCandidate)) {
+                continue;
+              }
+
+              // Author match: if both have an author, normalize(author) matches too
+              const hasTargetAuthor = Boolean(targetAuthor && targetAuthor.trim().length > 0);
+              const hasCandidateAuthor = Boolean(cAuthor && cAuthor.trim().length > 0);
+              if (hasTargetAuthor && hasCandidateAuthor) {
+                if (normalizeForSearch(cAuthor) !== normalizeForSearch(targetAuthor)) {
+                  continue; // Relink rejected on author mismatch!
+                }
+              }
+
+              // Match! Fetch cover for candidateId (unless it is the same itemId or known 404)
+              if (candidateId === itemId) {
+                continue;
+              }
+              const candidateMissPath = cachePaths(deps.config, candidateId).absMissPath;
+              if (readCachedAbsMiss(candidateMissPath, nowMs)) {
+                continue;
+              }
+              try {
+                const fetched = await client.getBinary(`/api/items/${candidateId}/cover`);
+                const contentType = normalizeImageType(fetched?.contentType);
+                if (contentType !== null) {
+                  const bytes =
+                    fetched.bytes instanceof Uint8Array ? fetched.bytes : new Uint8Array();
+                  const cover: CoverResult = { bytes, contentType };
+                  writeCachedCover(
+                    imgPath,
+                    typePath,
+                    srcPath,
+                    nonePath,
+                    cover,
+                    `abs-relinked:${candidateId}`,
+                    absMissPath
+                  );
+                  return cover;
+                }
+              } catch (err) {
+                if (isNetworkOrServerError(err)) {
+                  hadNetworkError = true;
+                } else if (!isAuthError(err)) {
+                  writeCachedAbsMiss(candidateMissPath, nowMs);
+                }
               }
             }
           }
         }
       }
-    }
-  } catch (err) {
-    if (isNetworkOrServerError(err)) {
-      hadNetworkError = true;
+    } catch (err) {
+      if (isNetworkOrServerError(err)) {
+        hadNetworkError = true;
+      }
     }
   }
 
-  // --- Step 3: Open Library ---
-  const coversConfig = deps.config.covers ?? {
-    external: true,
-    openlibrary_url: "https://openlibrary.org",
-    openlibrary_covers_url: "https://covers.openlibrary.org",
-  };
-
-  // A title alone is too generic to trust ("Focus" matched an unrelated book),
-  // so Open Library is only asked when the author is known.
-  if (coversConfig.external && targetAuthor !== "") {
-    for (const titleCandidate of titleCandidates) {
-      try {
-        const coverId = await searchOpenLibrary(titleCandidate, targetAuthor, {
-          fetch: deps.fetch,
-          baseUrl: coversConfig.openlibrary_url,
-        });
-
-        if (coverId !== null) {
-          const fetched = await fetchOpenLibraryCover(coverId, {
-            fetch: deps.fetch,
-            coversBaseUrl: coversConfig.openlibrary_covers_url,
-          });
-
-          if (fetched !== null) {
-            writeCachedCover(
-              imgPath,
-              typePath,
-              srcPath,
-              nonePath,
-              fetched,
-              `openlibrary:${coverId}`
-            );
-            return fetched;
-          }
-        }
-      } catch (err) {
-        if (isNetworkOrServerError(err)) {
-          hadNetworkError = true;
-        }
-      }
-    }
+  // --- Step 3: Open Library then iTunes Audiobooks ---
+  const extRes = await resolveExternalBookOrAudiobookCover(
+    titleCandidates,
+    targetAuthor,
+    deps,
+    imgPath,
+    typePath,
+    srcPath,
+    nonePath
+  );
+  if (extRes.cover !== null) {
+    return extRes.cover;
+  }
+  if (extRes.hadNetworkError) {
+    hadNetworkError = true;
   }
 
   // Definitive "no cover anywhere"
@@ -663,4 +1279,167 @@ export async function prefetchCovers(
     // Covers are a nicety; a failure here must never affect the sync.
   }
   return available;
+}
+
+export interface BackfillCoversOptions extends CoverDeps {
+  limit?: number;
+  onlyCategories?: ReadonlyArray<TitleCoverCategory>;
+}
+
+export interface BackfillCoversResult {
+  attempted: number;
+  resolved: number;
+  notFound: number;
+}
+
+/**
+ * Discover all uncached cover candidates in `db` (Audiobookshelf items without
+ * a cached cover, plus music tracks and books/audiobooks without a cover) and
+ * resolve up to `limit` of them via `getCover`.
+ *
+ * Items already known missing on Audiobookshelf (`<id>.abs404`) skip ABS and
+ * go straight to the Open Library / iTunes title fallback.
+ */
+export async function backfillCovers(
+  db: Database,
+  opts: BackfillCoversOptions
+): Promise<BackfillCoversResult> {
+  const limit = opts.limit ?? PREFETCH_LIMIT;
+  if (limit <= 0) {
+    return { attempted: 0, resolved: 0, notFound: 0 };
+  }
+
+  const nowMs = opts.now ? opts.now() : Date.now();
+  const candidateIds: string[] = [];
+  const seen = new Set<string>();
+
+  const addCandidate = (id: string) => {
+    if (!isValidCoverId(id) || seen.has(id)) return;
+    const { imgPath, typePath, nonePath } = cachePaths(opts.config, id);
+    if (readCachedCover(imgPath, typePath) !== null) return;
+    if (readCachedNone(nonePath, nowMs)) return;
+    seen.add(id);
+    candidateIds.push(id);
+  };
+
+  // 1. Audiobookshelf items (unless restricted to specific categories like ["music"])
+  if (!opts.onlyCategories || opts.onlyCategories.includes("audiobook")) {
+    const absRows = db
+      .query<{ item: string | null }, []>(
+        `SELECT DISTINCT COALESCE(json_extract(external_ids, '$.abs_item'), source_id) AS item
+           FROM events_latest
+          WHERE source = 'audiobookshelf'
+          ORDER BY id DESC;`
+      )
+      .all();
+    for (const r of absRows) {
+      if (r.item && isValidCoverId(r.item)) {
+        addCandidate(r.item);
+      }
+    }
+  }
+
+  // 2. Music tracks and books/audiobooks without a cover
+  const enrichmentMap = readYoutubeEnrichmentByVideoId(db);
+  const rows = db
+    .query<
+      {
+        source: string;
+        source_kind: string;
+        media_type: string;
+        title: string | null;
+        parent_title: string | null;
+        external_ids: string | null;
+        raw: string | null;
+      },
+      []
+    >(
+      `SELECT source, source_kind, media_type, title, parent_title, external_ids, raw
+       FROM events_latest
+       ORDER BY id DESC;`
+    )
+    .all();
+
+  for (const row of rows) {
+    const cat = categoryOf(row);
+    if (cat !== "book" && cat !== "audiobook" && cat !== "music") {
+      continue;
+    }
+    if (opts.onlyCategories && !opts.onlyCategories.includes(cat)) {
+      continue;
+    }
+
+    const ext = parseExternalIds(row.external_ids);
+    // Skip items that already have an ABS item id or metadata provider id
+    if (cat !== "music" && (ext?.["abs_item"] || ext?.["meta_id"])) {
+      continue;
+    }
+
+    const rawObj = parseJsonObject(row.raw);
+    const workSnap = parseJsonObject(rawObj?.["work"]);
+    const rawMeta = parseJsonObject(rawObj?.["mediaMetadata"]);
+
+    const title = (
+      (typeof workSnap?.["title"] === "string" ? workSnap["title"] : null) ??
+      (typeof rawMeta?.["title"] === "string" ? rawMeta["title"] : null) ??
+      (typeof rawObj?.["displayTitle"] === "string" ? rawObj["displayTitle"] : null) ??
+      row.title ??
+      ""
+    ).trim();
+    if (!title) continue;
+
+    let creator: string | null = null;
+    if (Array.isArray(workSnap?.["creators"]) && workSnap["creators"].length > 0) {
+      const cList = (workSnap["creators"] as unknown[]).filter(
+        (c): c is string => typeof c === "string" && c.trim() !== ""
+      );
+      if (cList.length > 0) creator = cList.join(", ");
+    }
+    if (!creator && typeof rawMeta?.["authorName"] === "string" && rawMeta["authorName"].trim() !== "") {
+      creator = rawMeta["authorName"].trim();
+    }
+    if (!creator && typeof rawObj?.["displayAuthor"] === "string" && rawObj["displayAuthor"].trim() !== "") {
+      creator = rawObj["displayAuthor"].trim();
+    }
+    if (!creator && row.parent_title && row.parent_title.trim() !== "") {
+      creator = row.parent_title.trim();
+    }
+    if (!creator && row.source === "youtube") {
+      const vid = ext?.["youtube_video"];
+      if (typeof vid === "string") {
+        const enr = enrichmentMap.get(vid);
+        if (enr?.channel && enr.channel.trim() !== "") {
+          creator = enr.channel.trim();
+        }
+      }
+    }
+    if (cat === "music") {
+      const cleanedArtist = cleanMusicArtist(creator);
+      if (cleanedArtist) {
+        creator = cleanedArtist;
+      } else {
+        const { embeddedArtist } = cleanMusicTitle(title);
+        if (embeddedArtist) creator = embeddedArtist;
+      }
+    }
+
+    const id = titleCoverId(cat, title, creator);
+    addCandidate(id);
+  }
+
+  let attempted = 0;
+  let resolved = 0;
+  let notFound = 0;
+
+  for (const id of candidateIds.slice(0, limit)) {
+    attempted += 1;
+    const res = await getCover(id, { ...opts, db });
+    if (res !== null) {
+      resolved += 1;
+    } else {
+      notFound += 1;
+    }
+  }
+
+  return { attempted, resolved, notFound };
 }

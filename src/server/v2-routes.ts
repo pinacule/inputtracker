@@ -12,13 +12,17 @@ import {
   listArchiveEntries,
   saveArchiveEntry,
 } from "./archive.ts";
+import { redactString } from "../core/config.ts";
 import {
   editLibraryWork,
   getHiddenLibraryWorks,
   getLibrary,
   getLibraryWorkDetail,
+  isValidLibrarySort,
   type LibrarySort,
+  refreshLibraryWorkMetadata,
 } from "./library.ts";
+import { ProviderError } from "./metadata/index.ts";
 import {
   CategoryFilterValidationError,
   parseCategoryFilter,
@@ -161,10 +165,10 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
     const sortRaw = c.req.query("sort");
     let sort: LibrarySort = "recent";
     if (sortRaw !== undefined && sortRaw !== "") {
-      if (sortRaw !== "recent" && sortRaw !== "time" && sortRaw !== "title") {
+      if (!isValidLibrarySort(sortRaw)) {
         return c.json(
           {
-            error: `Invalid sort: '${sortRaw}' (expected recent, time or title)`,
+            error: `Invalid sort: '${sortRaw}' (expected recent, time, title, category or creator)`,
           },
           400
         );
@@ -261,6 +265,46 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
       }
       if (caught instanceof WorkOverrideNotFoundError) {
         return c.json({ error: caught.message }, 404);
+      }
+      throw caught;
+    }
+  });
+
+  // POST /api/library/work/refresh-metadata?key=
+  app.post("/api/library/work/refresh-metadata", async (c) => {
+    const err = validateQueryParams(c.req.url, ["key"]);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const key = c.req.query("key");
+    if (key === undefined || key === "") {
+      return c.json({ error: "Missing required query parameter: key" }, 400);
+    }
+    if (key.length > 500) {
+      return c.json(
+        { error: `Invalid key: too long (${key.length} characters, max 500)` },
+        400
+      );
+    }
+
+    try {
+      const result = await refreshLibraryWorkMetadata(db, key, {
+        tz,
+        config,
+        fetch: deps.fetchImage,
+        now: deps.nowMs,
+      });
+      return c.json(result);
+    } catch (caught) {
+      if (caught instanceof WorkOverrideValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      if (caught instanceof WorkOverrideNotFoundError) {
+        return c.json({ error: caught.message }, 404);
+      }
+      if (caught instanceof ProviderError) {
+        return c.json({ error: redactString(caught.message, config) }, 502);
       }
       throw caught;
     }

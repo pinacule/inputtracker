@@ -19,6 +19,7 @@ import { redact, redactString, type Config } from "../../core/config.ts";
 import { finishRun, startRun, type NewEvent } from "../../core/events.ts";
 import type { Sink } from "../../core/sink.ts";
 import { DATE_ONLY_RE, localParts, localToUtcIso } from "../../core/time.ts";
+import { backfillCovers } from "../../server/covers.ts";
 import { SyncFailedError } from "../audiobookshelf/sync.ts";
 import { enrichYoutubeVideos } from "../youtube/enrich.ts";
 import type { ActivityWatchClient, FetchFn } from "./client.ts";
@@ -193,6 +194,20 @@ export async function syncActivityWatch(
       sleep: deps.sleep,
       nowMs: () => nowDate.getTime(),
     });
+
+    if (includeMusic && config && config.covers?.external !== false) {
+      try {
+        await backfillCovers(db, {
+          config,
+          db,
+          fetch: enrichFetch as typeof fetch | undefined,
+          now: () => nowDate.getTime(),
+          onlyCategories: ["music"],
+        });
+      } catch {
+        // Best-effort cover resolution during sync
+      }
+    }
 
     return {
       runId,
@@ -415,6 +430,20 @@ export async function backfillActivityWatch(
       sleep: deps.sleep,
       nowMs: () => nowDate.getTime(),
     });
+
+    if (includeMusic && config && config.covers?.external !== false) {
+      try {
+        await backfillCovers(db, {
+          config,
+          db,
+          fetch: enrichFetch as typeof fetch | undefined,
+          now: () => nowDate.getTime(),
+          onlyCategories: ["music"],
+        });
+      } catch {
+        // Best-effort cover resolution during sync
+      }
+    }
 
     return {
       runId,

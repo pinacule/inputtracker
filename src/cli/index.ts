@@ -37,7 +37,18 @@ import {
   type BackupOptions,
   type BackupResult,
 } from "../io/backup.ts";
-import { prefetchCovers } from "../server/covers.ts";
+import {
+  backfillCovers,
+  type BackfillCoversOptions,
+  type BackfillCoversResult,
+  prefetchCovers,
+} from "../server/covers.ts";
+import {
+  formatRefreshHoursLine,
+  refreshAllArchiveMetadata,
+  type RefreshArchiveSummaryItem,
+  type RefreshMetadataOptions,
+} from "../server/library.ts";
 import { remapPhonePlays } from "../server/ingest.ts";
 import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
@@ -109,12 +120,14 @@ export function usage(): string {
     "  sync audiobookshelf|simkl|activitywatch  fetch new source activity into the DB",
     "    sync activitywatch --since <date>      backfill older YouTube plays from ActivityWatch",
     "    youtube enrich [--limit <n>]           enrich stored YouTube videos with channel and category",
+    "    covers backfill [--limit <n>]          backfill missing covers by title (Open Library / iTunes)",
     "  auth simkl [--status]                    connect or inspect Simkl authorization",
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
     "  import <file> [--format json|csv]        import a native export file into the DB",
     "    import youtube-takeout <file>          import a YouTube Takeout watch-history JSON file",
     "    import achriom <path> [--dry-run]      import an Achriom library export (.zip or .csv)",
+    "    archive refresh-metadata [--dry-run]   re-look up linked metadata and update archive runtimes",
     "  backup                                   snapshot the DB + JSON export into backup_dir",
     "  notify test                              test every configured notification channel",
     "  notify weekly                            push the weekly summary (needs notify.weekly_summary)",
@@ -171,6 +184,14 @@ export interface CliDeps {
     db: Database,
     opts?: EnrichYoutubeVideosOptions
   ) => Promise<EnrichYoutubeVideosResult>;
+  backfillCovers?: (
+    db: Database,
+    opts: BackfillCoversOptions
+  ) => Promise<BackfillCoversResult>;
+  refreshAllArchiveMetadata?: (
+    db: Database,
+    opts: RefreshMetadataOptions
+  ) => Promise<RefreshArchiveSummaryItem[]>;
   /** Override for `it doctor` (tests inject mocked environment deps). */
   runDoctor?: (overrides?: Partial<DoctorDeps>) => Promise<number>;
   /** Environment deps merged into the doctor defaults. */
@@ -499,7 +520,9 @@ async function runSync(
     // Cache covers while the items still exist on the server (never throws).
     await (deps.prefetchCovers ?? prefetchCovers)(db, result.runId, {
       config,
+      db,
       createAbsClient: () => client,
+      fetch: deps.fetch as typeof fetch | undefined,
     });
     await reportSyncSafely(report, db, ABS_SOURCE, true, undefined, notifier);
     return EXIT_OK;
@@ -1533,6 +1556,162 @@ async function runYoutube(args: string[], ctx: SyncContext): Promise<number> {
   }
 }
 
+async function runCovers(args: string[], ctx: SyncContext): Promise<number> {
+  const { deps, out, err } = ctx;
+  const [sub, ...rest] = args;
+
+  if (sub !== "backfill") {
+    err("Usage: it covers backfill [--limit <n>]");
+    return EXIT_USAGE;
+  }
+
+  let limitVal: number | undefined;
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i]!;
+    if (arg === "--limit" || arg.startsWith("--limit=")) {
+      const raw =
+        arg === "--limit" ? rest[i + 1] : arg.slice("--limit=".length);
+      if (arg === "--limit") {
+        i += 1;
+      }
+      if (raw === undefined || raw === "") {
+        err("Missing value for --limit.");
+        return EXIT_USAGE;
+      }
+      if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+        err(`Invalid --limit: "${raw}" (expected a positive integer).`);
+        return EXIT_USAGE;
+      }
+      limitVal = Number(raw);
+    } else {
+      err(`Unknown option: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+  }
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const doBackfill = deps.backfillCovers ?? backfillCovers;
+    const nowMsFn =
+      deps.nowMs ??
+      (deps.now instanceof Date ? () => deps.now!.getTime() : undefined);
+    const result = await doBackfill(db, {
+      config,
+      db,
+      createAbsClient: deps.createAbsClient,
+      fetch: deps.fetch as typeof fetch | undefined,
+      now: nowMsFn,
+      limit: limitVal,
+    });
+    out(
+      `covers backfill: ${result.attempted} attempted, ${result.resolved} resolved, ${result.notFound} not found`
+    );
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
+async function runArchiveCli(args: string[], ctx: SyncContext): Promise<number> {
+  const { deps, out, err } = ctx;
+  const [sub, ...rest] = args;
+
+  if (sub !== "refresh-metadata") {
+    err("Usage: it archive refresh-metadata [--dry-run]");
+    return EXIT_USAGE;
+  }
+
+  let dryRun = false;
+  for (const arg of rest) {
+    if (arg === "--dry-run") {
+      dryRun = true;
+    } else {
+      err(`Unknown option: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+  }
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const doRefresh = deps.refreshAllArchiveMetadata ?? refreshAllArchiveMetadata;
+    const nowMsFn =
+      deps.nowMs ??
+      (deps.now instanceof Date ? () => deps.now!.getTime() : undefined);
+    const results = await doRefresh(db, {
+      config,
+      fetch: deps.fetch as typeof fetch | undefined,
+      now: nowMsFn,
+      dryRun,
+    });
+
+    let changedCount = 0;
+    for (const item of results) {
+      if (item.changed) {
+        changedCount += 1;
+        out(formatRefreshHoursLine(item));
+      }
+    }
+    out(
+      `archive refresh-metadata${dryRun ? " (dry-run)" : ""}: ${results.length} checked, ${changedCount} changed`
+    );
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
 /**
  * Run the CLI for the given argument list (without the program name).
  * Returns the process exit code; never calls `process.exit`.
@@ -1597,6 +1776,14 @@ export async function runCli(
 
   if (command === "youtube") {
     return await runYoutube(rest, { deps, out, err });
+  }
+
+  if (command === "covers") {
+    return await runCovers(rest, { deps, out, err });
+  }
+
+  if (command === "archive") {
+    return await runArchiveCli(rest, { deps, out, err });
   }
 
   if (command === "doctor") {
