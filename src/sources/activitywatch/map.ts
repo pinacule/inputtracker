@@ -12,6 +12,7 @@
  */
 
 import type { NewEvent } from "../../core/events.ts";
+import { localParts } from "../../core/time.ts";
 import type { AwRawEvent } from "./types.ts";
 
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
@@ -20,6 +21,15 @@ export interface MapBucketOptions {
   bucketId: string;
   device: string;
   includeMusic?: boolean;
+  /** Timezone for per-video per-local-day merging when merging is enabled. */
+  tz?: string;
+  /** Minimum watched minutes per video per local day (0 disables filtering). */
+  minWatchMinutes?: number;
+}
+
+export interface MergePlaysByDayOptions {
+  tz?: string;
+  minWatchMinutes?: number;
 }
 
 /**
@@ -275,5 +285,132 @@ export function mapBucketEvents(
     });
   }
 
+  if (options.tz !== undefined || options.minWatchMinutes !== undefined) {
+    return mergePlaysByVideoDay(result, {
+      tz: options.tz,
+      minWatchMinutes: options.minWatchMinutes,
+    });
+  }
+
   return result;
+}
+
+/**
+ * Merge ActivityWatch plays per video per local day in `tz` and filter out
+ * video-days below `minWatchMinutes` (0 disables filtering).
+ *
+ * The merged play uses the earliest `started_at` on that local day as its
+ * `started_at` and `source_id` (`${videoId}:${started_at}`), so repeat syncs
+ * and plays that grow or cross the limit later on the same day update the same
+ * `(source, source_kind, source_id)` key in `events_latest` without double
+ * counting.
+ */
+export function mergePlaysByVideoDay(
+  plays: readonly NewEvent[],
+  opts: MergePlaysByDayOptions = {}
+): NewEvent[] {
+  const tz = opts.tz ?? "Europe/Bratislava";
+  const minSeconds = Math.max(0, (opts.minWatchMinutes ?? 0) * 60);
+
+  const kept: NewEvent[] = [];
+  const groups = new Map<string, NewEvent[]>();
+
+  for (const play of plays) {
+    if (play.media_type === "music") {
+      kept.push(play);
+      continue;
+    }
+
+    const ext = play.external_ids as Record<string, unknown> | null | undefined;
+    const videoId =
+      typeof ext?.["youtube_video"] === "string"
+        ? ext["youtube_video"]
+        : play.source_id.split(":")[0] ?? "unknown";
+    const localDate = localParts(play.started_at, tz).date;
+    const groupKey = `${videoId}\0${localDate}`;
+
+    let group = groups.get(groupKey);
+    if (!group) {
+      group = [];
+      groups.set(groupKey, group);
+    }
+    group.push(play);
+  }
+
+  for (const [groupKey, group] of groups.entries()) {
+    const videoId = groupKey.split("\0")[0]!;
+    const sorted = [...group].sort((a, b) =>
+      a.started_at.localeCompare(b.started_at)
+    );
+
+    let merged: NewEvent;
+    if (sorted.length === 1) {
+      merged = sorted[0]!;
+    } else {
+      const first = sorted[0]!;
+      const started_at = first.started_at;
+      let ended_at: string | null = first.ended_at ?? null;
+      let totalWatched = 0;
+      let title: string | null = null;
+      let rawEventsCount = 0;
+      let rawAudibleSeconds = 0;
+      let rawTotalSeconds = 0;
+      let bucket = "";
+
+      for (const p of sorted) {
+        totalWatched += p.duration_seconds ?? 0;
+        if (p.ended_at && (!ended_at || p.ended_at > ended_at)) {
+          ended_at = p.ended_at;
+        }
+        if (typeof p.title === "string" && p.title.trim() !== "") {
+          title = p.title;
+        }
+        const r = (p.raw ?? null) as Record<string, unknown> | null;
+        if (r && typeof r === "object") {
+          if (typeof r.bucket === "string" && bucket === "") {
+            bucket = r.bucket;
+          }
+          if (typeof r.events === "number" && Number.isFinite(r.events)) {
+            rawEventsCount += r.events;
+          }
+          if (
+            typeof r.audible_seconds === "number" &&
+            Number.isFinite(r.audible_seconds)
+          ) {
+            rawAudibleSeconds += r.audible_seconds;
+          }
+          if (
+            typeof r.total_seconds === "number" &&
+            Number.isFinite(r.total_seconds)
+          ) {
+            rawTotalSeconds += r.total_seconds;
+          }
+        }
+      }
+
+      merged = {
+        ...first,
+        source_id: `${videoId}:${started_at}`,
+        title,
+        started_at,
+        ended_at,
+        duration_seconds: totalWatched,
+        raw: {
+          bucket,
+          events: rawEventsCount,
+          audible_seconds: Math.round(rawAudibleSeconds * 1000) / 1000,
+          total_seconds: Math.round(rawTotalSeconds * 1000) / 1000,
+        },
+      };
+    }
+
+    if (minSeconds > 0 && (merged.duration_seconds ?? 0) < minSeconds) {
+      continue;
+    }
+
+    kept.push(merged);
+  }
+
+  kept.sort((a, b) => a.started_at.localeCompare(b.started_at));
+  return kept;
 }

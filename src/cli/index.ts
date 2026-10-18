@@ -44,6 +44,11 @@ import { exportCsv } from "../io/export-csv.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
 import { addManual, type ManualInput } from "../io/manual.ts";
 import { importYoutubeTakeout } from "../sources/youtube/takeout.ts";
+import {
+  enrichYoutubeVideos,
+  type EnrichYoutubeVideosOptions,
+  type EnrichYoutubeVideosResult,
+} from "../sources/youtube/enrich.ts";
 import { createAbsClient, type AbsClient } from "../sources/audiobookshelf/client.ts";
 import {
   ABS_SOURCE,
@@ -102,6 +107,7 @@ export function usage(): string {
     "Commands:",
     "  sync audiobookshelf|simkl|activitywatch  fetch new source activity into the DB",
     "    sync activitywatch --since <date>      backfill older YouTube plays from ActivityWatch",
+    "    youtube enrich [--limit <n>]           enrich stored YouTube videos with channel and category",
     "  auth simkl [--status]                    connect or inspect Simkl authorization",
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
@@ -158,6 +164,10 @@ export interface CliDeps {
   backfillActivityWatch?: (
     deps: BackfillActivityWatchDeps
   ) => Promise<ActivityWatchSyncResult>;
+  enrichYoutubeVideos?: (
+    db: Database,
+    opts?: EnrichYoutubeVideosOptions
+  ) => Promise<EnrichYoutubeVideosResult>;
   /** Override for `it doctor` (tests inject mocked environment deps). */
   runDoctor?: (overrides?: Partial<DoctorDeps>) => Promise<number>;
   /** Environment deps merged into the doctor defaults. */
@@ -321,6 +331,8 @@ async function runSync(
           config,
           now: nowFn,
           out,
+          fetch: deps.fetch,
+          sleep: deps.sleep,
         });
       } else {
         const doSync = deps.syncActivityWatch ?? syncActivityWatch;
@@ -331,6 +343,8 @@ async function runSync(
           config,
           now: nowFn,
           out,
+          fetch: deps.fetch,
+          sleep: deps.sleep,
         });
         out(
           `activitywatch: ${result.seen} seen, ${result.inserted} new (${result.buckets} ${result.buckets === 1 ? "bucket" : "buckets"})`
@@ -1333,6 +1347,87 @@ async function runIngest(args: string[], ctx: SyncContext): Promise<number> {
   return EXIT_USAGE;
 }
 
+async function runYoutube(args: string[], ctx: SyncContext): Promise<number> {
+  const { deps, out, err } = ctx;
+  const [sub, ...rest] = args;
+
+  if (sub !== "enrich") {
+    err("Usage: it youtube enrich [--limit <n>]");
+    return EXIT_USAGE;
+  }
+
+  let limitVal: number | undefined;
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i]!;
+    if (arg === "--limit" || arg.startsWith("--limit=")) {
+      const raw =
+        arg === "--limit" ? rest[i + 1] : arg.slice("--limit=".length);
+      if (arg === "--limit") {
+        i += 1;
+      }
+      if (raw === undefined || raw === "") {
+        err("Missing value for --limit.");
+        return EXIT_USAGE;
+      }
+      if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+        err(`Invalid --limit: "${raw}" (expected a positive integer).`);
+        return EXIT_USAGE;
+      }
+      limitVal = Number(raw);
+    } else {
+      err(`Unknown option: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+  }
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const doEnrich = deps.enrichYoutubeVideos ?? enrichYoutubeVideos;
+    const nowMsFn =
+      deps.nowMs ??
+      (deps.now instanceof Date ? () => deps.now!.getTime() : undefined);
+    const result = await doEnrich(db, {
+      config,
+      limit: limitVal,
+      fetch: deps.fetch as typeof fetch | undefined,
+      sleep: deps.sleep,
+      nowMs: nowMsFn,
+    });
+    out(
+      `youtube enrich: ${result.attempted} attempted, ${result.enriched} enriched, ${result.notFound} not found, ${result.failed} failed`
+    );
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
 /**
  * Run the CLI for the given argument list (without the program name).
  * Returns the process exit code; never calls `process.exit`.
@@ -1393,6 +1488,10 @@ export async function runCli(
 
   if (command === "ingest") {
     return await runIngest(rest, { deps, out, err });
+  }
+
+  if (command === "youtube") {
+    return await runYoutube(rest, { deps, out, err });
   }
 
   if (command === "doctor") {

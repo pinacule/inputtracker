@@ -24,6 +24,7 @@ import {
   getAnnotationsFor,
   type AnnotationKey,
 } from "./annotations.ts";
+import { filterShortYoutubeEvents } from "./youtube-filter.ts";
 
 export const CONSUMPTION_KINDS = new Set([
   "listening_session",
@@ -1019,7 +1020,11 @@ export function getDisplayConsumptionEvents(
   source?: string,
   tz: string = "Europe/Bratislava"
 ): DedupedEvent[] {
-  const events = getLatestConsumptionEvents(db, source);
+  const events = filterShortYoutubeEvents(
+    getLatestConsumptionEvents(db, source),
+    tz,
+    db
+  );
   return dedupeConsumption(events, tz);
 }
 

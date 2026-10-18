@@ -20,8 +20,9 @@ import { finishRun, startRun, type NewEvent } from "../../core/events.ts";
 import type { Sink } from "../../core/sink.ts";
 import { DATE_ONLY_RE, localParts, localToUtcIso } from "../../core/time.ts";
 import { SyncFailedError } from "../audiobookshelf/sync.ts";
-import type { ActivityWatchClient } from "./client.ts";
-import { mapBucketEvents } from "./map.ts";
+import { enrichYoutubeVideos } from "../youtube/enrich.ts";
+import type { ActivityWatchClient, FetchFn } from "./client.ts";
+import { mapBucketEvents, mergePlaysByVideoDay } from "./map.ts";
 
 export { SyncFailedError } from "../audiobookshelf/sync.ts";
 
@@ -37,6 +38,8 @@ export interface BackfillActivityWatchDeps {
   config?: Config;
   now?: () => Date;
   out?: (line: string) => void;
+  fetch?: typeof fetch | FetchFn;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface SyncActivityWatchDeps {
@@ -46,6 +49,8 @@ export interface SyncActivityWatchDeps {
   config?: Config;
   now?: () => Date;
   out?: (line: string) => void;
+  fetch?: typeof fetch | FetchFn;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface ActivityWatchSyncResult {
@@ -97,8 +102,12 @@ export async function syncActivityWatch(
       return { runId, seen: 0, inserted: 0, buckets: 0 };
     }
 
+    const tz = config?.timezone ?? "Europe/Bratislava";
     const device = config?.activitywatch?.device ?? "pc";
     const includeMusic = config?.activitywatch?.include_music ?? false;
+    const minWatchMinutes = config?.youtube?.min_watch_minutes ?? 5;
+    const todayLocal = localParts(nowDate.toISOString(), tz).date;
+    const todayStartMs = new Date(localToUtcIso(todayLocal, tz)).getTime();
 
     for (const bucketId of matchingBucketIds) {
       const syncKey = `activitywatch:${bucketId}`;
@@ -111,17 +120,24 @@ export async function syncActivityWatch(
       let startIso: string;
       if (cursorRow && cursorRow.cursor) {
         const cursorMs = new Date(cursorRow.cursor).getTime();
-        startIso = new Date(cursorMs - TEN_MINUTES_MS).toISOString();
+        startIso = new Date(
+          Math.min(cursorMs - TEN_MINUTES_MS, todayStartMs)
+        ).toISOString();
       } else {
         startIso = new Date(nowDate.getTime() - SEVEN_DAYS_MS).toISOString();
       }
 
       const rawEvents = await client.getEvents(bucketId, startIso, endIso);
 
-      const events = mapBucketEvents(rawEvents, {
+      const rawPlays = mapBucketEvents(rawEvents, {
         bucketId,
         device,
         includeMusic,
+      });
+
+      const events = mergePlaysByVideoDay(rawPlays, {
+        tz,
+        minWatchMinutes,
       });
 
       const writeResult = await sink.write(events, {
@@ -140,7 +156,7 @@ export async function syncActivityWatch(
       let earliestOpenPlayStart: string | null = null;
       let minStartMs = Infinity;
 
-      for (const event of events) {
+      for (const event of rawPlays) {
         if (event.ended_at) {
           const playEndMs = new Date(event.ended_at).getTime();
           if (windowEndMs - playEndMs <= TEN_MINUTES_MS) {
@@ -168,6 +184,14 @@ export async function syncActivityWatch(
       status: "ok",
       rowsSeen: totalSeen,
       rowsInserted: totalInserted,
+    });
+
+    const enrichFetch = deps.fetch ?? client.fetch;
+    await enrichYoutubeVideos(db, {
+      config,
+      fetch: enrichFetch as typeof fetch | undefined,
+      sleep: deps.sleep,
+      nowMs: () => nowDate.getTime(),
     });
 
     return {
@@ -249,6 +273,7 @@ export async function backfillActivityWatch(
 
     const device = config?.activitywatch?.device ?? "pc";
     const includeMusic = config?.activitywatch?.include_music ?? false;
+    const minWatchMinutes = config?.youtube?.min_watch_minutes ?? 5;
 
     for (const bucketId of matchingBucketIds) {
       // Find stored aw_plays for this bucket
@@ -316,7 +341,7 @@ export async function backfillActivityWatch(
             }
           }
 
-          const closedEvents = isFinalChunk
+          const closedPlays = isFinalChunk
             ? mappedEvents
             : mappedEvents.filter((ev) => {
                 const pEndMs = ev.ended_at
@@ -324,6 +349,11 @@ export async function backfillActivityWatch(
                   : new Date(ev.started_at).getTime();
                 return chunkEndMs - pEndMs > TEN_MINUTES_MS;
               });
+
+          const closedEvents = mergePlaysByVideoDay(closedPlays, {
+            tz,
+            minWatchMinutes,
+          });
 
           // Skip any backfill play whose [started_at, ended_at] overlaps a stored aw_play of the same bucket
           const eventsToEmit: NewEvent[] = [];
@@ -376,6 +406,14 @@ export async function backfillActivityWatch(
       status: "ok",
       rowsSeen: totalSeen,
       rowsInserted: totalInserted,
+    });
+
+    const enrichFetch = deps.fetch ?? client.fetch;
+    await enrichYoutubeVideos(db, {
+      config,
+      fetch: enrichFetch as typeof fetch | undefined,
+      sleep: deps.sleep,
+      nowMs: () => nowDate.getTime(),
     });
 
     return {
