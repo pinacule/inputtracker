@@ -13,6 +13,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { categoryOf } from "../core/category.ts";
 import {
   CONSUMPTION_KINDS,
   coverUrlFor,
@@ -22,6 +23,10 @@ import {
   getSeriesOrTitle,
   type ConsumptionEvent,
 } from "./aggregate.ts";
+import {
+  type CategoryFilter,
+  matchesCategoryFilter,
+} from "./overrides.ts";
 
 export interface StreakInfo {
   /** Consecutive active days ending today (or yesterday when today is empty so far). */
@@ -293,6 +298,7 @@ export interface GetInsightsOptions {
   tz: string;
   today: string;
   source?: string;
+  categoryFilter?: CategoryFilter;
 }
 
 /**
@@ -303,7 +309,12 @@ export function getInsights(
   db: Database,
   opts: GetInsightsOptions
 ): InsightsResult {
-  const events = getDisplayConsumptionEvents(db, opts.source, opts.tz);
+  let events = getDisplayConsumptionEvents(db, opts.source, opts.tz);
+  if (opts.categoryFilter) {
+    events = events.filter((e) =>
+      matchesCategoryFilter(categoryOf(e), opts.categoryFilter)
+    );
+  }
   return {
     streaks: computeStreaks(events, opts.tz, opts.today),
     on_this_day: computeOnThisDay(events, opts.tz, opts.today),

@@ -1208,8 +1208,7 @@ describe("Achriom full import runner, HTTP POST /api/import/achriom, and CLI", (
   });
 });
 
-// enable after W04 merges
-describe.skip("Achriom planned/dropped status in Library API", () => {
+describe("Achriom planned/dropped status in Library API", () => {
   test("planned and dropped rows saved through POST /api/import/achriom appear in Library with status planned/dropped and 0 minutes", async () => {
     const db = openDb(":memory:");
     const config = makeTestConfig(":memory:");

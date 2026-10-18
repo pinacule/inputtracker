@@ -10,7 +10,6 @@
 
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { createRequire } from "node:module";
 import type { Hono } from "hono";
 import { categoryOf } from "../core/category.ts";
 import type {
@@ -36,6 +35,7 @@ import {
 } from "./aggregate.ts";
 import type { AppDeps } from "./app.ts";
 import { dedupeConsumption } from "./dedup.ts";
+import { getWorkOverrides } from "./overrides.ts";
 import { normalizeForSearch } from "./search.ts";
 import { isValidYoutubeVideoId } from "./thumbs.ts";
 import {
@@ -277,94 +277,19 @@ export function setVideoTopicOverride(
 }
 
 /**
- * Read video/work topic overrides (`WorkEdit.topic`).
- *
- * TODO(W04): Reads `getWorkOverrides(db)` from `src/server/overrides.ts` when
- * W04 is merged, and also inspects `work_overrides_latest` / `work_overrides`
- * if present in SQLite, plus any overrides registered via `setVideoTopicOverride`.
+ * Read video/work topic overrides (`WorkEdit.topic`) from the work overrides, plus any
+ * registered via `setVideoTopicOverride`.
  */
 export function readWorkTopicOverrides(
   db: Database
 ): Map<string, string | null> {
   const out = new Map<string, string | null>();
 
-  // 1. Check W04's src/server/overrides.ts if available
-  try {
-    const req = createRequire(import.meta.url);
-    const overridesMod = req("./overrides.ts") as {
-      getWorkOverrides?: (database: Database) => unknown;
-    };
-    if (typeof overridesMod?.getWorkOverrides === "function") {
-      const raw = overridesMod.getWorkOverrides(db);
-      if (raw instanceof Map) {
-        for (const [k, v] of raw.entries()) {
-          if (typeof k === "string" && v && typeof v === "object" && "topic" in v) {
-            const t = (v as { topic?: unknown }).topic;
-            if (typeof t === "string" && t.trim() !== "") {
-              out.set(k, t.trim());
-            } else if (t === null) {
-              out.set(k, null);
-            }
-          }
-        }
-      } else if (Array.isArray(raw)) {
-        for (const item of raw) {
-          if (item && typeof item === "object") {
-            const k =
-              (item as { key?: unknown; work_key?: unknown }).key ??
-              (item as { work_key?: unknown }).work_key;
-            const t = (item as { topic?: unknown }).topic;
-            if (typeof k === "string") {
-              if (typeof t === "string" && t.trim() !== "") {
-                out.set(k, t.trim());
-              } else if (t === null) {
-                out.set(k, null);
-              }
-            }
-          }
-        }
-      } else if (raw && typeof raw === "object") {
-        for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-          if (v && typeof v === "object" && "topic" in v) {
-            const t = (v as { topic?: unknown }).topic;
-            if (typeof t === "string" && t.trim() !== "") {
-              out.set(k, t.trim());
-            } else if (t === null) {
-              out.set(k, null);
-            }
-          }
-        }
-      }
-    }
-  } catch {
-    // src/server/overrides.ts is owned by W04 and may not exist on this branch yet.
-  }
-
-  // 2. Also check SQLite tables/views if W04's migration v6 is applied
-  if (out.size === 0) {
-    for (const viewOrTable of ["work_overrides_latest", "work_edits_latest"]) {
-      try {
-        const rows = db
-          .query<Record<string, unknown>, []>(`SELECT * FROM ${viewOrTable};`)
-          .all();
-        for (const row of rows) {
-          const k =
-            typeof row.work_key === "string"
-              ? row.work_key
-              : typeof row.key === "string"
-                ? row.key
-                : null;
-          if (!k) continue;
-          if (typeof row.topic === "string" && row.topic.trim() !== "") {
-            out.set(k, row.topic.trim());
-          } else if (row.topic === null) {
-            out.set(k, null);
-          }
-        }
-        break;
-      } catch {
-        // View does not exist
-      }
+  // 1. Topics stored with WorkEdit.topic (work overrides, migration v6).
+  for (const [key, override] of getWorkOverrides(db)) {
+    const t = override.topic;
+    if (typeof t === "string" && t.trim() !== "") {
+      out.set(key, t.trim());
     }
   }
 

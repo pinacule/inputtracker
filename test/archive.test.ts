@@ -175,7 +175,7 @@ describe("Migration v4 (events_latest hides tombstones)", () => {
       .all()
       .map((r) => r.version);
     expect(versions).toEqual(
-      migrations.map((m) => m.version).sort((a, b) => a - b)
+      [...migrations].map((m) => m.version).sort((a, b) => a - b)
     );
 
     // After v4 upgrade, events_latest hides the tombstoned s2 row

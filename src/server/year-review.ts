@@ -18,6 +18,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { categoryOf } from "../core/category.ts";
 import {
   CONSUMPTION_KINDS,
   coverUrlFor,
@@ -32,6 +33,10 @@ import {
   annotationMapKey,
   getAnnotationsFor,
 } from "./annotations.ts";
+import {
+  type CategoryFilter,
+  matchesCategoryFilter,
+} from "./overrides.ts";
 
 export interface ReviewTotals {
   items: number;
@@ -449,6 +454,7 @@ export interface GetYearReviewOptions {
   year: number;
   today: string;
   source?: string;
+  categoryFilter?: CategoryFilter;
 }
 
 /**
@@ -461,7 +467,12 @@ export function getYearReview(
   db: Database,
   opts: GetYearReviewOptions
 ): YearReview {
-  const events = getDisplayConsumptionEvents(db, opts.source, opts.tz);
+  let events = getDisplayConsumptionEvents(db, opts.source, opts.tz);
+  if (opts.categoryFilter) {
+    events = events.filter((e) =>
+      matchesCategoryFilter(categoryOf(e), opts.categoryFilter)
+    );
+  }
   const review = computeYearReview(events, opts.tz, opts.year, opts.today);
 
   const annotations = getAnnotationsFor(

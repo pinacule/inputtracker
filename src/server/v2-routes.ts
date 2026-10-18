@@ -4,7 +4,6 @@
  */
 
 import type { Hono } from "hono";
-import { isCategory, type Category } from "../core/category.ts";
 import type { AppDeps } from "./app.ts";
 import {
   ArchiveNotFoundError,
@@ -14,10 +13,18 @@ import {
   saveArchiveEntry,
 } from "./archive.ts";
 import {
+  editLibraryWork,
+  getHiddenLibraryWorks,
   getLibrary,
   getLibraryWorkDetail,
   type LibrarySort,
 } from "./library.ts";
+import {
+  CategoryFilterValidationError,
+  parseCategoryFilter,
+  WorkOverrideNotFoundError,
+  WorkOverrideValidationError,
+} from "./overrides.ts";
 import { getMonthReview, getSeries, getYearReviewV2 } from "./review.ts";
 import { getSettings } from "./settings.ts";
 
@@ -112,39 +119,35 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
     }
   });
 
-  // GET /api/archive?category=
+  // GET /api/archive?category=&exclude=
   app.get("/api/archive", (c) => {
-    const err = validateQueryParams(c.req.url, ["category"]);
+    const err = validateQueryParams(c.req.url, ["category", "exclude"]);
     if (err) {
       return c.json({ error: err }, 400);
     }
 
-    const catRaw = c.req.query("category");
-    let category: Category | undefined = undefined;
-    if (catRaw !== undefined && catRaw !== "") {
-      if (!isCategory(catRaw)) {
-        return c.json({ error: `Invalid category: '${catRaw}'` }, 400);
+    try {
+      return c.json(
+        listArchiveEntries(db, c.req.query("category"), c.req.query("exclude"))
+      );
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
       }
-      category = catRaw;
+      throw caught;
     }
-
-    return c.json(listArchiveEntries(db, category));
   });
 
-  // GET /api/library?category=<Category>&q=&sort=recent|time|title
+  // GET /api/library?category=<Category,...>&exclude=<Category,...>&q=&sort=recent|time|title
   app.get("/api/library", (c) => {
-    const err = validateQueryParams(c.req.url, ["category", "q", "sort"]);
+    const err = validateQueryParams(c.req.url, [
+      "category",
+      "exclude",
+      "q",
+      "sort",
+    ]);
     if (err) {
       return c.json({ error: err }, 400);
-    }
-
-    const catRaw = c.req.query("category");
-    let category: Category | undefined = undefined;
-    if (catRaw !== undefined && catRaw !== "") {
-      if (!isCategory(catRaw)) {
-        return c.json({ error: `Invalid category: '${catRaw}'` }, 400);
-      }
-      category = catRaw;
     }
 
     const q = c.req.query("q");
@@ -169,7 +172,23 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
       sort = sortRaw;
     }
 
-    return c.json(getLibrary(db, { category, q, sort, tz }));
+    try {
+      return c.json(
+        getLibrary(db, {
+          category: c.req.query("category"),
+          exclude: c.req.query("exclude"),
+          q,
+          sort,
+          tz,
+          config,
+        })
+      );
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
   });
 
   // GET /api/library/work?key=
@@ -190,20 +209,81 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
       );
     }
 
-    const detail = getLibraryWorkDetail(db, key, tz);
+    const detail = getLibraryWorkDetail(db, key, tz, config);
     if (detail === null) {
       return c.json({ error: "Work not found" }, 404);
     }
     return c.json(detail);
   });
 
-  // GET /api/series?bucket=day|week|month&from=YYYY-MM-DD&to=YYYY-MM-DD[&category=]
+  // POST /api/library/work/edit?key=
+  app.post("/api/library/work/edit", async (c) => {
+    const err = validateQueryParams(c.req.url, ["key"]);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    const key = c.req.query("key");
+    if (key === undefined || key === "") {
+      return c.json({ error: "Missing required query parameter: key" }, 400);
+    }
+    if (key.length > 500) {
+      return c.json(
+        { error: `Invalid key: too long (${key.length} characters, max 500)` },
+        400
+      );
+    }
+
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch (caught) {
+      return c.json(
+        {
+          error: `Invalid JSON body: ${
+            caught instanceof Error ? caught.message : String(caught)
+          }`,
+        },
+        400
+      );
+    }
+
+    try {
+      const detail = await editLibraryWork(db, key, body, {
+        tz,
+        config,
+        fetch: deps.fetchImage,
+      });
+      return c.json(detail);
+    } catch (caught) {
+      if (caught instanceof WorkOverrideValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      if (caught instanceof WorkOverrideNotFoundError) {
+        return c.json({ error: caught.message }, 404);
+      }
+      throw caught;
+    }
+  });
+
+  // GET /api/library/hidden
+  app.get("/api/library/hidden", (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) {
+      return c.json({ error: err }, 400);
+    }
+
+    return c.json(getHiddenLibraryWorks(db, tz, config));
+  });
+
+  // GET /api/series?bucket=day|week|month&from=YYYY-MM-DD&to=YYYY-MM-DD[&category=][&exclude=]
   app.get("/api/series", (c) => {
     const err = validateQueryParams(c.req.url, [
       "bucket",
       "from",
       "to",
       "category",
+      "exclude",
     ]);
     if (err) {
       return c.json({ error: err }, 400);
@@ -253,21 +333,32 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
       return c.json({ error: "'from' date must not be after 'to' date" }, 400);
     }
 
-    const catRaw = c.req.query("category");
-    let category: Category | undefined = undefined;
-    if (catRaw !== undefined && catRaw !== "") {
-      if (!isCategory(catRaw)) {
-        return c.json({ error: `Invalid category: '${catRaw}'` }, 400);
+    try {
+      return c.json(
+        getSeries(db, {
+          bucket: bucketRaw,
+          from,
+          to,
+          category: c.req.query("category"),
+          exclude: c.req.query("exclude"),
+          tz,
+        })
+      );
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
       }
-      category = catRaw;
+      throw caught;
     }
-
-    return c.json(getSeries(db, { bucket: bucketRaw, from, to, category, tz }));
   });
 
-  // GET /api/review/month?month=YYYY-MM
+  // GET /api/review/month?month=YYYY-MM[&category=][&exclude=]
   app.get("/api/review/month", (c) => {
-    const err = validateQueryParams(c.req.url, ["month"]);
+    const err = validateQueryParams(c.req.url, [
+      "month",
+      "category",
+      "exclude",
+    ]);
     if (err) {
       return c.json({ error: err }, 400);
     }
@@ -283,12 +374,27 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
       );
     }
 
-    return c.json(getMonthReview(db, month, tz));
+    try {
+      const filter = parseCategoryFilter(
+        c.req.query("category"),
+        c.req.query("exclude")
+      );
+      return c.json(getMonthReview(db, month, tz, filter));
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
   });
 
-  // GET /api/review/year?year=YYYY
+  // GET /api/review/year?year=YYYY[&category=][&exclude=]
   app.get("/api/review/year", (c) => {
-    const err = validateQueryParams(c.req.url, ["year"]);
+    const err = validateQueryParams(c.req.url, [
+      "year",
+      "category",
+      "exclude",
+    ]);
     if (err) {
       return c.json({ error: err }, 400);
     }
@@ -304,7 +410,18 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
       );
     }
 
-    return c.json(getYearReviewV2(db, Number(yearRaw), tz));
+    try {
+      const filter = parseCategoryFilter(
+        c.req.query("category"),
+        c.req.query("exclude")
+      );
+      return c.json(getYearReviewV2(db, Number(yearRaw), tz, filter));
+    } catch (caught) {
+      if (caught instanceof CategoryFilterValidationError) {
+        return c.json({ error: caught.message }, 400);
+      }
+      throw caught;
+    }
   });
 
   // GET /api/settings

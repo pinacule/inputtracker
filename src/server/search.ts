@@ -31,6 +31,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { categoryOf } from "../core/category.ts";
 import {
   CONSUMPTION_KINDS,
   coverUrlFor,
@@ -40,6 +41,10 @@ import {
   type ConsumptionEvent,
 } from "./aggregate.ts";
 import { getAnnotation } from "./annotations.ts";
+import {
+  type CategoryFilter,
+  matchesCategoryFilter,
+} from "./overrides.ts";
 
 /** Combining diacritical marks (Unicode range) stripped by `normalizeForSearch`. */
 const COMBINING_MARKS = /[\u0300-\u036f]/g;
@@ -543,11 +548,17 @@ export function titleHistory(
 
 export interface GetSearchOptions extends SearchOptions {
   tz: string;
+  categoryFilter?: CategoryFilter;
 }
 
 /** Reads consumption events through `getDisplayConsumptionEvents` and searches them. */
 export function search(db: Database, opts: GetSearchOptions): SearchResult {
-  const events = getDisplayConsumptionEvents(db, opts.source, opts.tz);
+  let events = getDisplayConsumptionEvents(db, opts.source, opts.tz);
+  if (opts.categoryFilter) {
+    events = events.filter((e) =>
+      matchesCategoryFilter(categoryOf(e), opts.categoryFilter)
+    );
+  }
   return searchEvents(events, opts.tz, {
     q: opts.q,
     source: opts.source,

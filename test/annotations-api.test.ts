@@ -187,9 +187,10 @@ describe("Annotations API (/api/annotations)", () => {
       });
 
     const badBodies: Array<[string, unknown]> = [
-      ["rating 0", { source: "manual", title: "T", rating: 0 }],
+      ["rating -0.1", { source: "manual", title: "T", rating: -0.1 }],
+      ["rating 10.1", { source: "manual", title: "T", rating: 10.1 }],
       ["rating 11", { source: "manual", title: "T", rating: 11 }],
-      ["rating 7.5", { source: "manual", title: "T", rating: 7.5 }],
+      ["rating 7.25", { source: "manual", title: "T", rating: 7.25 }],
       ["rating string", { source: "manual", title: "T", rating: "8" }],
       ["note too long", { source: "manual", title: "T", note: "x".repeat(5001) }],
       ["title too long", { source: "manual", title: "x".repeat(501) }],

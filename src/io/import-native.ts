@@ -40,6 +40,7 @@ import {
   parseRating,
   parseRevId,
 } from "../server/annotations.ts";
+import { tenthsToLegacyRating } from "../server/ratings.ts";
 import { toUtcIso } from "../core/time.ts";
 
 /** `events` source used for the ingest run recorded by an import. */
@@ -179,6 +180,7 @@ interface ValidatedAnnotationRow {
   title: string;
   rev_id: string;
   rating: number | null;
+  rating_tenths: number | null;
   note: string | null;
   created_at: string;
 }
@@ -240,12 +242,25 @@ function validateAnnotationRow(
 
   let rating: number | null;
   try {
-    rating = parseRating(record.rating);
+    const parsedLegacy =
+      record.rating !== undefined && record.rating !== null
+        ? parseRating(record.rating)
+        : null;
+    const parsedTenths =
+      record.rating_tenths !== undefined && record.rating_tenths !== null
+        ? typeof record.rating_tenths === "number" &&
+          Number.isInteger(record.rating_tenths)
+          ? parseRating(record.rating_tenths / 10)
+          : parseRating(record.rating_tenths)
+        : null;
+    rating = parsedLegacy ?? parsedTenths;
   } catch (e) {
     throw new AnnotationValidationError(
       `Annotation at index ${index}: ${(e as Error).message}`
     );
   }
+  const ratingTenths = rating === null ? null : Math.round(rating * 10);
+  const legacyRating = tenthsToLegacyRating(ratingTenths);
 
   let note: string | null;
   try {
@@ -284,7 +299,8 @@ function validateAnnotationRow(
     source: key.source,
     title: key.title,
     rev_id: revId,
-    rating,
+    rating: legacyRating,
+    rating_tenths: ratingTenths,
     note,
     created_at: createdAt,
   };
@@ -564,12 +580,12 @@ export function importNative(
       if (annotationRows.length > 0) {
         const annStmt = db.prepare(
           `INSERT OR IGNORE INTO annotations (
-            record_hash, source, title, rev_id, rating, note, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?);`
+            record_hash, source, title, rev_id, rating, rating_tenths, note, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`
         );
         for (const a of annotationRows) {
           const res = annStmt.run(
-            a.record_hash, a.source, a.title, a.rev_id, a.rating, a.note,
+            a.record_hash, a.source, a.title, a.rev_id, a.rating, a.rating_tenths, a.note,
             a.created_at
           );
           annotationsInserted += res.changes;
