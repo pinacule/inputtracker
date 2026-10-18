@@ -70,6 +70,7 @@ import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
 import { getYoutubeThumb, isValidYoutubeVideoId } from "./thumbs.ts";
 import { handleYoutubePlays } from "./ingest.ts";
+import { registerAchriomRoutes } from "./achriom-routes.ts";
 import { registerLookupRoutes } from "./lookup-routes.ts";
 import { registerV2Routes } from "./v2-routes.ts";
 import { registerYoutubeRoutes } from "./youtube-routes.ts";
@@ -968,6 +969,7 @@ export function createApp(deps: AppDeps): Hono {
   registerLookupRoutes(app, deps);
   registerV2Routes(app, deps);
   registerYoutubeRoutes(app, deps);
+  registerAchriomRoutes(app, deps);
 
   // Fallback for unknown /api routes
   app.all("/api", (c) => {

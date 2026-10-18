@@ -43,6 +43,7 @@ import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
 import { addManual, type ManualInput } from "../io/manual.ts";
+import { importAchriom } from "../io/import-achriom.ts";
 import { importYoutubeTakeout } from "../sources/youtube/takeout.ts";
 import {
   enrichYoutubeVideos,
@@ -113,6 +114,7 @@ export function usage(): string {
     "  export --format json|csv --out <file>    export the full events archive to a file",
     "  import <file> [--format json|csv]        import a native export file into the DB",
     "    import youtube-takeout <file>          import a YouTube Takeout watch-history JSON file",
+    "    import achriom <path> [--dry-run]      import an Achriom library export (.zip or .csv)",
     "  backup                                   snapshot the DB + JSON export into backup_dir",
     "  notify test                              test every configured notification channel",
     "  notify weekly                            push the weekly summary (needs notify.weekly_summary)",
@@ -142,6 +144,7 @@ export interface CliDeps {
   runBackup?: (db: Database, options: BackupOptions) => BackupResult;
   writeFile?: (path: string, data: string) => void;
   readFile?: (path: string) => string;
+  readFileBytes?: (path: string) => Uint8Array;
   out?: (line: string) => void;
   err?: (line: string) => void;
   env?: Record<string, string | undefined>;
@@ -698,11 +701,14 @@ function parseImportArgs(args: string[]): ImportParseResult {
   return { ok: true, value: { file, format: resolved } };
 }
 
-function runImport(args: string[], ctx: SyncContext): number {
+async function runImport(args: string[], ctx: SyncContext): Promise<number> {
   const { deps, out, err } = ctx;
 
   if (args[0] === "youtube-takeout") {
     return runYoutubeTakeoutImport(args.slice(1), ctx);
+  }
+  if (args[0] === "achriom") {
+    return await runAchriomImport(args.slice(1), ctx);
   }
 
   const parsed = parseImportArgs(args);
@@ -814,6 +820,105 @@ function runYoutubeTakeoutImport(args: string[], ctx: SyncContext): number {
         `${result.inserted} new, skipped ${skipped.ads} ads, ` +
         `${skipped.no_video} without video, ${skipped.other} other, ` +
         `${skipped.invalid} invalid`
+    );
+    return EXIT_OK;
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
+async function runAchriomImport(
+  args: string[],
+  ctx: SyncContext
+): Promise<number> {
+  const { deps, out, err } = ctx;
+
+  let file: string | undefined;
+  let dryRun = false;
+
+  for (const arg of args) {
+    if (arg === "--dry-run") {
+      dryRun = true;
+    } else if (arg.startsWith("-")) {
+      err(`Unknown option: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    } else if (file === undefined) {
+      file = arg;
+    } else {
+      err(`Unexpected argument: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+  }
+
+  if (file === undefined || file === "") {
+    err("Missing <path>.");
+    err(usage());
+    return EXIT_USAGE;
+  }
+
+  const doLoadConfig = deps.loadConfig ?? loadConfig;
+  const doOpenDb = deps.openDb ?? openDb;
+
+  let config: Config;
+  try {
+    config = doLoadConfig(deps.env ? { env: deps.env } : undefined);
+  } catch (caught) {
+    err(redactMessage(errorText(caught)));
+    return EXIT_FAILURE;
+  }
+
+  let input: Uint8Array | string;
+  try {
+    if (deps.readFileBytes) {
+      input = deps.readFileBytes(file);
+    } else if (deps.readFile) {
+      input = deps.readFile(file);
+    } else {
+      input = new Uint8Array(readFileSync(file));
+    }
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  let db: Database;
+  try {
+    db = doOpenDb(config.storage.db_path);
+  } catch (caught) {
+    err(redactMessage(errorText(caught), config));
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const result = await importAchriom({
+      db,
+      config,
+      input,
+      filename: file,
+      dryRun,
+      fetch: deps.fetch as typeof fetch | undefined,
+      now:
+        deps.nowMs ??
+        (deps.now instanceof Date ? () => deps.now!.getTime() : undefined),
+    });
+    const totalRows = Object.values(result.rows).reduce((a, b) => a + b, 0);
+    const filesBreakdown = Object.entries(result.rows)
+      .map(([f, n]) => `${f}: ${n}`)
+      .join(", ");
+    out(
+      `achriom${result.dry_run ? " (dry-run)" : ""}: ${totalRows} rows (${filesBreakdown}), ` +
+        `${result.created} created, ${result.updated} updated, ${result.unchanged} unchanged, ` +
+        `${result.planned} planned, ${result.matched} matched, ` +
+        `${result.skipped.length} skipped, ${result.total_minutes} min`
     );
     return EXIT_OK;
   } catch (caught) {
@@ -1467,7 +1572,7 @@ export async function runCli(
   }
 
   if (command === "import") {
-    return runImport(rest, { deps, out, err });
+    return await runImport(rest, { deps, out, err });
   }
 
   if (command === "backup") {
