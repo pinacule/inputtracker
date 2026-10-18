@@ -1,0 +1,263 @@
+/**
+ * InputTracker Design System — Tokens
+ *
+ * Aesthetic: Cover-first, calm and warm.
+ * Inspired by a quiet personal reading room and curated media shelf:
+ * warm linen/paper surfaces in light mode, deep espresso/walnut charcoal in dark mode,
+ * refined literary serif headings paired with crisp UI sans, soft warm shadows,
+ * and distinct, harmonious colours for each media kind.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* --- Typography --- */
+  --font-serif: "Iowan Old Style", "Palatino Linotype", "URW Palladio L", P052,
+    Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+
+  /* Type scale */
+  --text-xs: 0.75rem;      /* 12px */
+  --text-sm: 0.875rem;     /* 14px */
+  --text-base: 1rem;       /* 16px */
+  --text-lg: 1.125rem;     /* 18px */
+  --text-xl: 1.3125rem;    /* 21px */
+  --text-2xl: 1.625rem;    /* 26px */
+  --text-3xl: 2.125rem;    /* 34px */
+  --text-4xl: 2.75rem;     /* 44px */
+
+  --leading-tight: 1.18;
+  --leading-snug: 1.32;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.05em;
+  --tracking-wider: 0.08em;
+
+  /* --- Spacing scale --- */
+  --space-0: 0;
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+
+  /* --- Radii --- */
+  --radius-xs: 5px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 9999px;
+
+  /* --- Layout --- */
+  --sidebar-width: 256px;
+  --mobile-nav-height: 68px;
+  --content-max-width: 1320px;
+
+  /* --- Motion --- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 140ms;
+  --duration-normal: 220ms;
+  --duration-slow: 340ms;
+
+  /* --- Light Theme (Warm Paper & Linen) --- */
+  --bg-canvas: #f6f2ea;
+  --bg-surface: #fffdf9;
+  --bg-surface-raised: #ffffff;
+  --bg-subtle: #ede7dc;
+  --bg-muted: #e2dacb;
+  --bg-overlay: rgba(28, 24, 19, 0.45);
+
+  --text-primary: #1f1b16;
+  --text-secondary: #4e463d;
+  --text-muted: #6b6156;
+  --text-on-accent: #fffdf9;
+
+  --border-subtle: #e5dec9;
+  --border-default: #d5cbb8;
+  --border-strong: #b5a892;
+
+  /* Brand / Primary Accent (Warm Terracotta & Library Leather) */
+  --accent-primary: #9c4221;
+  --accent-primary-hover: #7f3418;
+  --accent-primary-subtle: #f6e7e0;
+  --accent-primary-border: #e2beaf;
+  --focus-ring: #9c4221;
+
+  /* Semantic Status Colours */
+  --status-success-fg: #1b6545;
+  --status-success-bg: #e6f4ed;
+  --status-success-border: #b4dfc8;
+
+  --status-warning-fg: #8c4f04;
+  --status-warning-bg: #fdf1de;
+  --status-warning-border: #eccb98;
+
+  --status-danger-fg: #a82424;
+  --status-danger-bg: #fcebeb;
+  --status-danger-border: #f0bcbc;
+
+  /* --- Media Kind Tokens (4 distinct, warm, WCAG-AA compliant families) --- */
+
+  /* 1. Audiobook (Audiobookshelf, Podcasts) — Warm Plum / Amethyst */
+  --kind-audiobook-fg: #5e348a;
+  --kind-audiobook-bg: #f1ebf8;
+  --kind-audiobook-border: #d4c1eb;
+  --kind-audiobook-solid: #6d3fa0;
+  --kind-audiobook-tile-start: #5b3386;
+  --kind-audiobook-tile-end: #391d59;
+
+  /* 2. YouTube (Videos, Streams) — Warm Vermilion / Terracotta Red */
+  --kind-youtube-fg: #a6261b;
+  --kind-youtube-bg: #fcede9;
+  --kind-youtube-border: #f0c2b8;
+  --kind-youtube-solid: #c23528;
+  --kind-youtube-tile-start: #a82b20;
+  --kind-youtube-tile-end: #6e1810;
+
+  /* 3. Film & Series (Simkl, Movies, TV) — Warm Ochre / Cinema Amber */
+  --kind-film-fg: #824905;
+  --kind-film-bg: #fcf0dc;
+  --kind-film-border: #e8c996;
+  --kind-film-solid: #be7112;
+  --kind-film-tile-start: #9c5b0b;
+  --kind-film-tile-end: #633704;
+
+  /* 4. Manual (Books, Music, Custom) — Botanical Sage / Forest Green */
+  --kind-manual-fg: #1b6144;
+  --kind-manual-bg: #e6f3ec;
+  --kind-manual-border: #b5dcc8;
+  --kind-manual-solid: #267855;
+  --kind-manual-tile-start: #226649;
+  --kind-manual-tile-end: #123d2a;
+
+  /* --- Calendar Intensity Heat Wash (Light) --- */
+  --heat-0: var(--bg-surface);
+  --heat-1: #f7efe2;
+  --heat-2: #efe1c8;
+  --heat-3: #e5cca3;
+  --heat-4: #d8b27c;
+  --heat-border-1: #e4d4ba;
+  --heat-border-2: #d8c098;
+  --heat-border-3: #c7a470;
+  --heat-border-4: #b5894c;
+
+  /* --- Shadows --- */
+  --shadow-xs: 0 1px 2px rgba(31, 27, 22, 0.05);
+  --shadow-sm: 0 2px 6px rgba(31, 27, 22, 0.06), 0 1px 2px rgba(31, 27, 22, 0.04);
+  --shadow-md: 0 8px 22px rgba(31, 27, 22, 0.08), 0 2px 6px rgba(31, 27, 22, 0.05);
+  --shadow-lg: 0 18px 42px rgba(31, 27, 22, 0.14), 0 4px 12px rgba(31, 27, 22, 0.08);
+  --shadow-cover: 0 6px 16px rgba(25, 20, 14, 0.16), 0 2px 4px rgba(25, 20, 14, 0.1),
+    inset 1px 0 0 rgba(255, 255, 255, 0.22);
+}
+
+/* --- Dark Theme (Deep Warm Charcoal Study) --- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-canvas: #14120f;
+    --bg-surface: #1d1a16;
+    --bg-surface-raised: #25211c;
+    --bg-subtle: #29241e;
+    --bg-muted: #352f27;
+    --bg-overlay: rgba(8, 7, 5, 0.72);
+
+    --text-primary: #f4efe6;
+    --text-secondary: #c4bba9;
+    --text-muted: #998f7e;
+    --text-on-accent: #14120f;
+
+    --border-subtle: #2b2620;
+    --border-default: #3a332b;
+    --border-strong: #54493e;
+
+    --accent-primary: #e58564;
+    --accent-primary-hover: #f09b7e;
+    --accent-primary-subtle: #321f18;
+    --accent-primary-border: #5e382b;
+    --focus-ring: #e58564;
+
+    --status-success-fg: #8adbb5;
+    --status-success-bg: #162b21;
+    --status-success-border: #28523f;
+
+    --status-warning-fg: #f5c67a;
+    --status-warning-bg: #2e2211;
+    --status-warning-border: #59401d;
+
+    --status-danger-fg: #f7a6a6;
+    --status-danger-bg: #321a1a;
+    --status-danger-border: #5e2e2e;
+
+    /* 1. Audiobook (Dark) */
+    --kind-audiobook-fg: #d3b8f8;
+    --kind-audiobook-bg: #271d35;
+    --kind-audiobook-border: #4a3566;
+    --kind-audiobook-solid: #a37bf0;
+    --kind-audiobook-tile-start: #4b2a70;
+    --kind-audiobook-tile-end: #2a1542;
+
+    /* 2. YouTube (Dark) */
+    --kind-youtube-fg: #f8afa6;
+    --kind-youtube-bg: #331c19;
+    --kind-youtube-border: #61312b;
+    --kind-youtube-solid: #e46356;
+    --kind-youtube-tile-start: #8f251c;
+    --kind-youtube-tile-end: #52120d;
+
+    /* 3. Film & Series (Dark) */
+    --kind-film-fg: #f6c982;
+    --kind-film-bg: #302312;
+    --kind-film-border: #5c421f;
+    --kind-film-solid: #e29a38;
+    --kind-film-tile-start: #824b08;
+    --kind-film-tile-end: #4a2903;
+
+    /* 4. Manual (Dark) */
+    --kind-manual-fg: #8fdcb8;
+    --kind-manual-bg: #172b22;
+    --kind-manual-border: #2a5441;
+    --kind-manual-solid: #4cb888;
+    --kind-manual-tile-start: #1d543c;
+    --kind-manual-tile-end: #0f3021;
+
+    /* Calendar Intensity Heat Wash (Dark) */
+    --heat-0: var(--bg-surface);
+    --heat-1: #231e17;
+    --heat-2: #2d241a;
+    --heat-3: #3b2d1d;
+    --heat-4: #4d3720;
+    --heat-border-1: #362d22;
+    --heat-border-2: #4a3a28;
+    --heat-border-3: #634b30;
+    --heat-border-4: #7d5d39;
+
+    /* Shadows (Dark) */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.38);
+    --shadow-md: 0 10px 26px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.6);
+    --shadow-cover: 0 8px 20px rgba(0, 0, 0, 0.55), 0 2px 5px rgba(0, 0, 0, 0.4),
+      inset 1px 0 0 rgba(255, 255, 255, 0.14);
+  }
+}
+
+/* Respect reduced motion preferences globally */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+  }
+}

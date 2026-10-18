@@ -1,7 +1,7 @@
 import { render } from "preact";
 import { App } from "./App";
 import { startQueueSync } from "./lib/offline-queue";
-import "./style.css";
+import "./styles/index.css";
 
 const root = document.getElementById("app");
 if (root !== null) {

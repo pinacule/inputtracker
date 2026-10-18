@@ -1,95 +1,90 @@
 import { useEffect, useState } from "preact/hooks";
-import { OfflineBanner } from "./components/OfflineBanner";
 import { getDefaultStore, subscribeQueue } from "./lib/offline-queue";
-import { Add } from "./pages/Add";
+import {
+  ALL_ROUTES,
+  DEFAULT_ROUTE,
+  MEDIA_KINDS,
+  MOBILE_MORE_ROUTES,
+  MOBILE_PRIMARY_ROUTES,
+  parseHash,
+  type MediaKind,
+  type ParsedRoute,
+  type Route,
+} from "./lib/ui-helpers";
 import { Calendar } from "./pages/Calendar";
-import { Heatmap } from "./pages/Heatmap";
-import { ImportExport } from "./pages/ImportExport";
-import { Progress } from "./pages/Progress";
-import { Search } from "./pages/Search";
-import { Stats } from "./pages/Stats";
-import { YearReviewPage } from "./pages/YearReview";
+import { PlaceholderPage } from "./pages/PlaceholderPage";
+import {
+  BookIcon,
+  IconButton,
+  MoreIcon,
+  OfflineIcon,
+  RouteIcon,
+  SearchIcon,
+  Sheet,
+} from "./ui";
 
-type Route =
-  | "calendar"
-  | "progress"
-  | "heatmap"
-  | "stats"
-  | "importexport"
-  | "add"
-  | "year"
-  | "search";
-
-const ROUTES: ReadonlyArray<{ id: Route; label: string }> = [
-  { id: "calendar", label: "Calendar" },
-  { id: "progress", label: "Progress" },
-  { id: "heatmap", label: "Heatmap" },
-  { id: "stats", label: "Stats" },
-  { id: "importexport", label: "Import/Export" },
-  { id: "add", label: "Add" },
+const DESKTOP_LIBRARY_ROUTES: ReadonlyArray<Route> = [
+  "calendar",
+  "progress",
+  "stats",
+  "heatmap",
+  "year",
+  "search",
 ];
 
-/** All routable pages. `year` and `search` have no bottom-nav tab: the bar is already full on a phone. */
-const PAGES: ReadonlyArray<{ id: Route; label: string }> = [
-  ...ROUTES,
-  { id: "year", label: "Year in review" },
-  { id: "search", label: "Search" },
-];
+const DESKTOP_UTILITY_ROUTES: ReadonlyArray<Route> = ["add", "importexport"];
 
-const DEFAULT_ROUTE: Route = "calendar";
+function OfflineBanner() {
+  const [online, setOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine
+  );
 
-interface ParsedRoute {
-  route: Route;
-  date?: string;
-  year?: string;
-  q?: string;
-  hitKey?: string;
-}
+  useEffect(() => {
+    const goOnline = () => setOnline(true);
+    const goOffline = () => setOnline(false);
 
-/** Read the route and optional query params out of the hash (e.g. `#/calendar?date=2026-10-17`, `#/search?q=harry`). */
-function parseHash(hash: string): ParsedRoute {
-  const stripped = hash.replace(/^#\/?/, "");
-  const [pathPart, queryPart] = stripped.split("?");
-  const raw = (pathPart ?? "").split(/[?/]/, 1)[0];
-  const match = PAGES.find((route) => route.id === raw);
-  const route = match ? match.id : DEFAULT_ROUTE;
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
 
-  let date: string | undefined;
-  let year: string | undefined;
-  let q: string | undefined;
-  let hitKey: string | undefined;
-  if (queryPart) {
-    const params = new URLSearchParams(queryPart);
-    const d = params.get("date");
-    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
-      date = d;
+    if (typeof navigator !== "undefined") {
+      setOnline(navigator.onLine);
     }
-    const y = params.get("year");
-    if (y && /^\d{4}$/.test(y)) {
-      year = y;
-    }
-    // Free-text query / opaque hit key, capped like the server accepts them.
-    const qRaw = params.get("q");
-    if (qRaw && qRaw.length <= 200) {
-      q = qRaw;
-    }
-    const keyRaw = params.get("key");
-    if (keyRaw && keyRaw.length <= 500) {
-      hitKey = keyRaw;
-    }
+
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
+  if (online) {
+    return null;
   }
 
-  return { route, date, year, q, hitKey };
+  return (
+    <div class="offline-banner" role="status" aria-live="polite">
+      <OfflineIcon size={15} />
+      <span>Offline — showing saved data</span>
+    </div>
+  );
 }
 
 export function App() {
-  const [{ route, date, year, q, hitKey }, setLocation] = useState<ParsedRoute>(() =>
-    parseHash(window.location.hash)
+  const [{ route, date, year, q, hitKey }, setLocation] = useState<ParsedRoute>(
+    () => parseHash(window.location.hash)
   );
   const [queueCount, setQueueCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState(q ?? "");
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
-    const onHashChange = () => setLocation(parseHash(window.location.hash));
+    const onHashChange = () => {
+      const parsed = parseHash(window.location.hash);
+      setLocation(parsed);
+      if (parsed.q !== undefined) {
+        setSearchQuery(parsed.q);
+      }
+      setMoreOpen(false);
+    };
     window.addEventListener("hashchange", onHashChange);
     if (window.location.hash === "") {
       window.location.hash = `#/${DEFAULT_ROUTE}`;
@@ -97,7 +92,7 @@ export function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  // Count of entries waiting to send, for the badge on the Add tab.
+  // Keep offline queue badge count up to date.
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
@@ -118,42 +113,273 @@ export function App() {
     };
   }, []);
 
+  const handleSearchSubmit = (e: Event) => {
+    e.preventDefault();
+    const trimmed = searchQuery.trim();
+    if (trimmed) {
+      window.location.hash = `#/search?q=${encodeURIComponent(trimmed)}`;
+    } else {
+      window.location.hash = "#/search";
+    }
+  };
+
+  const renderSidebarLink = (id: Route) => {
+    const def = ALL_ROUTES.find((r) => r.id === id);
+    if (!def) return null;
+    const isActive = route === id;
+    const waiting = id === "add" && queueCount > 0;
+    const badgeLabel = waiting
+      ? `${def.label}, ${queueCount} ${
+          queueCount === 1 ? "entry" : "entries"
+        } waiting to send`
+      : undefined;
+
+    return (
+      <a
+        key={id}
+        href={`#/${id}`}
+        class={
+          isActive
+            ? "sidebar-nav-link sidebar-nav-link--active"
+            : "sidebar-nav-link"
+        }
+        aria-current={isActive ? "page" : undefined}
+        aria-label={badgeLabel}
+      >
+        <span class="sidebar-nav-link-main">
+          <span class="sidebar-nav-icon">
+            <RouteIcon route={id} size={18} />
+          </span>
+          <span>{def.label}</span>
+        </span>
+        {waiting && (
+          <span class="queue-badge" aria-hidden="true">
+            {queueCount > 9 ? "9+" : queueCount}
+          </span>
+        )}
+      </a>
+    );
+  };
+
+  const isMoreRouteActive = MOBILE_MORE_ROUTES.includes(route);
+
   return (
-    <div class="app">
-      <OfflineBanner />
-      <main class="content">
-        {route === "calendar" && <Calendar date={date} />}
-        {route === "progress" && <Progress />}
-        {route === "heatmap" && <Heatmap />}
-        {route === "stats" && <Stats />}
-        {route === "importexport" && <ImportExport />}
-        {route === "add" && <Add />}
-        {route === "year" && <YearReviewPage yearParam={year} />}
-        {route === "search" && <Search qParam={q} hitKeyParam={hitKey} />}
-      </main>
-      <nav class="tabbar" aria-label="Primary">
-        {ROUTES.map((item) => {
-          const waiting = item.id === "add" && queueCount > 0;
+    <div class="app-shell">
+      {/* Desktop Left Sidebar */}
+      <aside class="app-sidebar" aria-label="Sidebar">
+        <a href="#/calendar" class="sidebar-brand">
+          <span class="sidebar-brand-mark" aria-hidden="true">
+            <BookIcon size={20} />
+          </span>
+          <span class="sidebar-brand-text">
+            <span class="sidebar-brand-title">InputTracker</span>
+            <span class="sidebar-brand-tagline">Personal Library</span>
+          </span>
+        </a>
+
+        <form
+          class="sidebar-search-form"
+          role="search"
+          onSubmit={handleSearchSubmit}
+        >
+          <span class="sidebar-search-icon" aria-hidden="true">
+            <SearchIcon size={15} />
+          </span>
+          <input
+            type="search"
+            class="sidebar-search-input"
+            placeholder="Search library…"
+            aria-label="Search library"
+            value={searchQuery}
+            onInput={(e) =>
+              setSearchQuery((e.currentTarget as HTMLInputElement).value)
+            }
+          />
+        </form>
+
+        <nav class="sidebar-nav-section" aria-label="Primary">
+          <span class="sidebar-nav-heading">Library</span>
+          {DESKTOP_LIBRARY_ROUTES.map(renderSidebarLink)}
+        </nav>
+
+        <nav class="sidebar-nav-section" aria-label="Actions and Data">
+          <span class="sidebar-nav-heading">Log & Sync</span>
+          {DESKTOP_UTILITY_ROUTES.map(renderSidebarLink)}
+        </nav>
+
+        <div class="sidebar-footer" aria-label="Media kind colour legend">
+          <span class="sidebar-legend-title">Media Kinds</span>
+          <div class="sidebar-legend-grid">
+            {(["audiobook", "film", "youtube", "manual"] as const).map(
+              (kind: MediaKind) => (
+                <div key={kind} class="sidebar-legend-item">
+                  <span
+                    class={`ui-tab-dot ui-tab-dot--${kind}`}
+                    aria-hidden="true"
+                  />
+                  <span>{MEDIA_KINDS[kind].shortLabel}</span>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Column */}
+      <div class="app-main-column">
+        <OfflineBanner />
+
+        {/* Mobile Top Bar */}
+        <header class="mobile-topbar">
+          <a href="#/calendar" class="sidebar-brand">
+            <span class="sidebar-brand-mark" aria-hidden="true">
+              <BookIcon size={18} />
+            </span>
+            <span class="sidebar-brand-text">
+              <span class="sidebar-brand-title">InputTracker</span>
+            </span>
+          </a>
+          <div class="mobile-topbar-actions">
+            <IconButton
+              label="Search library"
+              variant="subtle"
+              size="sm"
+              href="#/search"
+              active={route === "search"}
+            >
+              <SearchIcon size={17} />
+            </IconButton>
+          </div>
+        </header>
+
+        <main class="app-main">
+          {route === "calendar" && <Calendar date={date} />}
+          {route === "progress" && <PlaceholderPage route="progress" />}
+          {route === "heatmap" && <PlaceholderPage route="heatmap" />}
+          {route === "stats" && <PlaceholderPage route="stats" />}
+          {route === "importexport" && <PlaceholderPage route="importexport" />}
+          {route === "add" && (
+            <PlaceholderPage
+              route="add"
+              queryNote={
+                queueCount > 0
+                  ? `${queueCount} queued offline ${
+                      queueCount === 1 ? "entry" : "entries"
+                    }`
+                  : undefined
+              }
+            />
+          )}
+          {route === "year" && (
+            <PlaceholderPage
+              route="year"
+              queryNote={year ? `Year: ${year}` : undefined}
+            />
+          )}
+          {route === "search" && (
+            <PlaceholderPage
+              route="search"
+              queryNote={
+                q
+                  ? `Query: "${q}"`
+                  : hitKey
+                  ? `Title key: ${hitKey}`
+                  : undefined
+              }
+            />
+          )}
+        </main>
+      </div>
+
+      {/* Mobile Bottom Tab Bar */}
+      <nav class="mobile-tabbar" aria-label="Mobile Navigation">
+        {MOBILE_PRIMARY_ROUTES.map((id) => {
+          const def = ALL_ROUTES.find((r) => r.id === id)!;
+          const isActive = route === id;
+          const waiting = id === "add" && queueCount > 0;
+          const badgeLabel = waiting
+            ? `${def.shortLabel}, ${queueCount} ${
+                queueCount === 1 ? "entry" : "entries"
+              } waiting to send`
+            : undefined;
+
           return (
             <a
-              key={item.id}
-              class={route === item.id ? "tab tab-active" : "tab"}
-              href={`#/${item.id}`}
-              aria-current={route === item.id ? "page" : undefined}
-              aria-label={
-                waiting ? `Add, ${queueCount} ${queueCount === 1 ? "entry" : "entries"} waiting to send` : undefined
-              }
+              key={id}
+              href={`#/${id}`}
+              class={isActive ? "mobile-tab mobile-tab--active" : "mobile-tab"}
+              aria-current={isActive ? "page" : undefined}
+              aria-label={badgeLabel}
             >
-              {item.label}
-              {waiting && (
-                <span class="queue-badge" aria-hidden="true">
-                  {queueCount > 9 ? "9+" : queueCount}
-                </span>
-              )}
+              <span class="mobile-tab-icon-wrap">
+                <RouteIcon route={id} size={20} />
+                {waiting && (
+                  <span
+                    class="queue-badge mobile-tab-badge"
+                    aria-hidden="true"
+                  >
+                    {queueCount > 9 ? "9+" : queueCount}
+                  </span>
+                )}
+              </span>
+              <span>{def.shortLabel}</span>
             </a>
           );
         })}
+
+        <button
+          type="button"
+          class={
+            isMoreRouteActive || moreOpen
+              ? "mobile-tab mobile-tab--active"
+              : "mobile-tab"
+          }
+          aria-expanded={moreOpen}
+          aria-label="More pages"
+          onClick={() => setMoreOpen((prev) => !prev)}
+        >
+          <span class="mobile-tab-icon-wrap">
+            <MoreIcon size={20} />
+          </span>
+          <span>More</span>
+        </button>
       </nav>
+
+      {/* Mobile "More" Sheet */}
+      <Sheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        title="More Views"
+        subtitle="Explore your library, heatmaps, and sync tools"
+      >
+        <div class="more-sheet-list" role="navigation" aria-label="More pages">
+          {MOBILE_MORE_ROUTES.map((id) => {
+            const def = ALL_ROUTES.find((r) => r.id === id)!;
+            const isActive = route === id;
+            return (
+              <a
+                key={id}
+                href={`#/${id}`}
+                class={
+                  isActive
+                    ? "more-sheet-link more-sheet-link--active"
+                    : "more-sheet-link"
+                }
+                aria-current={isActive ? "page" : undefined}
+                onClick={() => setMoreOpen(false)}
+              >
+                <span class="more-sheet-link-icon" aria-hidden="true">
+                  <RouteIcon route={id} size={20} />
+                </span>
+                <span class="more-sheet-link-body">
+                  <span class="more-sheet-link-title">{def.label}</span>
+                  <span class="more-sheet-link-desc">{def.description}</span>
+                </span>
+              </a>
+            );
+          })}
+        </div>
+      </Sheet>
     </div>
   );
 }
