@@ -188,6 +188,7 @@ describe("aggregateStats pure aggregation", () => {
       title: "Movie Beta",
       source: "manual",
       media_type: "movie",
+      category: "film",
       minutes: 120,
       count: 1,
     });
@@ -195,6 +196,7 @@ describe("aggregateStats pure aggregation", () => {
       title: "Book Alpha",
       source: "audiobookshelf",
       media_type: "audiobook",
+      category: "audiobook",
       minutes: 90,
       count: 2,
     });

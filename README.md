@@ -281,6 +281,42 @@ hood it is `GET /api/annotations?source=<s>&title=<t>` and
 `POST /api/annotations`, and every revision is included in the JSON export
 (v2), so `it export` and `it import` round-trip them like events and goals.
 
+## Archive and library
+
+Besides automatic syncs, you can add works from the past to the archive
+(`POST /api/archive`, `GET /api/archive`, `POST /api/archive/:entry_id/delete`).
+Each entry carries a work snapshot (seasons, runtimes, pages, external ids and
+cover metadata) and is stored in `events` as append-only units (`source = "manual"`,
+`source_kind = "archive"`, `source_id = "archive:<entry_id>:<unit>"`): one unit
+per watched season (`s<n>`), one per film viewing (`v<n>`), or one per
+book/audiobook/other (`b`).
+
+Date precision (`day`, `month`, `year`, `unknown`) controls where an archive
+entry counts:
+
+- **Calendar, heat map, streaks and hour × weekday charts** include only `day`
+  precision events.
+- **Month review** (`GET /api/review/month?month=YYYY-MM`) includes `day` and
+  `month` precision events of that month (`month` precision time is also
+  reported in `undated_minutes`).
+- **Year review** (`GET /api/review/year?year=YYYY`) combines the twelve months
+  plus `year` precision archive entries (`undated_minutes`); `unknown`
+  precision entries are left out.
+- **Library and all-time totals** (`GET /api/library`, `GET /api/library/work`)
+  include every precision.
+
+Editing an archive entry with the same `entry_id` writes new unit revisions and
+writes tombstones (`raw.deleted = true`, `duration_seconds = 0`) for removed
+units; deleting an entry tombstones all of its units. The `events_latest` view
+(migration v4) hides tombstoned units from all reads while `events` keeps the
+full history forever.
+
+The library groups events across all sources into works by category and
+normalized series-or-title or shared external id (`anilist`, `mal`, `imdb`,
+`tvmaze`, `abs_item`, `meta_id`), with YouTube grouped by channel. Read-only
+server status and source configuration are exposed at `GET /api/settings`
+(hosts only, never secrets).
+
 ## Duplicates across sources
 
 The same watch often arrives twice: once logged by hand (`manual`) and once

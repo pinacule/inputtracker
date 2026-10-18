@@ -21,6 +21,7 @@ import type { Database } from "bun:sqlite";
 import {
   CONSUMPTION_KINDS,
   coverUrlFor,
+  eventPrecision,
   formatLocalParts,
   getDisplayConsumptionEvents,
   getSeriesOrTitle,
@@ -135,6 +136,7 @@ interface PreparedEvent {
   /** `getSeriesOrTitle(event)`: series title for episodes, else the title. */
   title: string;
   minutes: number;
+  precision: "day" | "month" | "year" | "unknown";
 }
 
 function prepareEvents(
@@ -142,7 +144,11 @@ function prepareEvents(
   tz: string
 ): PreparedEvent[] {
   return events
-    .filter((event) => CONSUMPTION_KINDS.has(event.source_kind))
+    .filter(
+      (event) =>
+        CONSUMPTION_KINDS.has(event.source_kind) &&
+        eventPrecision(event) !== "unknown"
+    )
     .map((event) => {
       const local = formatLocalParts(event.started_at, tz);
       return {
@@ -151,6 +157,7 @@ function prepareEvents(
         weekday: local.weekday,
         title: getSeriesOrTitle(event),
         minutes: (event.duration_seconds ?? 0) / 60,
+        precision: eventPrecision(event),
       };
     });
 }
@@ -160,7 +167,9 @@ function computeTotals(rows: readonly PreparedEvent[]): ReviewTotals {
   const titles = new Set<string>();
   let seconds = 0;
   for (const row of rows) {
-    days.add(row.date);
+    if (row.precision === "day") {
+      days.add(row.date);
+    }
     titles.add(`${row.event.source}:::${row.title}`);
     seconds += row.event.duration_seconds ?? 0;
   }
@@ -256,21 +265,25 @@ export function computeYearReview(
     mediaType.seconds += row.event.duration_seconds ?? 0;
     byMediaTypeData[row.event.media_type] = mediaType;
 
-    const monthKey = row.date.slice(0, 7);
-    const month = byMonthData.get(monthKey) ?? { minutes: 0, count: 0 };
-    month.minutes += row.minutes;
-    month.count += 1;
-    byMonthData.set(monthKey, month);
+    if (row.precision === "day" || row.precision === "month") {
+      const monthKey = row.date.slice(0, 7);
+      const month = byMonthData.get(monthKey) ?? { minutes: 0, count: 0 };
+      month.minutes += row.minutes;
+      month.count += 1;
+      byMonthData.set(monthKey, month);
+    }
 
-    const weekday = byWeekdayData.get(row.weekday) ?? { minutes: 0, count: 0 };
-    weekday.minutes += row.minutes;
-    weekday.count += 1;
-    byWeekdayData.set(row.weekday, weekday);
+    if (row.precision === "day") {
+      const weekday = byWeekdayData.get(row.weekday) ?? { minutes: 0, count: 0 };
+      weekday.minutes += row.minutes;
+      weekday.count += 1;
+      byWeekdayData.set(row.weekday, weekday);
 
-    const day = byDayData.get(row.date) ?? { minutes: 0, count: 0 };
-    day.minutes += row.minutes;
-    day.count += 1;
-    byDayData.set(row.date, day);
+      const day = byDayData.get(row.date) ?? { minutes: 0, count: 0 };
+      day.minutes += row.minutes;
+      day.count += 1;
+      byDayData.set(row.date, day);
+    }
 
     const titleKey = `${source}:::${row.title}`;
     const group = titleGroups.get(titleKey);
