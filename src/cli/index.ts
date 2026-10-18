@@ -1724,14 +1724,18 @@ async function runArchiveCli(args: string[], ctx: SyncContext): Promise<number> 
     });
 
     let changedCount = 0;
+    let failedCount = 0;
     for (const item of results) {
-      if (item.changed) {
+      if (item.error !== undefined) {
+        failedCount += 1;
+        out(`${item.title}: lookup failed (${redactMessage(item.error, config)})`);
+      } else if (item.changed) {
         changedCount += 1;
         out(formatRefreshHoursLine(item));
       }
     }
     out(
-      `archive refresh-metadata${dryRun ? " (dry-run)" : ""}: ${results.length} checked, ${changedCount} changed`
+      `archive refresh-metadata${dryRun ? " (dry-run)" : ""}: ${results.length} checked, ${changedCount} changed, ${failedCount} failed`
     );
     return EXIT_OK;
   } catch (caught) {

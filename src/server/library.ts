@@ -66,6 +66,7 @@ import {
   lookupWork,
   type MetadataDeps,
 } from "./metadata/index.ts";
+import { ProviderError } from "./metadata/types.ts";
 import {
   type CategoryFilterInput,
   eventWorkTitleForGrouping,
@@ -1199,6 +1200,8 @@ export interface RefreshMetadataOptions {
   now?: () => number;
   nowIso?: string;
   dryRun?: boolean;
+  /** Bulk refresh only: wait before retrying a rate-limited (429) lookup. Tests pass a no-op. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 interface SingleEntryRefreshOutcome {
@@ -1585,7 +1588,14 @@ export async function refreshLibraryWorkMetadata(
 
 export interface RefreshArchiveSummaryItem extends RefreshMetadataResult {
   title: string;
+  /** Set when the lookup failed (provider down, still rate-limited after retries); nothing changed. */
+  error?: string;
 }
+
+/** Waits for a rate-limited provider in the bulk refresh: 3 tries, 30 s, 60 s, 90 s. */
+const REFRESH_RATE_LIMIT_WAITS_MS = [30_000, 60_000, 90_000];
+/** Pause between works in the bulk refresh so AniList (≈30 requests/min) is not flooded. */
+const REFRESH_PAUSE_MS = 1_500;
 
 export function formatRefreshHours(minutes: number): string {
   const hours = minutes / 60;
@@ -1626,21 +1636,47 @@ export async function refreshAllArchiveMetadata(
     w.events.some((e) => e.source_kind === "archive")
   );
 
+  const sleep =
+    opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const results: RefreshArchiveSummaryItem[] = [];
-  for (const item of archiveWorks) {
-    const res = await refreshLibraryWorkMetadata(db, item.work.key, {
-      ...opts,
-      tz,
-      nowIso,
-      dryRun,
-    });
-    results.push({
-      key: res.key,
-      title: item.work.title,
-      changed: res.changed,
-      minutes_before: res.minutes_before,
-      minutes_after: res.minutes_after,
-    });
+  // One failing or rate-limited lookup must not abort the whole refresh: retry 429s after a
+  // wait, record other failures per work and go on.
+  for (const [index, item] of archiveWorks.entries()) {
+    if (index > 0) await sleep(REFRESH_PAUSE_MS);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const res = await refreshLibraryWorkMetadata(db, item.work.key, {
+          ...opts,
+          tz,
+          nowIso,
+          dryRun,
+        });
+        results.push({
+          key: res.key,
+          title: item.work.title,
+          changed: res.changed,
+          minutes_before: res.minutes_before,
+          minutes_after: res.minutes_after,
+        });
+        break;
+      } catch (caught) {
+        const rateLimited =
+          caught instanceof ProviderError && caught.status === 429;
+        if (rateLimited && attempt < REFRESH_RATE_LIMIT_WAITS_MS.length) {
+          await sleep(REFRESH_RATE_LIMIT_WAITS_MS[attempt]!);
+          continue;
+        }
+        results.push({
+          key: item.work.key,
+          title: item.work.title,
+          changed: false,
+          minutes_before: item.work.total_minutes,
+          minutes_after: item.work.total_minutes,
+          error: caught instanceof Error ? caught.message : String(caught),
+        });
+        break;
+      }
+    }
   }
 
   return results;
