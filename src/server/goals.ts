@@ -121,46 +121,28 @@ function daysUpTo(today: string, year: number): number {
   return Math.round((end - start) / 86400000) + 1;
 }
 
+/** Normalized, validated goal fields (everything except ids and timestamps). */
+export interface GoalFields {
+  year: number;
+  metric: GoalMetric;
+  source: string | null;
+  media_type: string | null;
+  target: number;
+  archived: number;
+}
+
 /**
- * Validates and inserts a goal revision. Returns `{ goal_id, rev_id, inserted }`.
+ * Validate and normalize the data fields of a goal revision. Shared by
+ * `addGoalRevision` and the native import so both apply the same rules.
  */
-export function addGoalRevision(
-  db: Database,
-  input: AddGoalInput,
-  now?: string
-): AddGoalResult {
-  if (!input || typeof input !== "object") {
-    throw new GoalValidationError("Input must be an object");
-  }
-
-  // Validate goal_id
-  let goalId = input.goal_id;
-  if (goalId !== undefined && goalId !== null && goalId !== "") {
-    if (typeof goalId !== "string" || !UUID_RE.test(goalId)) {
-      throw new GoalValidationError(`Invalid goal_id format: '${goalId}'`);
-    }
-    const existing = db
-      .query<{ goal_id: string }, [string]>(
-        "SELECT goal_id FROM goals_latest WHERE goal_id = ? LIMIT 1;"
-      )
-      .get(goalId);
-    if (!existing) {
-      throw new GoalNotFoundError(goalId);
-    }
-  } else {
-    goalId = crypto.randomUUID();
-  }
-
-  // Validate rev_id
-  let revId = input.rev_id;
-  if (revId !== undefined && revId !== null && revId !== "") {
-    if (typeof revId !== "string" || !UUID_RE.test(revId)) {
-      throw new GoalValidationError(`Invalid rev_id format: '${revId}'`);
-    }
-  } else {
-    revId = crypto.randomUUID();
-  }
-
+export function normalizeGoalFields(input: {
+  year?: unknown;
+  metric?: unknown;
+  source?: unknown;
+  media_type?: unknown;
+  target?: unknown;
+  archived?: unknown;
+}): GoalFields {
   // Validate year
   const year = input.year;
   if (
@@ -242,6 +224,52 @@ export function addGoalRevision(
       );
     }
   }
+
+  return { year, metric, source, media_type: mediaType, target, archived };
+}
+
+/**
+ * Validates and inserts a goal revision. Returns `{ goal_id, rev_id, inserted }`.
+ */
+export function addGoalRevision(
+  db: Database,
+  input: AddGoalInput,
+  now?: string
+): AddGoalResult {
+  if (!input || typeof input !== "object") {
+    throw new GoalValidationError("Input must be an object");
+  }
+
+  // Validate goal_id
+  let goalId = input.goal_id;
+  if (goalId !== undefined && goalId !== null && goalId !== "") {
+    if (typeof goalId !== "string" || !UUID_RE.test(goalId)) {
+      throw new GoalValidationError(`Invalid goal_id format: '${goalId}'`);
+    }
+    const existing = db
+      .query<{ goal_id: string }, [string]>(
+        "SELECT goal_id FROM goals_latest WHERE goal_id = ? LIMIT 1;"
+      )
+      .get(goalId);
+    if (!existing) {
+      throw new GoalNotFoundError(goalId);
+    }
+  } else {
+    goalId = crypto.randomUUID();
+  }
+
+  // Validate rev_id
+  let revId = input.rev_id;
+  if (revId !== undefined && revId !== null && revId !== "") {
+    if (typeof revId !== "string" || !UUID_RE.test(revId)) {
+      throw new GoalValidationError(`Invalid rev_id format: '${revId}'`);
+    }
+  } else {
+    revId = crypto.randomUUID();
+  }
+
+  const { year, metric, source, media_type: mediaType, target, archived } =
+    normalizeGoalFields(input);
 
   const createdAt = now ?? new Date().toISOString();
 

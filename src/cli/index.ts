@@ -633,7 +633,11 @@ function runImport(args: string[], ctx: SyncContext): number {
 
   try {
     const result = importNative(db, text, format);
-    out(`imported ${result.inserted} new of ${result.seen} events from ${file}`);
+    out(
+      `imported ${result.events.inserted} new of ${result.events.seen} events, ` +
+        `${result.goals.inserted} new of ${result.goals.seen} goals, ` +
+        `${result.annotations.inserted} new of ${result.annotations.seen} annotations from ${file}`
+    );
     return EXIT_OK;
   } catch (caught) {
     err(redactMessage(errorText(caught), config));

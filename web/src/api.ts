@@ -389,6 +389,9 @@ export interface ImportResult {
   records?: number;
   /** Only for a YouTube Takeout upload: counts per skip reason. */
   skipped?: ImportSkipCounts;
+  /** Only for a native JSON import: goal and annotation counts. */
+  goals?: { seen: number; inserted: number };
+  annotations?: { seen: number; inserted: number };
   runId: number;
 }
 

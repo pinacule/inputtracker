@@ -153,6 +153,15 @@ export function ImportExport() {
               : `${describeImport(importResult)} — ${importResult.seen} seen, ${
                   importResult.inserted
                 } inserted`}
+            {importResult.kind === "native" &&
+              (importResult.goals?.seen || importResult.annotations?.seen) ? (
+              <>
+                {" "}
+                — goals {describeImport(importResult.goals ?? { seen: 0, inserted: 0 })},
+                ratings/notes{" "}
+                {describeImport(importResult.annotations ?? { seen: 0, inserted: 0 })}
+              </>
+            ) : null}
             {importResult.kind === "youtube-takeout" && importResult.skipped && (
               <>
                 {" "}

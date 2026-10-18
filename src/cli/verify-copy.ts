@@ -1,15 +1,15 @@
 /**
- * `it verify-copy <copy.db>` — prove that a copied database holds every event of
- * the configured database.
+ * `it verify-copy <copy.db>` — prove that a copied database holds every event,
+ * goal and annotation of the configured database.
  *
  * The reference is `config.storage.db_path`; the copy is the argument. Both are
  * opened **read-only** (`new Database(path, { readonly: true })`) and are never
  * migrated, so no new file is created and no row is written. Only
- * `events.record_hash` is compared (a `Set` per database, so ~100k events stay
- * fast). Extra rows in the copy are reported but are not a failure — the copy
- * may simply have synced more since it was taken.
+ * `record_hash` is compared per table (a `Set` per database, so ~100k events
+ * stay fast). Extra rows in the copy are reported but are not a failure — the
+ * copy may simply have synced more since it was taken.
  *
- * Exit codes: 0 when every reference event is present, 1 when some are missing,
+ * Exit codes: 0 when every reference row is present, 1 when some are missing,
  * 2 on a usage/IO error (missing argument or unreadable database is 2).
  */
 
@@ -40,9 +40,16 @@ export interface VerifyCopyDeps {
   usage: () => string;
 }
 
+interface TableHashSet {
+  hashes: Set<string>;
+  count: number;
+}
+
 interface DbSnapshot {
   events: Set<string>;
   eventCount: number;
+  goals: TableHashSet | null;
+  annotations: TableHashSet | null;
   ingestRuns: number;
   schemaVersion: number;
 }
@@ -58,6 +65,28 @@ function redactText(text: string): string {
   } catch {
     return stripped;
   }
+}
+
+/** Check if a table exists in the database. */
+function tableExists(db: Database, tableName: string): boolean {
+  const row = db
+    .query<{ n: number }, [string]>(
+      "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name=?;"
+    )
+    .get(tableName);
+  return (row?.n ?? 0) > 0;
+}
+
+/** Read the hash set for a table, or null if the table doesn't exist. */
+function readTableHashes(db: Database, tableName: string): TableHashSet | null {
+  if (!tableExists(db, tableName)) {
+    return null;
+  }
+  const rows = db
+    .query<{ record_hash: string }, []>(`SELECT record_hash FROM ${tableName};`)
+    .all();
+  const hashes = new Set(rows.map((row) => row.record_hash));
+  return { hashes, count: hashes.size };
 }
 
 /**
@@ -76,6 +105,8 @@ function readSnapshot(path: string): DbSnapshot {
       .query<{ record_hash: string }, []>("SELECT record_hash FROM events;")
       .all();
     const events = new Set(rows.map((row) => row.record_hash));
+    const goals = readTableHashes(db, "goals");
+    const annotations = readTableHashes(db, "annotations");
     const ingestRuns =
       db
         .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM ingest_runs;")
@@ -86,7 +117,7 @@ function readSnapshot(path: string): DbSnapshot {
           "SELECT MAX(version) AS v FROM schema_migrations;"
         )
         .get()?.v ?? 0;
-    return { events, eventCount: events.size, ingestRuns, schemaVersion };
+    return { events, eventCount: events.size, goals, annotations, ingestRuns, schemaVersion };
   } finally {
     try {
       db.close();
@@ -108,6 +139,26 @@ function readSnapshot(path: string): DbSnapshot {
       }
     }
   }
+}
+
+/** Compare hash sets and return missing hashes. */
+function compareSets(
+  refSet: Set<string>,
+  copySet: Set<string>
+): { missing: string[]; extra: number } {
+  const missing: string[] = [];
+  for (const hash of refSet) {
+    if (!copySet.has(hash)) {
+      missing.push(hash);
+    }
+  }
+  let extra = 0;
+  for (const hash of copySet) {
+    if (!refSet.has(hash)) {
+      extra += 1;
+    }
+  }
+  return { missing, extra };
 }
 
 /**
@@ -166,26 +217,38 @@ export function runVerifyCopy(args: string[], deps: VerifyCopyDeps): number {
     return VERIFY_COPY_EXIT_FAILURE;
   }
 
-  const missing: string[] = [];
-  for (const hash of ref.events) {
-    if (!copy.events.has(hash)) {
-      missing.push(hash);
+  // Events keep their original output lines; goals and annotations (schema
+  // v2/v3) are prefixed with the table name and skipped when the reference has
+  // no such table. A copy without the table is missing all of its rows.
+  const tables: Array<{ label: string; prefix: string; ref: Set<string> | null; copy: Set<string> | null }> = [
+    { label: "event", prefix: "", ref: ref.events, copy: copy.events },
+    { label: "goal", prefix: "goals ", ref: ref.goals?.hashes ?? null, copy: copy.goals?.hashes ?? null },
+    {
+      label: "annotation",
+      prefix: "annotations ",
+      ref: ref.annotations?.hashes ?? null,
+      copy: copy.annotations?.hashes ?? null,
+    },
+  ];
+  const missingParts: string[] = [];
+  for (const table of tables) {
+    if (table.ref === null) {
+      continue;
     }
-  }
-  let extra = 0;
-  for (const hash of copy.events) {
-    if (!ref.events.has(hash)) {
-      extra += 1;
+    const plural = `${table.label}s`;
+    deps.out(`reference ${plural}: ${table.ref.size}`);
+    deps.out(`copy ${plural}: ${table.copy === null ? "table missing" : table.copy.size}`);
+    const { missing, extra } = compareSets(table.ref, table.copy ?? new Set());
+    deps.out(`${table.prefix}missing in copy: ${missing.length}`);
+    for (const hash of missing.slice(0, MAX_PRINTED_HASHES)) {
+      deps.out(`  ${hash}`);
+    }
+    deps.out(`${table.prefix}extra in copy: ${extra}`);
+    if (missing.length > 0) {
+      missingParts.push(`${missing.length} ${table.label}(s)`);
     }
   }
 
-  deps.out(`reference events: ${ref.eventCount}`);
-  deps.out(`copy events: ${copy.eventCount}`);
-  deps.out(`missing in copy: ${missing.length}`);
-  for (const hash of missing.slice(0, MAX_PRINTED_HASHES)) {
-    deps.out(`  ${hash}`);
-  }
-  deps.out(`extra in copy: ${extra}`);
   deps.out(`ingest_runs: reference ${ref.ingestRuns}, copy ${copy.ingestRuns}`);
   deps.out(`schema: reference v${ref.schemaVersion}, copy v${copy.schemaVersion}`);
   if (ref.schemaVersion !== copy.schemaVersion) {
@@ -195,8 +258,8 @@ export function runVerifyCopy(args: string[], deps: VerifyCopyDeps): number {
     );
   }
 
-  if (missing.length > 0) {
-    deps.out(`copy is missing ${missing.length} event(s)`);
+  if (missingParts.length > 0) {
+    deps.out(`copy is missing ${missingParts.join(", ")}`);
     return VERIFY_COPY_EXIT_MISSING;
   }
 
