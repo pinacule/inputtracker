@@ -11,6 +11,13 @@ PROMPT="$(cat "$PROMPT_FILE")"
 echo "$MODEL" > "$T/model"
 LIMIT_RE='429|RESOURCE_EXHAUSTED|[Qq]uota|[Rr]ate.?limit|credits balance|[Ee]xhausted|[Uu]sage limit|[Tt]oo many requests'
 
+# Vertex models (paid from the user's Google Cloud credits) authenticate with gcloud's
+# application-default credentials; opencode also needs the project and location.
+if [[ "$MODEL" == google-vertex/* ]]; then
+  export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
+  export VERTEX_LOCATION="${VERTEX_LOCATION:-global}"
+fi
+
 case "$WORKER" in
 antigravity)
   extra=(); [ -n "$RESUME" ] && extra=(--conversation "$RESUME")
