@@ -598,6 +598,8 @@ export function getYoutubeVideoWorkDetail(
     last_at: matching[matching.length - 1]?.started_at ?? null,
     status: "unknown",
     rating: null,
+    progress: null,
+    creator: null,
     sources: Array.from(sourceSet).sort((a, b) => a.localeCompare(b)),
     edited,
     channel,

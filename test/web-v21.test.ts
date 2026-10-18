@@ -388,6 +388,8 @@ describe("v2.1 YouTube topic & channel grouping (web/src/lib/youtube.ts)", () =>
         edited: false,
         channel: "Synthetic Academy",
         topic: "Education",
+        progress: null,
+        creator: "Synthetic Academy",
       },
     ];
     const fbOverview = buildYoutubeOverviewFromWorks(works);

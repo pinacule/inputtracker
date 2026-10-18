@@ -655,6 +655,9 @@ export function buildAllLibraryWorks(
       edited: override?.edited ?? false,
       channel: ytFields.channel,
       topic: ytFields.topic,
+      // v2.2 fields; filled by the v2.2 backend work.
+      progress: null,
+      creator: null,
     };
 
     const detail: LibraryWorkDetail = {

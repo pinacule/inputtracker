@@ -317,6 +317,8 @@ export async function fetchHiddenWorksGraceful(): Promise<LibraryWork[]> {
         edited: true,
         channel: null,
         topic: ov.topic ?? null,
+        progress: null,
+        creator: null,
       });
     }
   }

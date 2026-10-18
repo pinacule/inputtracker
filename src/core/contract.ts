@@ -173,6 +173,18 @@ export interface LibraryWork {
   /** v2.1: YouTube only: channel name and topic, else null. */
   channel: string | null;
   topic: string | null;
+  /**
+   * v2.2: explicit progress for works with seasons (series/anime), else null. Replaces guessing
+   * from `units` ("6 episodes" when 6 seasons were meant). Totals come from the linked metadata.
+   */
+  progress: {
+    seasons_watched: number;
+    seasons_total: number | null;
+    episodes_watched: number;
+    episodes_total: number | null;
+  } | null;
+  /** v2.2: author (books/audiobooks), artist (music), channel (YouTube), studio/creator, else null. */
+  creator: string | null;
 }
 
 export interface CategoryTotal {
@@ -378,4 +390,26 @@ export interface AchriomImportResult {
   /** Rows not imported, with a reason (e.g. games and albums are not tracked categories). */
   skipped: Array<{ file: string; title: string; reason: string }>;
   total_minutes: number;
+}
+
+// --- v2.2 ---------------------------------------------------------------------
+
+/**
+ * GET /api/library sort values (v2.2 adds "category" and "creator"):
+ * recent | time | title | category | creator. GET /api/youtube/videos adds sort=recent|time|topic.
+ */
+export type LibrarySortV2 = "recent" | "time" | "title" | "category" | "creator";
+
+/**
+ * POST /api/library/work/refresh-metadata?key=  → LibraryWorkDetail.
+ * Re-looks up the work's linked metadata (bypassing the cache) and, for archive entries, re-saves
+ * them as new revisions when seasons/runtimes changed (append-only). Also: CLI
+ * `archive refresh-metadata [--dry-run]` for every archive entry.
+ */
+export interface RefreshMetadataResult {
+  key: string;
+  changed: boolean;
+  /** Minutes before and after, for "Vikings: 89 h → 66 h". */
+  minutes_before: number;
+  minutes_after: number;
 }

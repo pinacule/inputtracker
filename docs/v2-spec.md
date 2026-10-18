@@ -269,3 +269,73 @@ calendar/day lists, heat maps, search, stats and reviews. Totals in the response
   I in the middle of, and how does this month look. Calm, readable, fewer words.
 - **Import** in Settings: upload the Achriom zip, show the dry-run summary, then import.
 - **Hidden works** list in Settings with unhide.
+
+---
+
+# v2.2: correct metadata, explicit progress, covers, YouTube/music placement, rating input, new home
+
+Types: the "v2.2" parts of `src/core/contract.ts` (`LibraryWork.progress`, `.creator`,
+`LibrarySortV2`, `RefreshMetadataResult`). Data rules unchanged (append-only, repeatable).
+
+## 13. Metadata accuracy (backend task W08)
+
+Two real cases, found after the Achriom import:
+- **Vikings** (TVmaze 29) counts 89 h: TVmaze reports `runtime: 60` for every episode, which is the
+  broadcast slot, not the real ~44 min (IMDb/Cinemeta say 44). Nothing cross-checks it.
+- **Library counts are ambiguous**: `LibraryWork.units` mixes seasons, episodes, sessions and
+  archive units, so the UI printed "6 episodes" for Vikings' 6 seasons and "1" for One-Punch Man
+  (3 seasons on AniList, a planned entry).
+
+Required:
+- Investigate the root causes in the code (series runtime selection per provider, the AniList season
+  chain, how `units` is computed and labelled) and write them, with what you changed, to
+  `docs/metadata-accuracy.md` so it does not happen again.
+- Runtime: for series, prefer per-episode runtimes when the provider has them; when the only runtime
+  is a broadcast slot (TVmaze `runtime`/`averageRuntime` of exactly 30/60/90) and an IMDb id is
+  known, cross-check with Cinemeta's runtime and use it when it is clearly lower. Check a handful
+  of real shows by hand while developing (network is fine for your manual checks; tests mock it).
+- `LibraryWork.progress` (seasons watched/total, episodes watched/total) for series and anime,
+  from the archive entries / synced episodes and the linked metadata; `null` otherwise.
+  `LibraryWork.creator`: author, artist, channel, studio/creator.
+- Refresh: `POST /api/library/work/refresh-metadata?key=` and CLI `archive refresh-metadata
+  [--dry-run]` re-look up linked works (bypassing the cache) and re-save changed archive entries as
+  new revisions (same entry ids; old rows stay). The dry run prints per work "title: 89 h → 66 h".
+
+## 14. Covers by title (backend task W08)
+
+Audiobookshelf items that were removed from ABS (cover 404, remembered since v2.1) and YouTube
+Music tracks show letter tiles although their titles are clear. Fallback: look the work up by
+title (+ author/artist when known) — books/audiobooks via Open Library then iTunes (audiobooks),
+music via iTunes Search (`entity=song`, artwork) — accept only a confident match, cache the result
+and the image permanently (same cover cache), never per read: resolve during sync or with a CLI
+`covers backfill [--limit N]`, and lazily at most once per work. GET only.
+
+## 15. Placement of YouTube and music (both tasks)
+
+- YouTube and music appear in Calendar, the day panel, heat maps, Insights and Reviews like any
+  category (they are time spent). Only the **Library "All"** leaves out YouTube and music.
+- Library › YouTube chip: the **videos** (not channels), sortable by recent, watch time and topic
+  (`GET /api/youtube/videos?sort=`), groupable by topic and by channel. Library › Music chip: the
+  tracks, sortable by recent, watch time and artist (`GET /api/library?category=music&sort=creator`).
+  No separate YouTube button or sidebar entry: the chip is the way in.
+- Library sorts gain `category` and `creator`.
+- **No ratings for music** (no rating control on music tracks).
+
+## 16. Rating input (frontend task W09)
+
+Replace the slider popover. Click the ★ badge and it turns **in place** into a small text field
+showing the current value: type `8.5`, Enter saves, Esc cancels, blur saves if valid; ↑/↓ and the
+mouse wheel nudge by 0.1 (Shift: 1.0); invalid input shows a short inline hint and does not save.
+Same control on the work page. Saves through `WorkEdit.rating` with undo.
+
+## 17. Work page (frontend task W09)
+
+The series/anime work page (e.g. Cobra Kai) is ugly: rebuild it. Use `progress` ("6 of 6 seasons ·
+65 of 65 episodes"), show seasons compactly (provider season titles like "Cobra Kaii (2019)" are
+noise: show "Season 2 · 2019 · 10 ep"), history readable (no "Undated · Manual (Archive)"),
+actions grouped (edit, add seasons, refresh metadata, delete entry), rating with the new control.
+
+## 18. Home page (frontend task W10)
+
+A complete redesign of the home page (`#/calendar`) from scratch by a designer who has not seen the
+previous one. The previous version is archived in git tag `archive/home-v2.1`.
