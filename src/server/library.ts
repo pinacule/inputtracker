@@ -34,6 +34,10 @@ import {
 } from "./aggregate.ts";
 import type { DedupedEvent } from "./dedup.ts";
 import { normalizeForSearch } from "./search.ts";
+import {
+  getYoutubeVideoWorkDetail,
+  resolveYoutubeLibraryWorkFields,
+} from "./youtube-routes.ts";
 
 const EXTERNAL_JOIN_KEYS = [
   "anilist",
@@ -694,6 +698,11 @@ export function buildAllLibraryWorks(
           };
         });
 
+      const ytFields =
+        cat === "youtube"
+          ? resolveYoutubeLibraryWorkFields(db, workEvents, canonicalTitle, key)
+          : { channel: null, topic: null };
+
       const work: LibraryWork = {
         key,
         category: cat,
@@ -708,8 +717,8 @@ export function buildAllLibraryWorks(
         sources,
         // v2.1 fields; filled by the edit and YouTube work.
         edited: false,
-        channel: null,
-        topic: null,
+        channel: ytFields.channel,
+        topic: ytFields.topic,
       };
 
       const detail: LibraryWorkDetail = {
@@ -836,6 +845,9 @@ export function getLibraryWorkDetail(
   key: string,
   tz: string = "Europe/Bratislava"
 ): LibraryWorkDetail | null {
+  if (key.startsWith("youtube:video:")) {
+    return getYoutubeVideoWorkDetail(db, key, tz);
+  }
   const allWorks = buildAllLibraryWorks(db, tz);
   const found = allWorks.find((item) => item.work.key === key);
   return found ? found.detail : null;

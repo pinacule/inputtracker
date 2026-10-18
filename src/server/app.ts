@@ -73,6 +73,7 @@ import { handleYoutubePlays } from "./ingest.ts";
 import { registerAchriomRoutes } from "./achriom-routes.ts";
 import { registerLookupRoutes } from "./lookup-routes.ts";
 import { registerV2Routes } from "./v2-routes.ts";
+import { registerYoutubeRoutes } from "./youtube-routes.ts";
 
 export interface AppDeps {
   db: Database;
@@ -967,6 +968,7 @@ export function createApp(deps: AppDeps): Hono {
 
   registerLookupRoutes(app, deps);
   registerV2Routes(app, deps);
+  registerYoutubeRoutes(app, deps);
   registerAchriomRoutes(app, deps);
 
   // Fallback for unknown /api routes

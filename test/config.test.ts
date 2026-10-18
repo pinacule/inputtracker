@@ -61,6 +61,8 @@ describe("loadConfig defaults", () => {
     });
     expect(config.youtube).toEqual({
       thumb_base_url: "https://i.ytimg.com/vi",
+      min_watch_minutes: 5,
+      enrich_per_sync: 50,
     });
     expect(config.activitywatch).toEqual({
       url: "http://127.0.0.1:5600",
@@ -259,6 +261,38 @@ describe("loadConfig errors", () => {
     );
     expect(() => loadConfig({ path: badThumb, env: {} })).toThrow(
       /youtube\.thumb_base_url/
+    );
+
+    const badMinWatchType = writeConfig(
+      "badminwatchtype.toml",
+      '[youtube]\nmin_watch_minutes = "five"\n'
+    );
+    expect(() => loadConfig({ path: badMinWatchType, env: {} })).toThrow(
+      /youtube\.min_watch_minutes/
+    );
+
+    const badMinWatchNeg = writeConfig(
+      "badminwatchneg.toml",
+      "[youtube]\nmin_watch_minutes = -1\n"
+    );
+    expect(() => loadConfig({ path: badMinWatchNeg, env: {} })).toThrow(
+      /youtube\.min_watch_minutes/
+    );
+
+    const badEnrichNeg = writeConfig(
+      "badenrichneg.toml",
+      "[youtube]\nenrich_per_sync = -5\n"
+    );
+    expect(() => loadConfig({ path: badEnrichNeg, env: {} })).toThrow(
+      /youtube\.enrich_per_sync/
+    );
+
+    const badEnrichFloat = writeConfig(
+      "badenrichfloat.toml",
+      "[youtube]\nenrich_per_sync = 2.5\n"
+    );
+    expect(() => loadConfig({ path: badEnrichFloat, env: {} })).toThrow(
+      /youtube\.enrich_per_sync/
     );
 
     const badTable = writeConfig("badytable.toml", 'youtube = "not-a-table"\n');

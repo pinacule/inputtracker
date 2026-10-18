@@ -43,6 +43,12 @@ export interface SimklConfig {
 export interface YoutubeConfig {
   /** Base URL for video thumbnails (e.g. `https://i.ytimg.com/vi`). */
   thumb_base_url: string;
+  /** Minimum watched minutes per video per local day to count (default 5; 0 disables). */
+  min_watch_minutes?: number;
+  /** Maximum videos enriched per ActivityWatch/YouTube sync run (default 50; 0 disables). */
+  enrich_per_sync?: number;
+  /** Optional base URL for YouTube oEmbed and watch page requests (default `https://www.youtube.com`). */
+  base_url?: string;
 }
 
 export interface IngestConfig {
@@ -306,6 +312,37 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   };
 
   const youtubeTable = readTable(file, "youtube", "youtube");
+  const minWatchMinutes = readNumber(
+    youtubeTable,
+    "min_watch_minutes",
+    "youtube.min_watch_minutes",
+    5
+  );
+  if (minWatchMinutes < 0 || minWatchMinutes > 1440) {
+    throw new Error(
+      `Config key "youtube.min_watch_minutes" must be between 0 and 1440 (got ${minWatchMinutes})`
+    );
+  }
+  const enrichPerSync = readNumber(
+    youtubeTable,
+    "enrich_per_sync",
+    "youtube.enrich_per_sync",
+    50
+  );
+  if (!Number.isInteger(enrichPerSync) || enrichPerSync < 0) {
+    throw new Error(
+      `Config key "youtube.enrich_per_sync" must be a non-negative integer (got ${enrichPerSync})`
+    );
+  }
+  const youtubeBaseUrl =
+    youtubeTable.base_url !== undefined && youtubeTable.base_url !== null
+      ? readString(
+          youtubeTable,
+          "base_url",
+          "youtube.base_url",
+          "https://www.youtube.com"
+        )
+      : undefined;
   const youtube: YoutubeConfig = {
     thumb_base_url: readString(
       youtubeTable,
@@ -313,6 +350,9 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
       "youtube.thumb_base_url",
       "https://i.ytimg.com/vi"
     ),
+    min_watch_minutes: minWatchMinutes,
+    enrich_per_sync: enrichPerSync,
+    ...(youtubeBaseUrl !== undefined ? { base_url: youtubeBaseUrl } : {}),
   };
 
   // The ingest token is a secret exactly like the ABS token: non-enumerable
