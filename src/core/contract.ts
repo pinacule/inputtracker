@@ -11,7 +11,7 @@ export type { Category } from "./category.ts";
 
 // --- metadata lookup (GET /api/lookup/...) ---------------------------------
 
-export type MetaProvider = "anilist" | "tvmaze" | "itunes" | "openlibrary" | "tmdb";
+export type MetaProvider = "anilist" | "tvmaze" | "cinemeta" | "itunes" | "openlibrary" | "tmdb";
 
 /** One search result: enough to show a row with a small cover and pick it. */
 export interface LookupHit {

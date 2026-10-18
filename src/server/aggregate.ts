@@ -14,6 +14,8 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { categoryOf, type Category } from "../core/category.ts";
+import type { DatePrecision } from "../core/contract.ts";
 import { isValidSimklPoster } from "./posters.ts";
 import { isValidYoutubeVideoId } from "./thumbs.ts";
 import { dedupeConsumption, type DedupedEvent } from "./dedup.ts";
@@ -29,6 +31,7 @@ export const CONSUMPTION_KINDS = new Set([
   "history_item",
   "aw_play",
   "phone_play",
+  "archive",
 ]);
 
 /** SQL list of `CONSUMPTION_KINDS`, so the queries can never drift from the set. */
@@ -48,6 +51,8 @@ export interface ConsumptionEvent {
   started_at: string;
   ended_at?: string | null;
   duration_seconds?: number | null;
+  progress?: number | null;
+  raw?: unknown;
 }
 
 /** Rounding slack (s) between listening time and wall-clock span before a session counts as uncertain. */
@@ -76,6 +81,7 @@ export interface CalendarItem {
   id: number;
   source: string;
   media_type: string;
+  category: Category;
   title: string | null;
   parent_title: string | null;
   season: number | null;
@@ -157,6 +163,7 @@ export interface TopItem {
   title: string;
   source: string;
   media_type: string;
+  category: Category;
   minutes: number;
   count: number;
 }
@@ -216,7 +223,7 @@ export interface ProgressLists {
 }
 
 /** Parse a JSON-object column (`raw` or `external_ids`) from SQLite. */
-function parseJsonObject(value: unknown): Record<string, unknown> | null {
+export function parseJsonObject(value: unknown): Record<string, unknown> | null {
   if (value === null || value === undefined) {
     return null;
   }
@@ -252,6 +259,36 @@ export function parseExternalIds(
 }
 
 /**
+ * Date precision of an event. Non-archive events always have exact `"day"`
+ * precision; archive events store their precision in `raw.when.precision`.
+ */
+export function eventPrecision(event: {
+  source_kind?: string;
+  raw?: unknown;
+}): DatePrecision {
+  if (event.source_kind !== "archive") {
+    return "day";
+  }
+  const raw = parseJsonObject(event.raw);
+  const when = parseJsonObject(raw?.["when"]);
+  const p = when?.["precision"];
+  if (p === "day" || p === "month" || p === "year" || p === "unknown") {
+    return p;
+  }
+  return "day";
+}
+
+export const VALID_META_PROVIDERS: ReadonlySet<string> = new Set([
+  "anilist",
+  "tvmaze",
+  "itunes",
+  "openlibrary",
+  "tmdb",
+]);
+
+export const META_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
  * `/api/cover/<abs_item>` for Audiobookshelf events carrying an `abs_item`
  * external id (real field `libraryItemId`), otherwise null. `media_progress`
  * rows have no external ids: their `source_id` is the library item id. The id is
@@ -262,6 +299,9 @@ export function parseExternalIds(
  *
  * `/api/thumb/youtube/<id>` for YouTube events carrying a `youtube_video` id
  * (validated against `YOUTUBE_VIDEO_RE`), otherwise null.
+ *
+ * `/api/meta-cover/<meta_provider>/<meta_id>` for archive events carrying a
+ * valid `meta_provider` and `meta_id`.
  */
 export function coverUrlFor(event: {
   source?: string;
@@ -285,17 +325,28 @@ export function coverUrlFor(event: {
     }
     return null;
   }
-  if (event.source !== "audiobookshelf") {
-    return null;
+  if (event.source === "audiobookshelf") {
+    const ids = parseExternalIds(event.external_ids);
+    const absItem =
+      ids?.["abs_item"] ??
+      (event.source_kind === "media_progress" ? event.source_id : undefined);
+    if (typeof absItem !== "string" || !/^[A-Za-z0-9_-]+$/.test(absItem)) {
+      return null;
+    }
+    return `/api/cover/${absItem}`;
   }
   const ids = parseExternalIds(event.external_ids);
-  const absItem =
-    ids?.["abs_item"] ??
-    (event.source_kind === "media_progress" ? event.source_id : undefined);
-  if (typeof absItem !== "string" || !/^[A-Za-z0-9_-]+$/.test(absItem)) {
-    return null;
+  const metaProvider = ids?.["meta_provider"];
+  const metaId = ids?.["meta_id"];
+  if (
+    typeof metaProvider === "string" &&
+    VALID_META_PROVIDERS.has(metaProvider) &&
+    typeof metaId === "string" &&
+    META_ID_RE.test(metaId)
+  ) {
+    return `/api/meta-cover/${metaProvider}/${metaId}`;
   }
-  return `/api/cover/${absItem}`;
+  return null;
 }
 
 /**
@@ -435,6 +486,9 @@ export function aggregateCalendar(
     if (!CONSUMPTION_KINDS.has(event.source_kind)) {
       continue;
     }
+    if (eventPrecision(event) !== "day") {
+      continue;
+    }
     const local = formatLocalParts(event.started_at, tz);
     if (!local.date.startsWith(monthPrefix)) {
       continue;
@@ -449,6 +503,7 @@ export function aggregateCalendar(
       id: event.id,
       source: event.source,
       media_type: event.media_type,
+      category: categoryOf(event),
       title: event.title ?? null,
       parent_title: event.parent_title ?? null,
       season: event.season ?? null,
@@ -500,6 +555,9 @@ export function aggregateHeatmapDays(
     if (!CONSUMPTION_KINDS.has(event.source_kind)) {
       continue;
     }
+    if (eventPrecision(event) !== "day") {
+      continue;
+    }
     const local = formatLocalParts(event.started_at, tz);
     if (!local.date.startsWith(yearPrefix)) {
       continue;
@@ -540,6 +598,9 @@ export function aggregateHeatmapHours(
 
   for (const event of events) {
     if (!CONSUMPTION_KINDS.has(event.source_kind)) {
+      continue;
+    }
+    if (eventPrecision(event) !== "day") {
       continue;
     }
     const local = formatLocalParts(event.started_at, tz);
@@ -665,7 +726,14 @@ export function aggregateStats(
   >();
   const topItemsMap = new Map<
     string,
-    { title: string; source: string; media_type: string; totalSeconds: number; count: number }
+    {
+      title: string;
+      source: string;
+      media_type: string;
+      category: Category;
+      totalSeconds: number;
+      count: number;
+    }
   >();
 
   for (const event of events) {
@@ -673,6 +741,13 @@ export function aggregateStats(
       continue;
     }
     if (sourceFilter !== undefined && sourceFilter !== "" && event.source !== sourceFilter) {
+      continue;
+    }
+
+    const precision = eventPrecision(event);
+    const hasDateFilter =
+      (from !== undefined && from !== "") || (to !== undefined && to !== "");
+    if (hasDateFilter && precision === "unknown") {
       continue;
     }
 
@@ -704,45 +779,49 @@ export function aggregateStats(
     mt.count += 1;
     mt.totalSeconds += dur;
 
-    // by_week
-    const week = getIsoWeek(local.date);
-    let weekEntry = byWeekMap.get(week);
-    if (!weekEntry) {
-      weekEntry = {
-        week,
-        bySourceSeconds: {},
-        bySourceCount: {},
-        totalSeconds: 0,
-        count: 0,
-      };
-      byWeekMap.set(week, weekEntry);
+    // by_week (day precision only)
+    if (precision === "day") {
+      const week = getIsoWeek(local.date);
+      let weekEntry = byWeekMap.get(week);
+      if (!weekEntry) {
+        weekEntry = {
+          week,
+          bySourceSeconds: {},
+          bySourceCount: {},
+          totalSeconds: 0,
+          count: 0,
+        };
+        byWeekMap.set(week, weekEntry);
+      }
+      weekEntry.bySourceSeconds[event.source] =
+        (weekEntry.bySourceSeconds[event.source] ?? 0) + dur;
+      weekEntry.bySourceCount[event.source] =
+        (weekEntry.bySourceCount[event.source] ?? 0) + 1;
+      weekEntry.totalSeconds += dur;
+      weekEntry.count += 1;
     }
-    weekEntry.bySourceSeconds[event.source] =
-      (weekEntry.bySourceSeconds[event.source] ?? 0) + dur;
-    weekEntry.bySourceCount[event.source] =
-      (weekEntry.bySourceCount[event.source] ?? 0) + 1;
-    weekEntry.totalSeconds += dur;
-    weekEntry.count += 1;
 
-    // by_month
-    const month = local.date.slice(0, 7);
-    let monthEntry = byMonthMap.get(month);
-    if (!monthEntry) {
-      monthEntry = {
-        month,
-        bySourceSeconds: {},
-        bySourceCount: {},
-        totalSeconds: 0,
-        count: 0,
-      };
-      byMonthMap.set(month, monthEntry);
+    // by_month (day and month precision only)
+    if (precision === "day" || precision === "month") {
+      const month = local.date.slice(0, 7);
+      let monthEntry = byMonthMap.get(month);
+      if (!monthEntry) {
+        monthEntry = {
+          month,
+          bySourceSeconds: {},
+          bySourceCount: {},
+          totalSeconds: 0,
+          count: 0,
+        };
+        byMonthMap.set(month, monthEntry);
+      }
+      monthEntry.bySourceSeconds[event.source] =
+        (monthEntry.bySourceSeconds[event.source] ?? 0) + dur;
+      monthEntry.bySourceCount[event.source] =
+        (monthEntry.bySourceCount[event.source] ?? 0) + 1;
+      monthEntry.totalSeconds += dur;
+      monthEntry.count += 1;
     }
-    monthEntry.bySourceSeconds[event.source] =
-      (monthEntry.bySourceSeconds[event.source] ?? 0) + dur;
-    monthEntry.bySourceCount[event.source] =
-      (monthEntry.bySourceCount[event.source] ?? 0) + 1;
-    monthEntry.totalSeconds += dur;
-    monthEntry.count += 1;
 
     // top_items
     const effectiveTitle = getSeriesOrTitle(event);
@@ -753,6 +832,7 @@ export function aggregateStats(
         title: effectiveTitle,
         source: event.source,
         media_type: event.media_type,
+        category: categoryOf(event),
         totalSeconds: 0,
         count: 0,
       };
@@ -817,6 +897,7 @@ export function aggregateStats(
       title: it.title,
       source: it.source,
       media_type: it.media_type,
+      category: it.category,
       minutes: it.totalSeconds / 60,
       count: it.count,
     }))
@@ -896,7 +977,9 @@ export function getLatestConsumptionEvents(
           episode,
           started_at,
           ended_at,
-          duration_seconds
+          duration_seconds,
+          progress,
+          raw
         FROM events_latest
         WHERE source_kind IN (${CONSUMPTION_KINDS_SQL})
           AND source = ?
@@ -920,7 +1003,9 @@ export function getLatestConsumptionEvents(
         episode,
         started_at,
         ended_at,
-        duration_seconds
+        duration_seconds,
+        progress,
+        raw
       FROM events_latest
       WHERE source_kind IN (${CONSUMPTION_KINDS_SQL})
       ORDER BY started_at ASC, id ASC;`

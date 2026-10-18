@@ -22,13 +22,17 @@ export interface DesktopNotifierOptions {
 export class DesktopNotifier implements Notifier {
   private readonly command: string;
   private readonly spawn: SpawnFn;
+  private readonly realSpawnUnderTest: boolean;
 
   constructor(options: DesktopNotifierOptions = {}) {
     this.command = options.command ?? "notify-send";
     this.spawn = options.spawn ?? Bun.spawn;
+    // `bun test` sets NODE_ENV=test: never pop up real notifications from a test run.
+    this.realSpawnUnderTest = options.spawn === undefined && process.env.NODE_ENV === "test";
   }
 
   async notify(title: string, body: string): Promise<void> {
+    if (this.realSpawnUnderTest) return;
     try {
       const proc = this.spawn([this.command, title, body], {
         stdin: "ignore",

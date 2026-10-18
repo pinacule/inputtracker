@@ -67,3 +67,18 @@ ntfy_url = ""
 # openlibrary_url = "https://openlibrary.org"
 # openlibrary_covers_url = "https://covers.openlibrary.org"
 
+# [metadata]
+# External metadata lookup for adding past anime, series, films, books and audiobooks.
+# Providers are keyless except optional TMDB (used ahead of iTunes/TVmaze when set).
+# enabled = true
+# anilist_url = "https://graphql.anilist.co"
+# tvmaze_url = "https://api.tvmaze.com"
+# cinemeta_url = "https://v3-cinemeta.strem.io"
+# itunes_url = "https://itunes.apple.com"
+# openlibrary_url = "https://openlibrary.org"
+# openlibrary_covers_url = "https://covers.openlibrary.org"
+# tmdb_url = "https://api.themoviedb.org/3"
+# tmdb_image_url = "https://image.tmdb.org/t/p"
+# tmdb_api_key = "YOUR_TMDB_API_KEY"
+
+

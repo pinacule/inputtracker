@@ -77,6 +77,20 @@ export interface CoversConfig {
   openlibrary_covers_url: string;
 }
 
+export interface MetadataConfig {
+  enabled: boolean;
+  anilist_url: string;
+  tvmaze_url: string;
+  cinemeta_url: string;
+  itunes_url: string;
+  openlibrary_url: string;
+  openlibrary_covers_url: string;
+  tmdb_url: string;
+  tmdb_image_url: string;
+  /** Optional TMDB API key; non-enumerable secret, never logged. */
+  tmdb_api_key: string;
+}
+
 export interface Config {
   timezone: string;
   server: ServerConfig;
@@ -89,6 +103,11 @@ export interface Config {
    * configs; `loadConfig` always populates it with defaults.
    */
   covers?: CoversConfig;
+  /**
+   * Metadata lookup options. Optional in hand-built (test/partial) configs;
+   * `loadConfig` always populates it with defaults.
+   */
+  metadata?: MetadataConfig;
   /**
    * Optional: hand-built (test/partial) configs may omit `ingest`; a missing
    * or empty token disables the ingest endpoint.
@@ -381,6 +400,72 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     ),
   };
 
+  const metadataTable = readTable(file, "metadata", "metadata");
+  const tmdbApiKey = readString(
+    metadataTable,
+    "tmdb_api_key",
+    "metadata.tmdb_api_key",
+    ""
+  );
+  const metadata = {
+    enabled: readBoolean(metadataTable, "enabled", "metadata.enabled", true),
+    anilist_url: readString(
+      metadataTable,
+      "anilist_url",
+      "metadata.anilist_url",
+      "https://graphql.anilist.co"
+    ),
+    tvmaze_url: readString(
+      metadataTable,
+      "tvmaze_url",
+      "metadata.tvmaze_url",
+      "https://api.tvmaze.com"
+    ),
+    cinemeta_url: readString(
+      metadataTable,
+      "cinemeta_url",
+      "metadata.cinemeta_url",
+      "https://v3-cinemeta.strem.io"
+    ),
+    itunes_url: readString(
+      metadataTable,
+      "itunes_url",
+      "metadata.itunes_url",
+      "https://itunes.apple.com"
+    ),
+    openlibrary_url: readString(
+      metadataTable,
+      "openlibrary_url",
+      "metadata.openlibrary_url",
+      covers.openlibrary_url
+    ),
+    openlibrary_covers_url: readString(
+      metadataTable,
+      "openlibrary_covers_url",
+      "metadata.openlibrary_covers_url",
+      covers.openlibrary_covers_url
+    ),
+    tmdb_url: readString(
+      metadataTable,
+      "tmdb_url",
+      "metadata.tmdb_url",
+      "https://api.themoviedb.org/3"
+    ),
+    tmdb_image_url: readString(
+      metadataTable,
+      "tmdb_image_url",
+      "metadata.tmdb_image_url",
+      "https://image.tmdb.org/t/p"
+    ),
+  } as MetadataConfig;
+
+  Object.defineProperty(metadata, "tmdb_api_key", {
+    value: tmdbApiKey,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+
   const config = {
     timezone,
     server,
@@ -389,6 +474,7 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     simkl,
     youtube,
     covers,
+    metadata,
     ingest,
     activitywatch,
     notify,
@@ -449,12 +535,23 @@ function secretsFrom(value: unknown): string[] {
     if ((value as Config).ingest) {
       add((value as Config).ingest?.token);
     }
+    if ((value as Config).metadata) {
+      add((value as Config).metadata?.tmdb_api_key);
+    }
+  } else if (value && typeof value === "object") {
+    const meta = (value as { metadata?: { tmdb_api_key?: unknown } }).metadata;
+    if (meta && typeof meta === "object") {
+      add(meta.tmdb_api_key);
+    }
   }
   if (activeConfig) {
     add(activeConfig.audiobookshelf.token);
     add(activeConfig.notify?.ntfy_token);
     if (activeConfig.ingest) {
       add(activeConfig.ingest.token);
+    }
+    if (activeConfig.metadata) {
+      add(activeConfig.metadata.tmdb_api_key);
     }
   }
 
@@ -521,6 +618,12 @@ export function redactString(text: string, config: Config): string {
   )?.ingest?.token;
   if (typeof ingestToken === "string" && ingestToken !== "") {
     secrets.push(ingestToken);
+  }
+  const tmdbKey = (
+    config as { metadata?: { tmdb_api_key?: string } } | null | undefined
+  )?.metadata?.tmdb_api_key;
+  if (typeof tmdbKey === "string" && tmdbKey !== "") {
+    secrets.push(tmdbKey);
   }
   return maskString(text, secrets);
 }

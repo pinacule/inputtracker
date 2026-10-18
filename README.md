@@ -58,6 +58,16 @@ Every key, its default and what it means:
 | `covers.external` | `true` | When true, searches Open Library for covers of books missing from Audiobookshelf (sends title and author to Open Library). |
 | `covers.openlibrary_url` | `https://openlibrary.org` | Open Library API base URL for cover search. |
 | `covers.openlibrary_covers_url` | `https://covers.openlibrary.org` | Open Library covers base URL. |
+| `metadata.enabled` | `true` | Enables external metadata lookup (`/api/lookup/*` and `/api/meta-cover/*`). |
+| `metadata.anilist_url` | `https://graphql.anilist.co` | AniList GraphQL endpoint for anime lookup. |
+| `metadata.tvmaze_url` | `https://api.tvmaze.com` | TVmaze API base URL for series lookup. |
+| `metadata.cinemeta_url` | `https://v3-cinemeta.strem.io` | Stremio Cinemeta API base URL for film and series lookup. |
+| `metadata.itunes_url` | `https://itunes.apple.com` | iTunes Search API base URL for film lookup. |
+| `metadata.openlibrary_url` | `covers.openlibrary_url` | Open Library API base URL for book and audiobook lookup. |
+| `metadata.openlibrary_covers_url` | `covers.openlibrary_covers_url` | Open Library covers base URL for metadata covers. |
+| `metadata.tmdb_url` | `https://api.themoviedb.org/3` | TMDB API base URL (used only when `metadata.tmdb_api_key` is set). |
+| `metadata.tmdb_image_url` | `https://image.tmdb.org/t/p` | TMDB image CDN base URL. |
+| `metadata.tmdb_api_key` | empty | Optional TMDB API key; when set, TMDB is used for films and series ahead of iTunes and TVmaze. Never logged. |
 
 The Audiobookshelf token stays server-side. It is read from the config and is
 never sent to the browser: cover images and every Audiobookshelf call are
@@ -280,6 +290,82 @@ In the app, the rating editor is on the Search and Progress pages. Under the
 hood it is `GET /api/annotations?source=<s>&title=<t>` and
 `POST /api/annotations`, and every revision is included in the JSON export
 (v2), so `it export` and `it import` round-trip them like events and goals.
+
+## Metadata lookup
+
+When adding older anime, series, films, books or audiobooks by hand, the server
+looks up titles, covers, seasons, episode counts, runtimes and page counts:
+
+- `GET /api/lookup/search?q=<1..200 chars>&category=<Category|any>` fans out in
+  parallel to the providers that match the category (each with an 8 s timeout
+  and concurrency limit), merges and ranks the hits (exact title match first,
+  then by popularity and year, up to 20 results), and lists any failed upstream
+  in `failed_providers` without failing the request.
+- `GET /api/lookup/work/:provider/:id` returns the full `WorkDetails` snapshot
+  for one work (404 when unknown, 502 when the provider fails).
+- `GET /api/meta-cover/:provider/:id` downloads the cover image once (validating
+  an `image/*` content type and a 5 MB limit) and stores it permanently under
+  `<directory of db_path>/covers/meta/`, so archived covers keep working even if
+  a provider disappears.
+
+Providers (all keyless except optional TMDB; GET-only except AniList's read-only
+GraphQL query):
+
+- **Anime → AniList** (`https://graphql.anilist.co`): follows `PREQUEL` back to
+  Season 1 and `SEQUEL` forward over `TV` / `TV_SHORT` / `ONA` entries (up to 15
+  hops) to assemble the full season list in watch order; `MOVIE` entries return
+  `runtime_minutes` and no seasons.
+- **Series → TVmaze** (`https://api.tvmaze.com`), plus **Cinemeta** as a second
+  provider (deduplicated by IMDb id): `/search/shows`, `/shows/:id/seasons` and
+  `/shows/:id/episodes`, summing per-episode runtimes for each season's
+  `total_minutes`.
+- **Films → Cinemeta** (`https://v3-cinemeta.strem.io`, keyless, IMDb ids), with
+  **iTunes Search** (`https://itunes.apple.com`) as a fallback.
+- **Books & audiobooks → Open Library** (`https://openlibrary.org`):
+  `search.json`, `/works/:id.json` and `/works/:id/editions.json` for page
+  counts and ISBNs, and `covers.openlibrary.org` for covers by `cover_i`.
+- **TMDB (optional)**: when `metadata.tmdb_api_key` is set in
+  `inputtracker.config.toml`, TMDB is queried for films and series and ranked
+  ahead of iTunes and TVmaze. The key is redacted everywhere.
+
+Search responses are cached on disk for 7 days and work details for 30 days
+under `<directory of db_path>/metadata-cache/`.
+
+## Archive and library
+
+Besides automatic syncs, you can add works from the past to the archive
+(`POST /api/archive`, `GET /api/archive`, `POST /api/archive/:entry_id/delete`).
+Each entry carries a work snapshot (seasons, runtimes, pages, external ids and
+cover metadata) and is stored in `events` as append-only units (`source = "manual"`,
+`source_kind = "archive"`, `source_id = "archive:<entry_id>:<unit>"`): one unit
+per watched season (`s<n>`), one per film viewing (`v<n>`), or one per
+book/audiobook/other (`b`).
+
+Date precision (`day`, `month`, `year`, `unknown`) controls where an archive
+entry counts:
+
+- **Calendar, heat map, streaks and hour × weekday charts** include only `day`
+  precision events.
+- **Month review** (`GET /api/review/month?month=YYYY-MM`) includes `day` and
+  `month` precision events of that month (`month` precision time is also
+  reported in `undated_minutes`).
+- **Year review** (`GET /api/review/year?year=YYYY`) combines the twelve months
+  plus `year` precision archive entries (`undated_minutes`); `unknown`
+  precision entries are left out.
+- **Library and all-time totals** (`GET /api/library`, `GET /api/library/work`)
+  include every precision.
+
+Editing an archive entry with the same `entry_id` writes new unit revisions and
+writes tombstones (`raw.deleted = true`, `duration_seconds = 0`) for removed
+units; deleting an entry tombstones all of its units. The `events_latest` view
+(migration v4) hides tombstoned units from all reads while `events` keeps the
+full history forever.
+
+The library groups events across all sources into works by category and
+normalized series-or-title or shared external id (`anilist`, `mal`, `imdb`,
+`tvmaze`, `abs_item`, `meta_id`), with YouTube grouped by channel. Read-only
+server status and source configuration are exposed at `GET /api/settings`
+(hosts only, never secrets).
 
 ## Duplicates across sources
 

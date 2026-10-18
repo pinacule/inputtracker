@@ -16,6 +16,7 @@ import type { Database } from "bun:sqlite";
 import {
   CONSUMPTION_KINDS,
   coverUrlFor,
+  eventPrecision,
   formatLocalParts,
   getDisplayConsumptionEvents,
   getSeriesOrTitle,
@@ -99,6 +100,9 @@ function activeDaysBySource(
   const bySource = new Map<string, Set<string>>();
   for (const event of events) {
     if (!CONSUMPTION_KINDS.has(event.source_kind)) {
+      continue;
+    }
+    if (eventPrecision(event) !== "day") {
       continue;
     }
     const { date } = formatLocalParts(event.started_at, tz);
@@ -227,7 +231,11 @@ export function computeOnThisDay(
   const byYear = new Map<number, Map<string, OnThisDayItem>>();
 
   const candidates = events
-    .filter((event) => CONSUMPTION_KINDS.has(event.source_kind))
+    .filter(
+      (event) =>
+        CONSUMPTION_KINDS.has(event.source_kind) &&
+        eventPrecision(event) === "day"
+    )
     .map((event) => ({
       event,
       local: formatLocalParts(event.started_at, tz),

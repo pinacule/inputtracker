@@ -79,7 +79,9 @@ describe("annotations db & schema (migration v3)", () => {
         "SELECT version FROM schema_migrations ORDER BY version ASC;"
       )
       .all();
-    expect(migrationRows.map((r) => r.version)).toEqual([1, 2, 3]);
+    expect(migrationRows.map((r) => r.version)).toEqual(
+      [...migrations].map((m) => m.version).sort((a, b) => a - b)
+    );
 
     // Events table is unchanged
     const afterEvents = v1Db
