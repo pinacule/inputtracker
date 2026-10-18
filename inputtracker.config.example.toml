@@ -60,3 +60,10 @@ ntfy_url = ""
 # device = "pc"
 # include_music = false
 
+# [covers]
+# Fallback cover lookup when an audiobook is no longer present on Audiobookshelf.
+# When external is true, book titles and authors are sent to Open Library to find covers.
+# external = true
+# openlibrary_url = "https://openlibrary.org"
+# openlibrary_covers_url = "https://covers.openlibrary.org"
+

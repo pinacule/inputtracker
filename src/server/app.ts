@@ -583,7 +583,10 @@ export function createApp(deps: AppDeps): Hono {
 
     const cover = await getCover(itemId, {
       config,
+      db: deps.db,
       createAbsClient: deps.createAbsClient,
+      fetch: deps.fetchImage,
+      now: deps.nowMs,
     });
     if (cover === null) {
       return c.json({ error: "Cover not available" }, 404);

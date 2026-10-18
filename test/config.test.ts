@@ -68,6 +68,11 @@ describe("loadConfig defaults", () => {
       device: "pc",
       include_music: false,
     });
+    expect(config.covers).toEqual({
+      external: true,
+      openlibrary_url: "https://openlibrary.org",
+      openlibrary_covers_url: "https://covers.openlibrary.org",
+    });
     // ntfy_token "" is part of the (public-by-value) defaults; redact() masks
     // any `*token*` key, so no serialized form of the config reveals it.
     expect(config.notify).toEqual({
@@ -128,6 +133,11 @@ describe("loadConfig file merging", () => {
         "desktop = false",
         'ntfy_url = "https://ntfy.example/topic"',
         "",
+        "[covers]",
+        "external = false",
+        'openlibrary_url = "https://ol.example"',
+        'openlibrary_covers_url = "https://covers.ol.example"',
+        "",
       ].join("\n")
     );
 
@@ -155,6 +165,11 @@ describe("loadConfig file merging", () => {
     });
     expect(config.notify.desktop).toBe(false);
     expect(config.notify.ntfy_url).toBe("https://ntfy.example/topic");
+    expect(config.covers).toEqual({
+      external: false,
+      openlibrary_url: "https://ol.example",
+      openlibrary_covers_url: "https://covers.ol.example",
+    });
   });
 
   test("a partial file keeps defaults for the other keys", () => {

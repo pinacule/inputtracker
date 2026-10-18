@@ -55,6 +55,9 @@ Every key, its default and what it means:
 | `notify.ntfy_token` | empty | Optional ntfy access token (`Authorization: Bearer …`); never logged. |
 | `notify.app_url` | empty | Web app URL sent as the ntfy `Click` header (e.g. its Tailscale address). |
 | `notify.weekly_summary` | `false` | Enable the weekly summary push (title of what you consumed only reaches the ntfy server when this is on). |
+| `covers.external` | `true` | When true, searches Open Library for covers of books missing from Audiobookshelf (sends title and author to Open Library). |
+| `covers.openlibrary_url` | `https://openlibrary.org` | Open Library API base URL for cover search. |
+| `covers.openlibrary_covers_url` | `https://covers.openlibrary.org` | Open Library covers base URL. |
 
 The Audiobookshelf token stays server-side. It is read from the config and is
 never sent to the browser: cover images and every Audiobookshelf call are

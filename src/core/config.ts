@@ -71,6 +71,12 @@ export interface NotifyConfig {
   weekly_summary: boolean;
 }
 
+export interface CoversConfig {
+  external: boolean;
+  openlibrary_url: string;
+  openlibrary_covers_url: string;
+}
+
 export interface Config {
   timezone: string;
   server: ServerConfig;
@@ -78,6 +84,11 @@ export interface Config {
   audiobookshelf: AudiobookshelfConfig;
   simkl: SimklConfig;
   youtube: YoutubeConfig;
+  /**
+   * Cover lookup fallback options. Optional in hand-built (test/partial)
+   * configs; `loadConfig` always populates it with defaults.
+   */
+  covers?: CoversConfig;
   /**
    * Optional: hand-built (test/partial) configs may omit `ingest`; a missing
    * or empty token disables the ingest endpoint.
@@ -353,6 +364,23 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   // matching /token/ is masked) and by `secretsFrom` for free-text masking, so
   // `config.toJSON()`/`toString()`/`redact(config)` can never reveal it.
 
+  const coversTable = readTable(file, "covers", "covers");
+  const covers: CoversConfig = {
+    external: readBoolean(coversTable, "external", "covers.external", true),
+    openlibrary_url: readString(
+      coversTable,
+      "openlibrary_url",
+      "covers.openlibrary_url",
+      "https://openlibrary.org"
+    ),
+    openlibrary_covers_url: readString(
+      coversTable,
+      "openlibrary_covers_url",
+      "covers.openlibrary_covers_url",
+      "https://covers.openlibrary.org"
+    ),
+  };
+
   const config = {
     timezone,
     server,
@@ -360,6 +388,7 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     audiobookshelf,
     simkl,
     youtube,
+    covers,
     ingest,
     activitywatch,
     notify,
