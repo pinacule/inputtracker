@@ -1,0 +1,1392 @@
+/**
+ * InputTracker v2.2 — Home Page (`#/calendar`) Styles
+ *
+ * Phone-first (375px) & desktop two-column studio (1440px).
+ * Uses design tokens from `tokens.css` exclusively across all 5 dark themes.
+ */
+
+.home-page {
+  gap: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .home-page {
+    gap: var(--space-5);
+  }
+}
+
+/* ==========================================================================
+   1. Top Header & Category Filter Strip
+   ========================================================================== */
+
+.home-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.home-month-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.home-month-title {
+  font-family: var(--font-serif);
+  font-size: clamp(1.35rem, 2.2vw, var(--text-2xl));
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+  padding: 0 var(--space-1);
+  white-space: nowrap;
+}
+
+.home-today-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem 0.72rem;
+  min-height: 30px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent-primary);
+  background-color: var(--accent-primary-subtle);
+  border: 1px solid var(--accent-primary-border);
+  border-radius: var(--radius-full);
+  margin-left: var(--space-1);
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.home-today-btn:hover {
+  border-color: var(--accent-primary);
+}
+
+.home-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Single-row horizontal scroll on phone, wrap on desktop */
+.home-filter-bar {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.home-filter-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.home-filter-bar .ui-cat-chips {
+  flex-wrap: nowrap;
+}
+
+@media (min-width: 768px) {
+  .home-filter-bar .ui-cat-chips {
+    flex-wrap: wrap;
+  }
+}
+
+.home-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--status-danger-bg);
+  color: var(--status-danger-fg);
+  border: 1px solid var(--status-danger-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+/* ==========================================================================
+   2. Responsive Workspace Layout (Phone Stack -> Desktop 2-Column Studio)
+   ========================================================================== */
+
+.home-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.home-inspector-col,
+.home-stage-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .home-workspace {
+    grid-template-columns: minmax(0, 1.58fr) minmax(350px, 430px);
+    grid-template-areas: "stage inspector";
+    gap: var(--space-6);
+  }
+
+  .home-stage-col {
+    grid-area: stage;
+    gap: var(--space-5);
+  }
+
+  .home-inspector-col {
+    grid-area: inspector;
+    position: sticky;
+    top: var(--space-6);
+    gap: var(--space-4);
+  }
+}
+
+/* Shared Home Card Surface */
+.home-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .home-card {
+    padding: var(--space-5);
+  }
+}
+
+.home-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.home-section-titles {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.home-section-title {
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.home-section-count {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.home-section-link {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.home-section-link:hover {
+  color: var(--accent-primary);
+}
+
+/* ==========================================================================
+   3. Graph 1: 7-Day Week Stacked Bar Graph (`WeekGraph.tsx`)
+   ========================================================================== */
+
+.home-week-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.home-week-titles {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.home-week-sub {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.home-week-totals {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.home-week-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+.home-week-pill--today {
+  background-color: var(--accent-primary-subtle);
+  border-color: var(--accent-primary-border);
+}
+
+.home-week-pill-label {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.home-week-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  padding-top: var(--space-1);
+}
+
+.home-week-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 3px;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  border: 1px solid transparent;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.home-week-day:hover {
+  background-color: var(--bg-muted);
+  border-color: var(--border-default);
+}
+
+.home-week-day--selected {
+  background-color: var(--bg-surface-raised);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.home-week-day--outside {
+  opacity: 0.72;
+}
+
+.home-week-day-value {
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.1;
+  min-height: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.home-week-day--selected .home-week-day-value {
+  color: var(--text-primary);
+}
+
+.home-week-bar-well {
+  width: 100%;
+  max-width: 24px;
+  height: 56px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 2px;
+}
+
+.home-week-bar-stack {
+  width: 100%;
+  min-height: 6px;
+  border-radius: 4px 4px 2px 2px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1px;
+  transition: height var(--duration-normal) var(--ease-out);
+}
+
+.home-week-bar-seg {
+  width: 100%;
+  min-height: 2px;
+  display: block;
+}
+
+.home-week-bar-Baseline {
+  width: 100%;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background-color: var(--border-default);
+  opacity: 0.6;
+}
+
+.home-week-day-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.home-week-day-name {
+  display: none;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.home-week-day-letter {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+@media (min-width: 420px) {
+  .home-week-day-name {
+    display: block;
+  }
+  .home-week-day-letter {
+    display: none;
+  }
+}
+
+.home-week-day-num {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+}
+
+.home-week-day-num--today {
+  background-color: var(--accent-primary);
+  color: var(--text-on-accent);
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   4. Shared Proportional Category Share Bars
+   ========================================================================== */
+
+.home-share-bar {
+  width: 100%;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-subtle);
+  overflow: hidden;
+  display: flex;
+  gap: 2px;
+}
+
+.home-share-bar--lg {
+  height: 10px;
+}
+
+.home-share-bar-seg {
+  height: 100%;
+  min-width: 3px;
+  border-radius: 2px;
+  transition: width var(--duration-normal) var(--ease-out);
+}
+
+/* ==========================================================================
+   5. Selected Day Detail Panel (`DayDetailPanel.tsx`)
+   ========================================================================== */
+
+.home-day-panel {
+  gap: var(--space-3);
+}
+
+.home-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.home-day-heading-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.home-day-step-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.home-day-title {
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.home-day-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.home-day-total {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.home-day-cat-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: var(--space-1);
+}
+
+.home-day-cat-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.home-day-cat-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.home-day-cat-tag-val {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Empty Day State */
+.home-day-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  border: 1px dashed var(--border-default);
+}
+
+.home-day-empty-text {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Day Work List & Rows */
+.home-day-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.home-day-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.home-day-row:hover {
+  border-color: var(--border-default);
+}
+
+.home-day-row-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.home-day-row-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.home-day-row-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-day-row-title:hover {
+  color: var(--accent-primary);
+}
+
+.home-day-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-day-row-bar-track {
+  width: 100%;
+  max-width: 140px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-muted);
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.home-day-row-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+}
+
+.home-day-row-right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.home-day-row-duration {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Meaningful Cover Thumb vs Calm Category Icon Badge (`HomeWorkThumb.tsx`) */
+.home-work-thumb {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background-color: var(--bg-muted);
+  box-shadow: var(--shadow-xs);
+  flex-shrink: 0;
+}
+
+.home-work-thumb--sm.home-work-thumb--poster {
+  width: 30px;
+  height: 44px;
+}
+
+.home-work-thumb--sm.home-work-thumb--square {
+  width: 34px;
+  height: 34px;
+}
+
+.home-work-thumb--md.home-work-thumb--poster {
+  width: 40px;
+  height: 58px;
+}
+
+.home-work-thumb--md.home-work-thumb--square {
+  width: 46px;
+  height: 46px;
+}
+
+.home-work-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.home-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  flex-shrink: 0;
+}
+
+.home-cat-badge--sm {
+  width: 32px;
+  height: 32px;
+}
+
+.home-cat-badge--md {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+}
+
+.home-cat-badge--anime {
+  background-color: var(--cat-anime-bg);
+  color: var(--cat-anime-fg);
+  border-color: var(--cat-anime-border);
+}
+.home-cat-badge--series {
+  background-color: var(--cat-series-bg);
+  color: var(--cat-series-fg);
+  border-color: var(--cat-series-border);
+}
+.home-cat-badge--film {
+  background-color: var(--cat-film-bg);
+  color: var(--cat-film-fg);
+  border-color: var(--cat-film-border);
+}
+.home-cat-badge--book {
+  background-color: var(--cat-book-bg);
+  color: var(--cat-book-fg);
+  border-color: var(--cat-book-border);
+}
+.home-cat-badge--audiobook {
+  background-color: var(--cat-audiobook-bg);
+  color: var(--cat-audiobook-fg);
+  border-color: var(--cat-audiobook-border);
+}
+.home-cat-badge--youtube {
+  background-color: var(--cat-youtube-bg);
+  color: var(--cat-youtube-fg);
+  border-color: var(--cat-youtube-border);
+}
+.home-cat-badge--podcast {
+  background-color: var(--cat-podcast-bg);
+  color: var(--cat-podcast-fg);
+  border-color: var(--cat-podcast-border);
+}
+.home-cat-badge--music {
+  background-color: var(--cat-music-bg);
+  color: var(--cat-music-fg);
+  border-color: var(--cat-music-border);
+}
+.home-cat-badge--other {
+  background-color: var(--cat-other-bg);
+  color: var(--cat-other-fg);
+  border-color: var(--cat-other-border);
+}
+
+/* Collapsible YouTube & Music Summary Rows */
+.home-day-collapse-item {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.home-day-collapse-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.home-day-collapse-trigger:hover {
+  background-color: var(--bg-muted);
+}
+
+.home-day-collapse-trigger--open {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.home-day-collapse-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home-day-collapse-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.home-day-collapse-pill {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.home-day-collapse-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.home-chevron {
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.home-chevron--open {
+  transform: rotate(90deg);
+}
+
+.home-day-drawer-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Expanded YouTube Drawer (Grouped by Channel) */
+.home-yt-drawer {
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.home-yt-channel-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.home-yt-channel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.home-yt-channel-info {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.home-yt-channel-name {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--cat-youtube-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-yt-channel-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.home-yt-channel-bar-track {
+  width: 100%;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-muted);
+  overflow: hidden;
+}
+
+.home-yt-channel-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background-color: var(--cat-youtube-solid);
+}
+
+.home-yt-video-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--space-2);
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.home-yt-video-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 3px 4px;
+  border-radius: var(--radius-xs);
+}
+
+.home-yt-video-row:hover {
+  background-color: var(--bg-surface);
+}
+
+.home-yt-video-title {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.home-yt-video-title:hover {
+  color: var(--text-primary);
+}
+
+.home-yt-video-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.home-yt-video-dur {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   6. "In the Middle Of" Shelf (`InProgressShelf.tsx`)
+   ========================================================================== */
+
+.home-progress-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+@media (min-width: 600px) {
+  .home-progress-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.home-progress-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+
+.home-progress-item:hover {
+  border-color: var(--border-default);
+}
+
+.home-progress-thumb-link {
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+.home-progress-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.home-progress-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.home-progress-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-progress-title:hover {
+  color: var(--accent-primary);
+}
+
+.home-progress-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-progress-status {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.home-progress-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: 2px;
+}
+
+.home-progress-log-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.home-progress-log-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+/* ==========================================================================
+   7. Graph 2: Month Rhythm & 31-Day Skyline (`MonthRhythmCard.tsx`)
+   ========================================================================== */
+
+.home-rhythm-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.home-rhythm-summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.home-rhythm-total {
+  font-family: var(--font-serif);
+  font-size: clamp(1.35rem, 2vw, var(--text-2xl));
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.home-rhythm-meta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.home-rhythm-readout {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-subtle);
+}
+
+.home-rhythm-readout strong {
+  color: var(--text-primary);
+}
+
+.home-rhythm-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.home-rhythm-cat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background-color: var(--bg-subtle);
+  border: 1px solid transparent;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.home-rhythm-cat-pill:hover {
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+.home-rhythm-cat-pill--active {
+  background-color: var(--accent-primary-subtle);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.home-rhythm-cat-pill strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 31-Day Daily Skyline Bar Chart */
+.home-skyline {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding-top: var(--space-2);
+  align-items: end;
+}
+
+@media (min-width: 640px) {
+  .home-skyline {
+    gap: 3px;
+  }
+}
+
+.home-skyline-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  border-radius: 4px;
+}
+
+.home-skyline-col:hover,
+.home-skyline-col--selected {
+  background-color: var(--bg-subtle);
+}
+
+.home-skyline-well {
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 1px;
+}
+
+.home-skyline-stack {
+  width: 100%;
+  max-width: 12px;
+  min-height: 4px;
+  border-radius: 2px 2px 1px 1px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1px;
+}
+
+.home-skyline-seg {
+  width: 100%;
+  min-height: 1.5px;
+  display: block;
+}
+
+.home-skyline-dot {
+  width: 4px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background-color: var(--border-default);
+  opacity: 0.5;
+}
+
+.home-skyline-tick {
+  font-size: 0.62rem;
+  line-height: 1;
+  min-height: 0.65rem;
+  color: var(--text-muted);
+}
+
+.home-skyline-tick--selected {
+  color: var(--accent-primary);
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   8. Graph 3: 7-Column Month Calendar Grid (`MonthCalendarGrid.tsx`)
+   ========================================================================== */
+
+.home-cal-card {
+  padding: var(--space-3);
+  gap: var(--space-2);
+}
+
+@media (min-width: 768px) {
+  .home-cal-card {
+    padding: var(--space-4);
+  }
+}
+
+.home-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  padding: 0 2px;
+}
+
+.home-cal-weekday {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.home-cal-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+@media (min-width: 768px) {
+  .home-cal-grid,
+  .home-cal-weekdays {
+    gap: 6px;
+  }
+}
+
+.home-cal-week-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+@media (min-width: 768px) {
+  .home-cal-week-row {
+    gap: 6px;
+  }
+}
+
+.home-cal-cell {
+  position: relative;
+  min-height: 54px;
+  padding: 5px 5px 6px;
+  border-radius: var(--radius-sm);
+  background-color: var(--heat-0);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4px;
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+@media (min-width: 768px) {
+  .home-cal-cell {
+    min-height: 86px;
+    padding: 7px 8px 8px;
+    border-radius: var(--radius-md);
+  }
+}
+
+/* Subtle Heat-Wash Levels */
+.home-cal-cell--heat-1 {
+  background-color: var(--heat-1);
+  border-color: var(--heat-border-1);
+}
+.home-cal-cell--heat-2 {
+  background-color: var(--heat-2);
+  border-color: var(--heat-border-2);
+}
+.home-cal-cell--heat-3 {
+  background-color: var(--heat-3);
+  border-color: var(--heat-border-3);
+}
+.home-cal-cell--heat-4 {
+  background-color: var(--heat-4);
+  border-color: var(--heat-border-4);
+}
+
+.home-cal-cell--outside {
+  opacity: 0.36;
+}
+
+.home-cal-cell:hover {
+  border-color: var(--border-strong);
+}
+
+.home-cal-cell--selected {
+  border-color: var(--accent-primary);
+  box-shadow: inset 0 0 0 1.5px var(--accent-primary);
+  opacity: 1;
+}
+
+.home-cal-cell-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  width: 100%;
+}
+
+.home-cal-day-num {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.home-cal-day-num--today {
+  background-color: var(--accent-primary);
+  color: var(--text-on-accent);
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: var(--radius-full);
+}
+
+.home-cal-day-dur {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+/* Desktop Calm Lines: hidden on narrow phone cells (< 768px) */
+.home-cal-lines {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .home-cal-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.home-cal-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.home-cal-line .ui-tab-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.home-cal-line-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.home-cal-line-more {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Phone Category Dots: shown only on < 768px */
+.home-cal-mobile-dots {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 0;
+}
+
+.home-cal-mobile-dots .ui-tab-dot {
+  width: 5px;
+  height: 5px;
+}
+
+@media (min-width: 768px) {
+  .home-cal-mobile-dots {
+    display: none;
+  }
+}
+
+/* Bottom Proportional Category Time Bar */
+.home-cal-bar-slot {
+  width: 100%;
+  height: 4px;
+  display: flex;
+  align-items: center;
+  margin-top: auto;
+}
+
+.home-cal-bar {
+  height: 100%;
+  min-width: 8px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  display: flex;
+  gap: 1px;
+}
+
+.home-cal-bar-seg {
+  height: 100%;
+  min-width: 2px;
+  display: block;
+}
+
+/* Phone: the shelf shows the 3 most recent works; the Library link leads to the rest. */
+@media (max-width: 767px) {
+  .home-progress-grid > :nth-child(n + 4) {
+    display: none;
+  }
+}
