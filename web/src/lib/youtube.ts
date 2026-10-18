@@ -1,15 +1,19 @@
 /**
- * Pure, DOM-free helpers for YouTube grouping (topics -> channels -> videos),
+ * Pure, DOM-free helpers for YouTube videos, topic/channel grouping,
+ * Library sorting (`recent | time | title | category | creator`),
  * proportional bar ratios, search filtering, and 404 fallback synthesis.
  */
 
 import type {
+  LibrarySortV2,
   LibraryWork,
   YoutubeChannel,
   YoutubeOverview,
   YoutubeVideo,
+  YoutubeVideoSort,
   YoutubeVideosResult,
 } from "../api";
+import { CATEGORIES } from "./categories";
 
 export const UNCATEGORISED_TOPIC = "Uncategorised";
 
@@ -27,6 +31,8 @@ export const COMMON_YOUTUBE_TOPICS: ReadonlyArray<string> = [
   "News & Politics",
 ];
 
+export type YoutubeVideoGroupBy = "none" | "topic" | "channel";
+
 export interface YoutubeChannelBar extends YoutubeChannel {
   readonly displayTopic: string;
   readonly sharePct: number;
@@ -42,6 +48,249 @@ export interface YoutubeTopicGroup {
   readonly sharePct: number;
   readonly barRatio: number;
   readonly channels: readonly YoutubeChannelBar[];
+}
+
+export interface YoutubeVideoGroup {
+  readonly key: string;
+  readonly label: string;
+  readonly kind: "topic" | "channel";
+  readonly topic: string | null;
+  readonly isUncategorised: boolean;
+  readonly totalMinutes: number;
+  readonly videosCount: number;
+  readonly sharePct: number;
+  readonly barRatio: number;
+  readonly videos: readonly YoutubeVideo[];
+}
+
+/**
+ * Sorts a list of `LibraryWork`s according to `LibrarySortV2`
+ * (`"recent" | "time" | "title" | "category" | "creator"`).
+ */
+export function sortLibraryWorks(
+  works: readonly LibraryWork[],
+  sort: LibrarySortV2 = "recent"
+): LibraryWork[] {
+  const copy = [...works];
+  switch (sort) {
+    case "time":
+      return copy.sort((a, b) => {
+        if (b.total_minutes !== a.total_minutes) {
+          return b.total_minutes - a.total_minutes;
+        }
+        const aLast = a.last_at ?? "";
+        const bLast = b.last_at ?? "";
+        if (bLast !== aLast) {
+          return bLast.localeCompare(aLast);
+        }
+        return a.title.localeCompare(b.title);
+      });
+    case "title":
+      return copy.sort((a, b) => a.title.localeCompare(b.title));
+    case "category":
+      return copy.sort((a, b) => {
+        const idxA = CATEGORIES.indexOf(a.category);
+        const idxB = CATEGORIES.indexOf(b.category);
+        if (idxA !== idxB) {
+          return idxA - idxB;
+        }
+        if (b.total_minutes !== a.total_minutes) {
+          return b.total_minutes - a.total_minutes;
+        }
+        return a.title.localeCompare(b.title);
+      });
+    case "creator":
+      return copy.sort((a, b) => {
+        const crA = (a.creator ?? a.channel ?? "").trim();
+        const crB = (b.creator ?? b.channel ?? "").trim();
+        if (Boolean(crA) !== Boolean(crB)) {
+          return crA ? -1 : 1;
+        }
+        if (crA && crB) {
+          const cmp = crA.localeCompare(crB, undefined, { sensitivity: "base" });
+          if (cmp !== 0) return cmp;
+        }
+        if (b.total_minutes !== a.total_minutes) {
+          return b.total_minutes - a.total_minutes;
+        }
+        return a.title.localeCompare(b.title);
+      });
+    case "recent":
+    default:
+      return copy.sort((a, b) => {
+        const aLast = a.last_at ?? "";
+        const bLast = b.last_at ?? "";
+        if (bLast !== aLast) {
+          return bLast.localeCompare(aLast);
+        }
+        if (b.total_minutes !== a.total_minutes) {
+          return b.total_minutes - a.total_minutes;
+        }
+        return a.title.localeCompare(b.title);
+      });
+  }
+}
+
+/**
+ * Sorts `YoutubeVideo[]` by `"recent"`, `"time"` (watch time), or `"topic"`.
+ */
+export function sortYoutubeVideos(
+  videos: readonly YoutubeVideo[],
+  sort: YoutubeVideoSort = "recent"
+): YoutubeVideo[] {
+  const copy = [...videos];
+  switch (sort) {
+    case "time":
+      return copy.sort((a, b) => {
+        if (b.watched_minutes !== a.watched_minutes) {
+          return b.watched_minutes - a.watched_minutes;
+        }
+        if (b.plays !== a.plays) {
+          return b.plays - a.plays;
+        }
+        return a.title.localeCompare(b.title);
+      });
+    case "topic":
+      return copy.sort((a, b) => {
+        const tA = (a.topic ?? "").trim();
+        const tB = (b.topic ?? "").trim();
+        const uncatA =
+          !tA ||
+          tA.toLowerCase() === "uncategorised" ||
+          tA.toLowerCase() === "uncategorized";
+        const uncatB =
+          !tB ||
+          tB.toLowerCase() === "uncategorised" ||
+          tB.toLowerCase() === "uncategorized";
+        if (uncatA !== uncatB) {
+          return uncatA ? 1 : -1;
+        }
+        const cmp = tA.localeCompare(tB, undefined, { sensitivity: "base" });
+        if (cmp !== 0) return cmp;
+        if (b.watched_minutes !== a.watched_minutes) {
+          return b.watched_minutes - a.watched_minutes;
+        }
+        return a.title.localeCompare(b.title);
+      });
+    case "recent":
+    default:
+      return copy.sort((a, b) => {
+        const aLast = a.last_at ?? "";
+        const bLast = b.last_at ?? "";
+        if (bLast !== aLast) {
+          return bLast.localeCompare(aLast);
+        }
+        if (b.watched_minutes !== a.watched_minutes) {
+          return b.watched_minutes - a.watched_minutes;
+        }
+        return a.title.localeCompare(b.title);
+      });
+  }
+}
+
+/**
+ * Groups `YoutubeVideo[]` by `"topic"` or `"channel"`, computing total watch time,
+ * share percentage, proportional `barRatio`, and sorting videos within each group.
+ */
+export function groupYoutubeVideos(
+  videos: readonly YoutubeVideo[],
+  groupBy: "topic" | "channel",
+  sort: YoutubeVideoSort = "recent"
+): YoutubeVideoGroup[] {
+  const map = new Map<
+    string,
+    {
+      label: string;
+      topic: string | null;
+      isUncategorised: boolean;
+      totalMinutes: number;
+      videos: YoutubeVideo[];
+    }
+  >();
+
+  for (const v of videos) {
+    if (groupBy === "topic") {
+      const rawTopic = (v.topic ?? "").trim();
+      const isUncat =
+        !rawTopic ||
+        rawTopic.toLowerCase() === "uncategorised" ||
+        rawTopic.toLowerCase() === "uncategorized";
+      const label = isUncat ? UNCATEGORISED_TOPIC : rawTopic;
+      let bucket = map.get(label);
+      if (!bucket) {
+        bucket = {
+          label,
+          topic: isUncat ? null : label,
+          isUncategorised: isUncat,
+          totalMinutes: 0,
+          videos: [],
+        };
+        map.set(label, bucket);
+      }
+      bucket.totalMinutes += Math.max(0, v.watched_minutes || 0);
+      bucket.videos.push(v);
+    } else {
+      const ch = (v.channel ?? "").trim() || "Unknown Channel";
+      let bucket = map.get(ch);
+      if (!bucket) {
+        bucket = {
+          label: ch,
+          topic: v.topic?.trim() || null,
+          isUncategorised: false,
+          totalMinutes: 0,
+          videos: [],
+        };
+        map.set(ch, bucket);
+      }
+      if (!bucket.topic && v.topic?.trim()) {
+        bucket.topic = v.topic.trim();
+      }
+      bucket.totalMinutes += Math.max(0, v.watched_minutes || 0);
+      bucket.videos.push(v);
+    }
+  }
+
+  const groups = [...map.values()].sort((a, b) => {
+    if (groupBy === "topic" && a.isUncategorised !== b.isUncategorised) {
+      return a.isUncategorised ? 1 : -1;
+    }
+    if (b.totalMinutes !== a.totalMinutes) {
+      return b.totalMinutes - a.totalMinutes;
+    }
+    if (b.videos.length !== a.videos.length) {
+      return b.videos.length - a.videos.length;
+    }
+    return a.label.localeCompare(b.label);
+  });
+
+  const grandMinutes = groups.reduce((acc, g) => acc + g.totalMinutes, 0);
+  const maxMinutes = groups.reduce((acc, g) => Math.max(acc, g.totalMinutes), 0);
+  const maxCount = groups.reduce((acc, g) => Math.max(acc, g.videos.length), 0);
+
+  return groups.map((g) => {
+    const sharePct =
+      grandMinutes > 0
+        ? Math.round((g.totalMinutes / grandMinutes) * 1000) / 10
+        : 0;
+    const barRatio =
+      maxMinutes > 0
+        ? Math.max(0.06, Math.min(1, g.totalMinutes / maxMinutes))
+        : maxCount > 0
+          ? Math.max(0.06, Math.min(1, g.videos.length / maxCount))
+          : 0;
+    return {
+      key: `${groupBy}:${g.label}`,
+      label: g.label,
+      kind: groupBy,
+      topic: g.topic,
+      isUncategorised: g.isUncategorised,
+      totalMinutes: Math.round(g.totalMinutes),
+      videosCount: g.videos.length,
+      sharePct,
+      barRatio: Math.round(barRatio * 100) / 100,
+      videos: sortYoutubeVideos(g.videos, sort),
+    };
+  });
 }
 
 /**
@@ -333,7 +582,7 @@ export function buildYoutubeOverviewFromWorks(
   let totalVideos = 0;
 
   for (const w of ytWorks) {
-    const chName = (w.channel ?? w.title ?? "Unknown Channel").trim();
+    const chName = (w.channel ?? w.creator ?? w.title ?? "Unknown Channel").trim();
     const topic = w.topic?.trim() || null;
     const vids = Math.max(1, w.units || 1);
     const mins = Math.max(0, w.total_minutes || 0);
@@ -401,7 +650,12 @@ export function buildYoutubeOverviewFromWorks(
  */
 export function buildYoutubeVideosFromWorks(
   works: readonly LibraryWork[],
-  params: { channel?: string; topic?: string; q?: string } = {}
+  params: {
+    channel?: string;
+    topic?: string;
+    q?: string;
+    sort?: YoutubeVideoSort;
+  } = {}
 ): YoutubeVideosResult {
   const qNorm = (params.q ?? "").trim().toLowerCase();
   const chFilter = (params.channel ?? "").trim().toLowerCase();
@@ -410,14 +664,15 @@ export function buildYoutubeVideosFromWorks(
   const videos: YoutubeVideo[] = [];
   for (const w of works) {
     if (w.category !== "youtube") continue;
-    const ch = w.channel ?? w.title;
+    const ch = w.channel ?? w.creator ?? w.title;
     const topic = w.topic ?? UNCATEGORISED_TOPIC;
     if (chFilter && ch.toLowerCase() !== chFilter) continue;
     if (topicFilter && topic.toLowerCase() !== topicFilter) continue;
     if (
       qNorm &&
       !w.title.toLowerCase().includes(qNorm) &&
-      !ch.toLowerCase().includes(qNorm)
+      !ch.toLowerCase().includes(qNorm) &&
+      !topic.toLowerCase().includes(qNorm)
     ) {
       continue;
     }
@@ -435,8 +690,10 @@ export function buildYoutubeVideosFromWorks(
     });
   }
 
+  const sorted = sortYoutubeVideos(videos, params.sort ?? "recent");
+
   return {
-    videos,
-    total: videos.length,
+    videos: sorted,
+    total: sorted.length,
   };
 }

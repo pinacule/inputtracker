@@ -3,6 +3,7 @@ import { CATEGORIES, categoryPluralLabel } from "../lib/categories";
 import {
   toggleCategoryChip,
   updateHashCategorySelection,
+  type CategoryFilterScope,
 } from "../lib/category-filter";
 import { formatHours } from "../lib/year-review";
 
@@ -11,7 +12,9 @@ export interface CategoryChipsProps {
   onChange: (next: Category[]) => void;
   totals?: readonly CategoryTotal[];
   availableCategories?: readonly Category[];
+  /** @deprecated Kept for home page (`Calendar.tsx`) prop compatibility. */
   includeYoutubeInAll?: boolean;
+  scope?: CategoryFilterScope;
   ariaLabel?: string;
   showCounts?: "units" | "works" | "hours" | "hours-works" | "none";
   syncUrl?: boolean;
@@ -29,7 +32,7 @@ export function CategoryChips({
   onChange,
   totals = [],
   availableCategories,
-  includeYoutubeInAll = false,
+  scope = "all",
   ariaLabel = "Filter by category",
   showCounts = "none",
   syncUrl = true,
@@ -48,10 +51,15 @@ export function CategoryChips({
     presentSet.add(c);
   }
 
-  // Always show categories that have data (or all categories if no totals passed)
+  // Always show categories that have data; in Library also ensure YouTube and Music
+  // chips remain reachable even when "All" excludes them.
   const categoriesToShow =
     presentSet.size > 0
-      ? CATEGORIES.filter((c) => presentSet.has(c) || c === "youtube")
+      ? CATEGORIES.filter(
+          (c) =>
+            presentSet.has(c) ||
+            (scope === "library" && (c === "youtube" || c === "music"))
+        )
       : CATEGORIES;
 
   const applyChange = (next: Category[]) => {
@@ -106,9 +114,9 @@ export function CategoryChips({
         aria-pressed={isAllActive}
         onClick={() => handleToggle("all")}
         title={
-          includeYoutubeInAll
-            ? "All categories (including YouTube)"
-            : "All categories (excluding YouTube — toggle in Settings)"
+          scope === "library"
+            ? "All works (excluding YouTube and Music — click their chips to view)"
+            : "All categories"
         }
       >
         <span>All</span>

@@ -1,35 +1,43 @@
 import { useEffect, useId, useRef, useState } from "preact/hooks";
-import { getAnnotation, saveAnnotation, type Annotation } from "../api";
+import { getAnnotation, saveAnnotation, type Annotation, type Category } from "../api";
 import {
   formatNoteCounter,
   isNoteTooLong,
 } from "../lib/annotations";
-import { formatRating10, validateRating10 } from "../lib/rating";
+import { canRateCategory, formatRating10, validateRating10 } from "../lib/rating";
 import { performWorkEdit, pushToast } from "../lib/work-edits";
 import { Button } from "./Button";
-import { RatingInput10 } from "./QuickRating";
+import { QuickRatingPill, RatingInput10 } from "./QuickRating";
 
 export interface StarRatingInputProps {
   rating: number | null;
   onChange: (rating: number | null) => void;
+  category?: Category;
   disabled?: boolean;
 }
 
 /**
- * 0–10 one-decimal rating picker (replaces the old 5-star editor in v2.1).
+ * 0–10 one-decimal inline rating input (hidden for music).
  */
 export function StarRatingInput({
   rating,
   onChange,
+  category,
   disabled = false,
 }: StarRatingInputProps) {
   return (
-    <RatingInput10 rating={rating} onChange={onChange} disabled={disabled} />
+    <RatingInput10
+      rating={rating}
+      onChange={onChange}
+      category={category}
+      disabled={disabled}
+    />
   );
 }
 
 export interface RatingEditorProps {
   workKey?: string;
+  category?: Category;
   source: string;
   title: string;
   initialRating: number | null;
@@ -40,11 +48,12 @@ export interface RatingEditorProps {
 }
 
 /**
- * Full Rating (0..10 one decimal) + Note editor wired to `/api/library/work/edit`
- * (and falling back to `/api/annotations` when `workKey` is omitted or 404).
+ * In-place Rating (0..10 one decimal, hidden for music) + Personal Note editor
+ * wired to `/api/library/work/edit` (falling back to `/api/annotations`).
  */
 export function RatingEditor({
   workKey,
+  category,
   source,
   title,
   initialRating,
@@ -53,7 +62,10 @@ export function RatingEditor({
   onSaved,
   onCancel,
 }: RatingEditorProps) {
-  const [rating, setRating] = useState<number | null>(initialRating);
+  const ratable = canRateCategory(category);
+  const [rating, setRating] = useState<number | null>(
+    ratable ? initialRating : null
+  );
   const [note, setNote] = useState(initialNote ?? "");
   const [loading, setLoading] = useState(!skipFetch && !workKey);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -67,11 +79,11 @@ export function RatingEditor({
   const counterId = useId();
 
   useEffect(() => {
-    setRating(initialRating);
+    setRating(ratable ? initialRating : null);
     if (initialNote !== undefined) {
       setNote(initialNote ?? "");
     }
-  }, [initialRating, initialNote]);
+  }, [initialRating, initialNote, ratable]);
 
   useEffect(() => {
     if (skipFetch || workKey) {
@@ -87,7 +99,7 @@ export function RatingEditor({
     getAnnotation(source, title)
       .then((ann) => {
         if (cancelled) return;
-        setRating(ann.rating);
+        setRating(ratable ? ann.rating : null);
         setNote(ann.note ?? "");
         setLoading(false);
       })
@@ -100,11 +112,13 @@ export function RatingEditor({
     return () => {
       cancelled = true;
     };
-  }, [source, title, skipFetch, workKey]);
+  }, [source, title, skipFetch, workKey, ratable]);
+
+  const targetKey = workKey ?? `${category ?? source}:${title.toLowerCase().trim()}`;
 
   async function handleSave(): Promise<void> {
     const errors: string[] = [];
-    const rCheck = validateRating10(rating);
+    const rCheck = ratable ? validateRating10(rating) : { ok: true as const, rating: null };
     if (!rCheck.ok) {
       errors.push(rCheck.error);
     }
@@ -116,7 +130,7 @@ export function RatingEditor({
       return;
     }
 
-    const cleanRating = rCheck.ok ? rCheck.rating : null;
+    const cleanRating = ratable && rCheck.ok ? rCheck.rating : null;
     const cleanNote = note.trimEnd().length > 0 ? note.trimEnd() : null;
 
     setValidationErrors([]);
@@ -125,15 +139,19 @@ export function RatingEditor({
     setSaving(true);
 
     try {
-      const targetKey = workKey ?? `${source}:${title.toLowerCase().trim()}`;
       const { undo } = await performWorkEdit(
         targetKey,
-        {
-          rating: cleanRating,
-          note: cleanNote,
-        },
+        ratable
+          ? {
+              rating: cleanRating,
+              note: cleanNote,
+            }
+          : {
+              note: cleanNote,
+            },
         {
           title,
+          category,
           rating: initialRating,
           note: initialNote ?? null,
           source,
@@ -145,7 +163,7 @@ export function RatingEditor({
           revIdRef.current = crypto.randomUUID();
         }
         const intRating =
-          cleanRating !== null
+          ratable && cleanRating !== null
             ? Math.max(1, Math.min(10, Math.round(cleanRating)))
             : null;
         await saveAnnotation({
@@ -165,15 +183,18 @@ export function RatingEditor({
 
       pushToast({
         message:
-          cleanRating !== null
+          ratable && cleanRating !== null
             ? `Saved rating (${formatRating10(cleanRating)} / 10) for “${title}”`
             : `Updated note for “${title}”`,
         variant: "success",
         actionLabel: "Undo",
         onAction: () => {
-          setRating(initialRating);
+          setRating(ratable ? initialRating : null);
           setNote(initialNote ?? "");
-          onSaved?.({ rating: initialRating, note: initialNote ?? null });
+          onSaved?.({
+            rating: ratable ? initialRating : null,
+            note: initialNote ?? null,
+          });
           void undo();
         },
       });
@@ -192,16 +213,26 @@ export function RatingEditor({
         </p>
       )}
 
-      <RatingInput10
-        rating={rating}
-        onChange={(next) => {
-          setRating(next);
-          setSaved(false);
-          setServerError(null);
-        }}
-        disabled={loading || saving}
-        onCommit={() => void handleSave()}
-      />
+      {ratable && (
+        <div class="ui-rating-editor-score-row">
+          <span class="ui-form-label">Your Rating</span>
+          <QuickRatingPill
+            workKey={targetKey}
+            title={title}
+            category={category}
+            rating={rating}
+            source={source}
+            variant="inline"
+            onRated={(next) => {
+              setRating(next);
+              onSaved?.({
+                rating: next,
+                note: note.trimEnd().length > 0 ? note.trimEnd() : null,
+              });
+            }}
+          />
+        </div>
+      )}
 
       <div class="ui-rating-note-field">
         <div class="ui-rating-note-header">
@@ -249,7 +280,7 @@ export function RatingEditor({
           disabled={loading || saving}
           onClick={() => void handleSave()}
         >
-          {saving ? "Saving…" : "Save Rating & Note"}
+          {saving ? "Saving…" : "Save Note"}
         </Button>
         {onCancel && (
           <Button

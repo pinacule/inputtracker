@@ -296,6 +296,19 @@
   word-break: break-word;
 }
 
+.library-work-card-creator {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-work-list-creator {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
 .library-work-card-meta {
   display: flex;
   align-items: center;
@@ -376,8 +389,9 @@
   font-weight: 600;
 }
 
-/* Work Detail View */
-.library-work-hero-layout {
+/* Work Detail View (v2.2 Rebuilt WorkPage) */
+.library-work-hero-layout,
+.work-hero-layout {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -385,12 +399,14 @@
 }
 
 @media (min-width: 640px) {
-  .library-work-hero-layout {
+  .library-work-hero-layout,
+  .work-hero-layout {
     flex-direction: row;
   }
 }
 
-.library-work-hero-body {
+.library-work-hero-body,
+.work-hero-body {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
@@ -398,16 +414,31 @@
   gap: var(--space-3);
 }
 
-.library-work-badges {
+.library-work-badges,
+.work-hero-badges {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
 
+.work-hero-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .library-work-title {
   font-size: clamp(1.5rem, 2.5vw, var(--text-3xl));
+  line-height: 1.15;
   word-break: break-word;
+}
+
+.work-hero-creator {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .library-work-stats-row {
@@ -419,31 +450,164 @@
   color: var(--text-secondary);
 }
 
-.library-work-actions {
+.work-hero-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.work-metric-pill {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+}
+
+.work-metric-label {
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+}
+
+.work-metric-pill strong {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.work-actions-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.work-actions-group {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-1);
 }
 
-.library-work-archive-btns {
+.work-archive-entry-btns {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
+}
+
+/* Compact Seasons Grid (v2.2 section 17) */
+.work-seasons-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: var(--space-2);
 }
 
-.library-seasons-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-3);
+.work-season-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
 }
 
-@media (min-width: 768px) {
-  .library-seasons-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-4);
-  }
+.work-season-pill--finished {
+  border-color: var(--border-default);
+}
+
+.work-season-pill-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.work-season-pill-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.work-season-check {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-on-accent);
+}
+
+.work-season-check--done {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.work-season-summary {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-season-meta {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.work-season-count {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.work-season-bar-track {
+  width: 100%;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-subtle);
+  overflow: hidden;
+}
+
+.work-season-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background-color: var(--accent-primary);
+}
+
+.work-season-bar-fill--anime {
+  background-color: var(--cat-anime-solid);
+}
+
+.work-season-bar-fill--series {
+  background-color: var(--cat-series-solid);
+}
+
+.yt-active-filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
 }
 
 .library-work-two-col {

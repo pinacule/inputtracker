@@ -1356,12 +1356,10 @@ export function Add({
                                 {isChecked ? <CheckIcon size={14} /> : null}
                               </span>
                               <div class="add-season-chip-text">
-                                <strong>
-                                  {season.title || `Season ${season.number}`}
-                                </strong>
+                                <strong>{`Season ${season.number}`}</strong>
                                 <span class="tabular-nums">
+                                  {season.year ? `${season.year} · ` : ""}
                                   {season.episodes} ep
-                                  {season.year ? ` · ${season.year}` : ""}
                                   {season.total_minutes
                                     ? ` · ${formatMinutes(season.total_minutes)}`
                                     : ""}
@@ -1714,10 +1712,23 @@ export function Add({
                 </div>
               </Card>
 
-              {/* 3. Optional Rating & Note */}
-              <Card padding="md" title="3. Rating (0–10, one decimal) & Note (optional)">
+              {/* 3. Optional Rating & Note (Rating hidden for music) */}
+              <Card
+                padding="md"
+                title={
+                  selectedWork.category === "music"
+                    ? "3. Note (optional)"
+                    : "3. Rating (0–10, one decimal) & Note (optional)"
+                }
+              >
                 <div class="ui-form-stack">
-                  <RatingInput10 rating={rating} onChange={setRating} />
+                  {selectedWork.category !== "music" && (
+                    <RatingInput10
+                      rating={rating}
+                      onChange={setRating}
+                      category={selectedWork.category}
+                    />
+                  )}
                   <div class="ui-form-field">
                     <label class="ui-form-label" for="archive-note-input">
                       Note
