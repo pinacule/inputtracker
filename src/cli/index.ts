@@ -42,7 +42,7 @@ import { remapPhonePlays } from "../server/ingest.ts";
 import { countEvents, exportJson } from "../io/export-json.ts";
 import { exportCsv } from "../io/export-csv.ts";
 import { detectFormat, importNative } from "../io/import-native.ts";
-import { addManual, localToUtcIso, type ManualInput } from "../io/manual.ts";
+import { addManual, type ManualInput } from "../io/manual.ts";
 import { importYoutubeTakeout } from "../sources/youtube/takeout.ts";
 import { createAbsClient, type AbsClient } from "../sources/audiobookshelf/client.ts";
 import {
@@ -77,10 +77,13 @@ import {
 } from "../sources/activitywatch/client.ts";
 import {
   ACTIVITYWATCH_SOURCE,
+  backfillActivityWatch,
   syncActivityWatch,
   type ActivityWatchSyncResult,
+  type BackfillActivityWatchDeps,
   type SyncActivityWatchDeps,
 } from "../sources/activitywatch/sync.ts";
+import { DATE_ONLY_RE, localParts, localToUtcIso } from "../core/time.ts";
 
 export const EXIT_OK = 0;
 export const EXIT_USAGE = 1;
@@ -98,6 +101,7 @@ export function usage(): string {
     "",
     "Commands:",
     "  sync audiobookshelf|simkl|activitywatch  fetch new source activity into the DB",
+    "    sync activitywatch --since <date>      backfill older YouTube plays from ActivityWatch",
     "  auth simkl [--status]                    connect or inspect Simkl authorization",
     "  add --type <t> --title <title> --start <local>   add a consumed item manually",
     "  export --format json|csv --out <file>    export the full events archive to a file",
@@ -151,6 +155,9 @@ export interface CliDeps {
   syncActivityWatch?: (
     deps: SyncActivityWatchDeps
   ) => Promise<ActivityWatchSyncResult>;
+  backfillActivityWatch?: (
+    deps: BackfillActivityWatchDeps
+  ) => Promise<ActivityWatchSyncResult>;
   /** Override for `it doctor` (tests inject mocked environment deps). */
   runDoctor?: (overrides?: Partial<DoctorDeps>) => Promise<number>;
   /** Environment deps merged into the doctor defaults. */
@@ -184,10 +191,11 @@ interface SyncContext {
 }
 
 async function runSync(
-  source: string | undefined,
+  args: string[],
   ctx: SyncContext
 ): Promise<number> {
   const { deps, out, err } = ctx;
+  const [source, ...syncArgs] = args;
 
   if (source === undefined || source === "") {
     err("Missing source.");
@@ -198,6 +206,34 @@ async function runSync(
   if (source !== ABS_SOURCE && source !== "simkl" && source !== ACTIVITYWATCH_SOURCE) {
     err(`Unknown source: ${source}`);
     err(usage());
+    return EXIT_USAGE;
+  }
+
+  let sinceVal: string | undefined;
+  for (let i = 0; i < syncArgs.length; i++) {
+    const arg = syncArgs[i];
+    if (arg === "--since") {
+      if (i + 1 >= syncArgs.length || syncArgs[i + 1].startsWith("--")) {
+        err("Missing value for --since.");
+        return EXIT_USAGE;
+      }
+      sinceVal = syncArgs[i + 1];
+      i++;
+    } else if (arg.startsWith("--since=")) {
+      sinceVal = arg.slice("--since=".length);
+      if (!sinceVal) {
+        err("Missing value for --since.");
+        return EXIT_USAGE;
+      }
+    } else {
+      err(`Unknown option: ${arg}`);
+      err(usage());
+      return EXIT_USAGE;
+    }
+  }
+
+  if (source !== ACTIVITYWATCH_SOURCE && sinceVal !== undefined) {
+    err("--since is only supported for activitywatch.");
     return EXIT_USAGE;
   }
 
@@ -214,6 +250,37 @@ async function runSync(
     } catch (caught) {
       err(redactMessage(errorText(caught)));
       return EXIT_FAILURE;
+    }
+
+    if (sinceVal !== undefined) {
+      const tz = config.timezone ?? "Europe/Bratislava";
+      if (!DATE_ONLY_RE.test(sinceVal)) {
+        err(`Invalid --since date: "${sinceVal}" (expected YYYY-MM-DD)`);
+        return EXIT_USAGE;
+      }
+
+      let sinceUtcIso: string;
+      try {
+        sinceUtcIso = localToUtcIso(sinceVal, tz);
+      } catch {
+        err(`Invalid --since date: "${sinceVal}"`);
+        return EXIT_USAGE;
+      }
+
+      const nowDate =
+        deps.now instanceof Date
+          ? deps.now
+          : deps.nowMs
+            ? new Date(deps.nowMs())
+            : new Date();
+      const todayLocal = localParts(nowDate.toISOString(), tz).date;
+      if (
+        sinceVal > todayLocal ||
+        new Date(sinceUtcIso).getTime() > nowDate.getTime()
+      ) {
+        err(`--since date cannot be in the future: "${sinceVal}"`);
+        return EXIT_USAGE;
+      }
     }
 
     let db: Database;
@@ -237,11 +304,39 @@ async function runSync(
         deps.createActivityWatchClient ??
         ((cfg, opts) => createActivityWatchClient(cfg, opts));
       const client = makeClient(config.activitywatch, { fetch: deps.fetch });
-      const doSync = deps.syncActivityWatch ?? syncActivityWatch;
-      const result = await doSync({ client, sink, db, config, out });
-      out(
-        `activitywatch: ${result.seen} seen, ${result.inserted} new (${result.buckets} ${result.buckets === 1 ? "bucket" : "buckets"})`
-      );
+      const nowFn =
+        deps.now instanceof Date
+          ? () => deps.now!
+          : deps.nowMs
+            ? () => new Date(deps.nowMs!())
+            : undefined;
+
+      if (sinceVal !== undefined) {
+        const doBackfill = deps.backfillActivityWatch ?? backfillActivityWatch;
+        await doBackfill({
+          client,
+          sink,
+          db,
+          since: sinceVal,
+          config,
+          now: nowFn,
+          out,
+        });
+      } else {
+        const doSync = deps.syncActivityWatch ?? syncActivityWatch;
+        const result = await doSync({
+          client,
+          sink,
+          db,
+          config,
+          now: nowFn,
+          out,
+        });
+        out(
+          `activitywatch: ${result.seen} seen, ${result.inserted} new (${result.buckets} ${result.buckets === 1 ? "bucket" : "buckets"})`
+        );
+      }
+
       await reportSyncSafely(
         report,
         db,
@@ -1261,7 +1356,7 @@ export async function runCli(
   }
 
   if (command === "sync") {
-    return await runSync(rest[0], { deps, out, err });
+    return await runSync(rest, { deps, out, err });
   }
 
   if (command === "auth") {
