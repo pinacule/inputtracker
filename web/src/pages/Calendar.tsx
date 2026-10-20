@@ -28,7 +28,6 @@ import {
   subscribeWorkEdits,
 } from "../lib/work-edits";
 import {
-  AddIcon,
   Button,
   Skeleton,
 } from "../ui";
@@ -365,23 +364,6 @@ export function Calendar({
           )}
         </div>
 
-        <div class="home-topbar-actions">
-          {onOpenAdd && (
-            <Button
-              variant="primary"
-              size="sm"
-              leadingIcon={<AddIcon size={16} />}
-              onClick={() =>
-                onOpenAdd({
-                  date: selectedDate,
-                  category: singleSelectedCategory,
-                })
-              }
-            >
-              Add
-            </Button>
-          )}
-        </div>
       </header>
 
       <CategoryIndex

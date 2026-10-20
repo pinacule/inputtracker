@@ -9,6 +9,7 @@ import { IconButton } from "../IconButton";
 import { ChevronLeftIcon, ChevronRightIcon } from "../icons";
 import { HomeTimeDisplay } from "./HomeTimeDisplay";
 import { NormComparison } from "./NormComparison";
+import { CategoryLegend, sumLegend } from "./CategoryLegend";
 
 export interface WeekGraphProps {
   readonly model: RollingGraphModel;
@@ -139,6 +140,7 @@ export function WeekGraph({
           );
         })}
       </div>
+      <CategoryLegend entries={sumLegend(model.days.map((d) => d.segments))} label={`${model.heading} by category`} />
       <NormComparison actual={model.weekMinutes} norm={usualTotal} label={model.heading} />
     </section>
   );

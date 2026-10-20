@@ -26,6 +26,7 @@ import {
 } from "../icons";
 import { QuickRatingPill } from "../QuickRating";
 import { HomeWorkThumb } from "./HomeWorkThumb";
+import { CategoryLegend } from "./CategoryLegend";
 import { HomeTimeDisplay } from "./HomeTimeDisplay";
 import { NormComparison } from "./NormComparison";
 
@@ -248,23 +249,6 @@ export function DayDetailPanel({
           <h2 class="home-day-title">{model.heading}</h2>
         </div>
 
-        <div class="home-day-header-right">
-          {onOpenAdd && (
-            <Button
-              variant="secondary"
-              size="sm"
-              leadingIcon={<AddIcon size={14} />}
-              onClick={() =>
-                onOpenAdd({
-                  date: model.date,
-                  category: singleCategory,
-                })
-              }
-            >
-              Log
-            </Button>
-          )}
-        </div>
       </div>
 
       <div key={model.date} class="home-day-hero" aria-live="polite" aria-atomic="true">
@@ -299,6 +283,7 @@ export function DayDetailPanel({
               />
             ))}
           </div>
+          <CategoryLegend entries={model.segments} label={`${model.heading} by category`} />
         </div>
       )}
 

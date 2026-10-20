@@ -3,3 +3,4 @@ export * from "./HomeWorkThumb";
 export * from "./MonthRhythmCard";
 export * from "./WeekGraph";
 export * from "./CategoryIndex";
+export * from "./CategoryLegend";
