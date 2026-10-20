@@ -3,7 +3,7 @@
  * card / season / history label formatters for InputTracker.
  *
  * Categories come from `src/core/category.ts`:
- * `anime`, `series`, `film`, `book`, `audiobook`, `youtube`, `podcast`, `music`, `other`.
+ * `anime`, `series`, `film`, `book`, `audiobook`, `youtube`, `podcast`, `music`, `shortform`, `other`.
  * Every category has one consistent colour across badges, calendar bars, charts,
  * library tabs, and fallback cover tiles.
  *
@@ -124,6 +124,10 @@ export const CATEGORY_META: Readonly<Record<Category, CategoryMeta>> = {
     cssVarPrefix: "--cat-music",
     color: "#b0306a",
     defaultAspect: "square",
+  },
+  shortform: {
+    category: "shortform", label: "Short-form", pluralLabel: "Short-form", shortLabel: "Short-form",
+    unitSingular: "minute", unitPlural: "minutes", cssVarPrefix: "--cat-shortform", color: "#6194cf", defaultAspect: "square",
   },
   other: {
     category: "other",
@@ -330,6 +334,8 @@ export function formatWorkUnitLabel(work: {
   const u = Math.max(0, Math.round(work.units || 0));
 
   switch (work.category) {
+    case "shortform":
+      return null;
     case "audiobook":
       return u > 0 ? `${u} ${u === 1 ? "session" : "sessions"}` : null;
     case "music":

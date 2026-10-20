@@ -237,7 +237,9 @@ export function buildAllLibraryWorks(
   opts: BuildLibraryWorksOptions = {}
 ): InternalLibraryWork[] {
   // Short YouTube video-days (below [youtube] min_watch_minutes) are left out, as in every read.
-  const rawEvents = filterShortYoutubeEvents(getLatestConsumptionEvents(db), tz, db);
+  // Time-only short-form never creates an archived work.
+  const rawEvents = filterShortYoutubeEvents(getLatestConsumptionEvents(db), tz, db)
+    .filter((e) => e.source_kind !== "shortform_day" && categoryOf(e) !== "shortform");
   const events = dedupeConsumption(rawEvents, tz);
   if (events.length === 0) {
     return [];
@@ -901,6 +903,7 @@ export function buildAllLibraryWorks(
 export type LibrarySort = LibrarySortV2;
 
 export const VALID_LIBRARY_SORTS: ReadonlySet<LibrarySortV2> = new Set([
+  "plays",
   "recent",
   "time",
   "title",
@@ -990,7 +993,9 @@ export function getLibrary(
   const sort = opts.sort ?? "recent";
   const works = filtered.map((item) => item.work);
 
-  if (sort === "time") {
+  if (sort === "plays") {
+    works.sort((a, b) => b.units - a.units || b.total_minutes - a.total_minutes || a.title.localeCompare(b.title) || a.key.localeCompare(b.key));
+  } else if (sort === "time") {
     works.sort(
       (a, b) =>
         b.total_minutes - a.total_minutes ||

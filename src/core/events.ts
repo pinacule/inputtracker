@@ -9,6 +9,7 @@ export type MediaType =
   | "episode"
   | "video"
   | "music"
+  | "shortform"
   | "book"
   | "other";
 
@@ -19,6 +20,7 @@ export const VALID_MEDIA_TYPES: ReadonlySet<string> = new Set<MediaType>([
   "episode",
   "video",
   "music",
+  "shortform",
   "book",
   "other",
 ]);
@@ -301,6 +303,10 @@ export function insertEvents(
     );
   `);
 
+  const latestShortform = db.query<{ id: number; record_hash: string; external_ids: string | null }, [string, string, string]>(
+    "SELECT id, record_hash, external_ids FROM events_latest WHERE source = ? AND source_kind = ? AND source_id = ?"
+  );
+
   const runTx = db.transaction((evs: Iterable<NewEvent>) => {
     let seen = 0;
     let inserted = 0;
@@ -308,7 +314,20 @@ export function insertEvents(
 
     for (const rawEvent of evs) {
       seen++;
-      const norm = normalize(rawEvent);
+      let norm = normalize(rawEvent);
+      if (norm.source_kind === "shortform_day") {
+        // Daily corrections may return to an older value. An unchanged latest
+        // snapshot is a no-op; every transition gets append-only revision identity.
+        const { shortform_revision: _ignored, ...ids } = norm.external_ids ?? {};
+        const latest = latestShortform.get(norm.source, norm.source_kind, norm.source_id);
+        const previousIds = latest?.external_ids ? JSON.parse(latest.external_ids) as Record<string, unknown> : {};
+        const previousRevision = previousIds.shortform_revision;
+        norm = normalize({ ...norm, external_ids: Object.keys(ids).length || previousRevision !== undefined
+          ? { ...ids, ...(previousRevision !== undefined ? { shortform_revision: previousRevision } : {}) } : null });
+        if (latest && recordHashNormalized(norm) !== latest.record_hash) {
+          norm = normalize({ ...norm, external_ids: { ...ids, shortform_revision: latest.id } });
+        }
+      }
       const hash = recordHashNormalized(norm);
       const extIdsJson =
         norm.external_ids !== null ? JSON.stringify(norm.external_ids) : null;

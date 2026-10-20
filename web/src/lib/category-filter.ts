@@ -147,6 +147,7 @@ export function matchesCategorySelection(
   selected: readonly Category[],
   scopeOrLegacy?: CategoryFilterScope | boolean
 ): boolean {
+  if (scopeOrLegacy === "library" && category === "shortform") return false;
   if (selected.length > 0) {
     return selected.includes(category);
   }

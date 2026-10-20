@@ -19,6 +19,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
 import type { Database } from "bun:sqlite";
 import type { Config } from "../core/config.ts";
+import { DATE_ONLY_RE, localParts, localToUtcIso } from "../core/time.ts";
+import { shortformDay } from "../core/shortform.ts";
 import {
   finishRun,
   insertEvents,
@@ -398,7 +400,8 @@ function invalidJson(error: unknown): string {
  */
 export async function handleYoutubePlays(
   c: Context,
-  deps: IngestHandlerDeps
+  deps: IngestHandlerDeps,
+  shortform = false
 ): Promise<Response> {
   const { db, config } = deps;
 
@@ -425,10 +428,14 @@ export async function handleYoutubePlays(
   }
 
   let plays: YoutubePlay[];
+  let shortDays: NewEvent[] = [];
   let device: string;
   try {
     const parsed: unknown = JSON.parse(bodyText);
-    plays = parseIngestBody(parsed, (deps.nowMs ?? Date.now)());
+    if (shortform) {
+      shortDays = parseShortformBody(parsed, (deps.nowMs ?? Date.now)(), config.timezone);
+      plays = [];
+    } else plays = parseIngestBody(parsed, (deps.nowMs ?? Date.now)());
     device = typeof (parsed as { device?: unknown }).device === "string"
       ? ((parsed as { device: string }).device)
       : "";
@@ -440,11 +447,11 @@ export async function handleYoutubePlays(
     return c.json({ error: message }, 400);
   }
 
-  const events = plays.map((play) => playToEvent(play, device));
+  const events = shortform ? shortDays : plays.map((play) => playToEvent(play, device));
 
   let runId: number | null = null;
   try {
-    runId = startRun(db, "youtube", "phone");
+    runId = startRun(db, shortform ? "phone" : "youtube", shortform ? "shortform" : "phone");
     const result = insertEvents(db, runId, events);
     try {
       finishRun(db, runId, {
@@ -455,7 +462,7 @@ export async function handleYoutubePlays(
     } catch {
       // Rows are inserted; a bookkeeping failure must not claim a 500.
     }
-    return c.json({ accepted: plays.length, inserted: result.inserted }, 200);
+    return c.json({ accepted: events.length, inserted: result.inserted }, 200);
   } catch {
     if (runId !== null) {
       try {
@@ -467,4 +474,28 @@ export async function handleYoutubePlays(
     // No details: an error message could carry user data.
     return c.json({ error: "ingest failed" }, 500);
   }
+}
+
+export function parseShortformBody(body: unknown, nowMs: number, tz = "Europe/Bratislava"): NewEvent[] {
+  if (!isObject(body) || !Array.isArray(body.days) || body.days.length < 1 || body.days.length > 200) {
+    throw new IngestValidationError("days must contain 1-200 items");
+  }
+  const today = localParts(new Date(nowMs).toISOString(), tz).date;
+  const seen = new Set<string>();
+  return body.days.map((raw: unknown, index: number) => {
+    if (!isObject(raw)) throw new IngestValidationError(`days[${index}] must be an object`);
+    if (typeof raw.date !== "string" || !DATE_ONLY_RE.test(raw.date)) throw new IngestValidationError(`days[${index}].date must be YYYY-MM-DD`);
+    try { localToUtcIso(raw.date, tz); } catch { throw new IngestValidationError(`days[${index}].date is not a valid date`); }
+    if (raw.date > today) throw new IngestValidationError(`days[${index}].date cannot be in the future`);
+    if (typeof raw.app !== "string" || raw.app.length < 1 || raw.app.length > 100 || !APP_RE.test(raw.app)) throw new IngestValidationError(`days[${index}].app must be 1-100 characters matching [A-Za-z0-9_.]`);
+    if (!isIntInRange(raw.seconds, 0, 86400)) throw new IngestValidationError(`days[${index}].seconds must be an integer 0-86400`);
+    const event = shortformDay(raw.date, raw.seconds, "phone", `phone:${raw.app}`, tz);
+    if (seen.has(event.source_id)) throw new IngestValidationError(`days[${index}] duplicates an app/date`);
+    seen.add(event.source_id);
+    return { ...event, external_ids: { android_package: raw.app }, raw: { date: raw.date, app: raw.app, seconds: raw.seconds } };
+  });
+}
+
+export function handleShortform(c: Context, deps: IngestHandlerDeps): Promise<Response> {
+  return handleYoutubePlays(c, deps, true);
 }

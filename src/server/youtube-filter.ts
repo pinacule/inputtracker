@@ -17,6 +17,7 @@
 import type { Database } from "bun:sqlite";
 import type { Config, YoutubeConfig } from "../core/config.ts";
 import type { YoutubeVideoRow } from "../core/schema.ts";
+import { dedupeShortform } from "./shortform.ts";
 import {
   formatLocalParts,
   parseExternalIds,
@@ -350,7 +351,7 @@ export function partitionYoutubeEvents<T extends ConsumptionEvent>(
 
   const enriched = dropTakeoutCoveredByMeasuredPlays(
     dropSupersededActivityWatchPlays(
-      applyYoutubeEnrichmentToEvents(events, opts.db),
+      applyYoutubeEnrichmentToEvents(dedupeShortform(events, tz), opts.db),
       tz
     ),
     tz

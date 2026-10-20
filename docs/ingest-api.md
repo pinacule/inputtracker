@@ -1,4 +1,4 @@
-# Ingest API — YouTube plays from the phone
+# Ingest API — phone plays and daily short-form time
 
 The second-brain Android app reads what the YouTube app plays and POSTs batches
 to InputTracker. This document is the fixed contract.
@@ -98,3 +98,49 @@ Each play becomes one append-only event row:
   `ended_at` inserts a **new row** (`events` is append-only; rows are never
   updated or deleted). The `events_latest` view — which the calendar, heat map,
   stats and lists all read — then shows the newest row (highest `id`).
+
+## Daily short-form app time
+
+`POST /api/ingest/shortform` accepts daily phone usage totals, not individual
+Shorts/Reels videos. It uses the **same Bearer token**, disabled/auth checks,
+1 MB body limit, whole-batch validation and response/error shapes as the plays
+endpoint. Unknown query parameters are rejected; extra JSON fields are ignored.
+
+```json
+{
+  "days": [
+    { "date": "2026-10-17", "app": "instagram", "seconds": 2820 },
+    { "date": "2026-10-17", "app": "youtube", "seconds": 900 }
+  ]
+}
+```
+
+- `days`: required array of 1–200 objects; duplicate app/date pairs reject the batch.
+- `date`: a real `YYYY-MM-DD` calendar date in the configured timezone
+  (Europe/Bratislava by default), no later than today. No UTC timestamp is needed.
+- `app`: 1–100 characters matching `^[A-Za-z0-9_.]+$`; common names are
+  `instagram`, `youtube`, `tiktok`, or an Android package name. Spelling/case is
+  identity: send a stable value for each app. No `device` field is required.
+- `seconds`: integer 0–86400. Zero is valid and can correct an earlier total.
+  Send the **whole current daily total**, not a delta. The phone app decides
+  what usage counts as short-form; the server cannot distinguish Reels from
+  other Instagram activity within a supplied app total.
+
+Success is `{ "accepted": <days.length>, "inserted": <new rows> }`. Each
+app/day becomes `source=phone`, `source_kind=shortform_day`,
+`source_id=phone:<app>:<date>`, `media_type=shortform`, and
+`duration_seconds=seconds`. `started_at` is local midnight converted to UTC;
+it is a date anchor, **not an observed watching time**. `raw` contains only
+validated `date`, `app`, and `seconds`; `external_ids.android_package` holds app.
+
+Daily records are append-only and latest wins. Repeating the current total
+inserts nothing. A changed total (including returning to an older total)
+appends a revision; `external_ids.shortform_revision` identifies the transition
+when needed. There is no upload ordering/version field: the last accepted changed
+snapshot wins, so the sender must not replay stale snapshots out of order.
+
+This time appears in Calendar, heatmaps, Insights, Reviews and totals, but never
+creates a Library work, play count, item count or ranking entry. Hourly charts
+omit daily totals because their hour placement is unknown. Phone app time stays
+separate from PC ActivityWatch time; only measured PC Shorts suppress same-day
+Takeout estimates. The phone app itself is outside this server contract.

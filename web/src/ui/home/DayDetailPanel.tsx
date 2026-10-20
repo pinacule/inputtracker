@@ -326,6 +326,12 @@ export function DayDetailPanel({
         </div>
       ) : (
         <ul class="home-day-list">
+          {model.shortformMinutes > 0 && (
+            <li class="home-day-row home-day-row--shortform">
+              <span class="ui-tab-dot ui-tab-dot--shortform" aria-hidden="true" />
+              <span>Short-form · {Math.round(model.shortformMinutes)} min</span>
+            </li>
+          )}
           {/* 1. Long-form / Story Works */}
           {model.works.map((row) => (
             <DayWorkItemRow key={row.key} row={row} />

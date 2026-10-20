@@ -17,6 +17,7 @@
 import type { Database } from "bun:sqlite";
 import { redact, redactString, type Config } from "../../core/config.ts";
 import { finishRun, startRun, type NewEvent } from "../../core/events.ts";
+import { readIntervals } from "../../core/shortform.ts";
 import type { Sink } from "../../core/sink.ts";
 import { DATE_ONLY_RE, localParts, localToUtcIso } from "../../core/time.ts";
 import { backfillCovers } from "../../server/covers.ts";
@@ -24,6 +25,7 @@ import { SyncFailedError } from "../audiobookshelf/sync.ts";
 import { enrichYoutubeVideos } from "../youtube/enrich.ts";
 import type { ActivityWatchClient, FetchFn } from "./client.ts";
 import { mapBucketEvents, mergePlaysByVideoDay } from "./map.ts";
+import { mergeStoredShortformDays } from "./shortform.ts";
 
 export { SyncFailedError } from "../audiobookshelf/sync.ts";
 
@@ -134,6 +136,7 @@ export async function syncActivityWatch(
         bucketId,
         device,
         includeMusic,
+        shortformTz: tz,
       });
 
       const events = mergePlaysByVideoDay(rawPlays, {
@@ -141,7 +144,7 @@ export async function syncActivityWatch(
         minWatchMinutes,
       });
 
-      const writeResult = await sink.write(events, {
+      const writeResult = await sink.write(mergeStoredShortformDays(db, events, tz, { bucket: bucketId, from: startIso, to: endIso }), {
         source: ACTIVITYWATCH_SOURCE,
         runId,
       });
@@ -158,6 +161,17 @@ export async function syncActivityWatch(
       let minStartMs = Infinity;
 
       for (const event of rawPlays) {
+        if (event.source_kind === "shortform_day") {
+          // An ongoing Short can grow across midnight between syncs. Keep its
+          // observation start as the cursor, not the synthetic day anchor.
+          for (const [start, end] of readIntervals(event.raw)) {
+            if (windowEndMs - end <= TEN_MINUTES_MS && start < minStartMs) {
+              minStartMs = start;
+              earliestOpenPlayStart = new Date(start).toISOString();
+            }
+          }
+          continue;
+        }
         if (event.ended_at) {
           const playEndMs = new Date(event.ended_at).getTime();
           if (windowEndMs - playEndMs <= TEN_MINUTES_MS) {
@@ -336,11 +350,13 @@ export async function backfillActivityWatch(
             bucketId,
             device,
             includeMusic,
+            shortformTz: tz,
           });
 
           let earliestOpenPlayStartMs: number | null = null;
           if (!isFinalChunk) {
             for (const ev of mappedEvents) {
+              if (ev.source_kind === "shortform_day") continue;
               const pEndMs = ev.ended_at
                 ? new Date(ev.ended_at).getTime()
                 : new Date(ev.started_at).getTime();
@@ -359,6 +375,7 @@ export async function backfillActivityWatch(
           const closedPlays = isFinalChunk
             ? mappedEvents
             : mappedEvents.filter((ev) => {
+                if (ev.source_kind === "shortform_day") return true;
                 const pEndMs = ev.ended_at
                   ? new Date(ev.ended_at).getTime()
                   : new Date(ev.started_at).getTime();
@@ -373,6 +390,7 @@ export async function backfillActivityWatch(
           // Skip any backfill play whose [started_at, ended_at] overlaps a stored aw_play of the same bucket
           const eventsToEmit: NewEvent[] = [];
           for (const ev of closedEvents) {
+            if (ev.source_kind === "shortform_day") { eventsToEmit.push(ev); continue; }
             const evStartMs = new Date(ev.started_at).getTime();
             const evEndMs = ev.ended_at
               ? new Date(ev.ended_at).getTime()
@@ -387,7 +405,7 @@ export async function backfillActivityWatch(
             }
           }
 
-          const writeResult = await sink.write(eventsToEmit, {
+          const writeResult = await sink.write(mergeStoredShortformDays(db, eventsToEmit, tz, { bucket: bucketId, from: chunkStartIso, to: chunkEndIso }), {
             source: ACTIVITYWATCH_SOURCE,
             runId,
           });
@@ -469,4 +487,3 @@ export async function backfillActivityWatch(
     });
   }
 }
-

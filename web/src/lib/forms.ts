@@ -8,7 +8,7 @@
 
 import type { ManualEventInput } from "../api";
 
-/** Allowed `media_type` values; mirrors `VALID_MEDIA_TYPES` in `src/core/events.ts`. */
+/** Item media types; daily short-form time uses its dedicated ingest endpoint. */
 export const MEDIA_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
   { value: "movie", label: "Movie" },
   { value: "episode", label: "Episode" },

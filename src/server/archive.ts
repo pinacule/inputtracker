@@ -204,6 +204,9 @@ function validateWork(raw: unknown): WorkDetails | ManualWork {
     );
   }
   const category = raw.category;
+  if (category === "shortform") {
+    throw new ArchiveValidationError("Short-form is daily time, not an archive work; use /api/ingest/shortform");
+  }
 
   if (typeof raw.title !== "string" || raw.title.trim() === "") {
     throw new ArchiveValidationError("Field 'work.title' is required");
