@@ -30,6 +30,8 @@ export function WorkArt({ url, title }: { url: string | null | undefined; title:
 
   return (
     <section class="work-art" aria-label={`Art for ${title}`}>
+      {/* Faint full-page backdrop from the featured image; decorative only. */}
+      <div class="work-art-backdrop" aria-hidden="true" style={{ backgroundImage: `url("${image.url}")` }} />
       <header class="work-art-header">
         <h2>Art</h2>
         <span>{images.length} {images.length === 1 ? "image" : "images"} · Select to explore</span>

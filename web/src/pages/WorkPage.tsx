@@ -562,7 +562,6 @@ export function WorkPage({
             </div>
           </Card>
 
-          <WorkArt key={`${effectiveWorkDetail.key}:${effectiveWorkDetail.art_url}`} url={effectiveWorkDetail.art_url} title={effectiveWorkDetail.title} />
 
           {/* Compact Seasons Grid (for Series & Anime) */}
           {effectiveWorkDetail.seasons.length > 0 && (
@@ -746,6 +745,9 @@ export function WorkPage({
               )}
             </Card>
           </div>
+
+          {/* Art last: the page's tools stay near the top; the featured image also tints the page. */}
+          <WorkArt key={`${effectiveWorkDetail.key}:${effectiveWorkDetail.art_url}`} url={effectiveWorkDetail.art_url} title={effectiveWorkDetail.title} />
         </>
       )}
     </section>
