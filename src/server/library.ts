@@ -51,6 +51,7 @@ import { resolveWorkKey } from "../core/work-identity.ts";
 import { getArchiveEntry, saveArchiveEntry } from "./archive.ts";
 import {
   cleanMusicArtist,
+  cachedItunesCoverId,
   cleanMusicTitle,
   hasCachedCover,
   hasCachedCoverNone,
@@ -821,6 +822,10 @@ export function buildAllLibraryWorks(
       (override?.meta === null || override?.meta === undefined)
     ) {
       const tCoverId = titleCoverId(effectiveCategory, effectiveTitle, creator);
+      if (!presentation.art_url && !override?.meta_unlinked && opts.config) {
+        const itunesId = cachedItunesCoverId(opts.config, tCoverId);
+        if (itunesId) presentation.art_url = `/api/meta-art/itunes/${itunesId}`;
+      }
       if (opts.config && hasCachedCover(opts.config, tCoverId)) {
         if (effectiveCategory === "music" || coverUrl === null) {
           coverUrl = `/api/cover/${tCoverId}`;

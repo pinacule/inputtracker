@@ -9,6 +9,7 @@
  */
 
 import { writeCoverUrlCache } from "./cache.ts";
+import { artSource, selectArt, type ArtSource } from "./art-types.ts";
 import {
   BROADCAST_SLOTS,
   BROADCAST_SLOT_MULTIPLES,
@@ -483,13 +484,12 @@ export async function getTvmazeWork(
     : [];
 
   let remoteBannerUrl: string | null = null;
+  let remoteArt: ArtSource[] | undefined;
   try {
-    const images = await fetchProviderJson<Array<{ type?: string; resolutions?: { original?: { url?: string } } }>>(
-      ctx, "tvmaze", `${base}/shows/${id}/images`
-    );
-    remoteBannerUrl = Array.isArray(images.data)
-      ? images.data.find((image) => image?.type === "background")?.resolutions?.original?.url ?? null
-      : null;
+    const images = await fetchTvmazeImages(id, ctx);
+    remoteArt = tvmazeArtSources(images);
+    // Preserve existing banner/snapshot selection; gallery ranking is display-only.
+    remoteBannerUrl = images.find((image) => image?.type === "background")?.resolutions?.original?.url ?? null;
   } catch {
     // Backgrounds are optional and fetched only alongside cached work details.
   }
@@ -515,7 +515,32 @@ export async function getTvmazeWork(
     },
     remoteCoverUrl,
     remoteBannerUrl,
+    remoteArt,
   };
+}
+
+interface TvmazeImage { type?: string; resolutions?: { original?: { url?: string; width?: number; height?: number } } }
+
+async function fetchTvmazeImages(id: string, ctx: ProviderContext): Promise<TvmazeImage[]> {
+  const { data } = await fetchProviderJson<TvmazeImage[]>(
+    ctx, "tvmaze", `${ctx.metaConfig.tvmaze_url}/shows/${id}/images`
+  );
+  return Array.isArray(data) ? data : [];
+}
+
+function tvmazeArtSources(images: TvmazeImage[]): ArtSource[] {
+  const sources = images.flatMap((image) => {
+    if (!["background", "banner", "poster"].includes(image?.type ?? "")) return [];
+    const original = image?.resolutions?.original;
+    return [artSource(original?.url, image.type === "background" ? "backdrop" : image.type === "banner" ? "banner" : "poster", original?.width, original?.height)];
+  });
+  sources.sort((a, b) => (b?.width ?? 0) * (b?.height ?? 0) - (a?.width ?? 0) * (a?.height ?? 0));
+  return selectArt(sources);
+}
+
+export async function getTvmazeArt(id: string, ctx: ProviderContext): Promise<ArtSource[]> {
+  if (!/^\d+$/.test(id)) return [];
+  return tvmazeArtSources(await fetchTvmazeImages(id, ctx));
 }
 
 export async function fetchTvmazeCover(

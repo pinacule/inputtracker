@@ -9,6 +9,7 @@
  */
 
 import { readProviderHint, writeCoverUrlCache, writeProviderHint } from "./cache.ts";
+import { artSource, selectArt } from "./art-types.ts";
 import {
   fetchProviderJson,
   readValidatedImageResponse,
@@ -430,6 +431,7 @@ function mapCinemetaWork(
     },
     remoteCoverUrl,
     remoteBannerUrl: meta.background ?? null,
+    remoteArt: selectArt([artSource(meta.background, "backdrop"), artSource(remoteCoverUrl, "poster")]),
   };
 }
 

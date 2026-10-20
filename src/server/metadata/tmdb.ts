@@ -8,6 +8,7 @@
  */
 
 import { readProviderHint, writeCoverUrlCache, writeProviderHint } from "./cache.ts";
+import { artSource, selectArt, type ArtSource } from "./art-types.ts";
 import {
   BROADCAST_SLOTS,
   fetchCinemetaSeriesRuntime,
@@ -609,4 +610,33 @@ export async function fetchTmdbCover(
   } catch {
     return null;
   }
+}
+
+export async function getTmdbArt(id: string, ctx: ProviderContext): Promise<ArtSource[]> {
+  if (!isTmdbConfigured(ctx.config)) return [];
+  const hint = readProviderHint<TmdbHint>(ctx.config, "tmdb", id);
+  const { rawId, preferredKind } = parseTmdbId(id, undefined, hint);
+  if (!/^\d+$/.test(rawId)) return [];
+  type Image = { file_path?: string; width?: number; height?: number; vote_average?: number; vote_count?: number };
+  const kinds = preferredKind ? [preferredKind] : ["movie", "tv"];
+  for (const kind of kinds) {
+    const { status, data } = await fetchProviderJson<{ backdrops?: Image[]; posters?: Image[] }>(ctx, "tmdb",
+      buildTmdbUrl(ctx, `/${kind}/${rawId}/images`, { include_image_language: "en,null" }),
+      { method: "GET", headers: tmdbHeaders(ctx) });
+    if (status === 404) continue;
+    const ranked = (images: unknown): Image[] => (Array.isArray(images) ? images : []).filter((image): image is Image => Boolean(image && typeof image === "object"))
+      .sort((a, b) => (Number.isFinite(b.vote_average) ? b.vote_average! : 0) - (Number.isFinite(a.vote_average) ? a.vote_average! : 0)
+        || (Number.isFinite(b.vote_count) ? b.vote_count! : 0) - (Number.isFinite(a.vote_count) ? a.vote_count! : 0)
+        || (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0));
+    const source = (image: Image, kind: ArtSource["kind"]) => {
+      // Image paths are not arbitrary URLs; do not allow traversal/query injection.
+      if (typeof image.file_path !== "string" || !/^\/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp)$/i.test(image.file_path)) return null;
+      return artSource(`${ctx.metaConfig.tmdb_image_url}/original${image.file_path}`, kind, image.width, image.height);
+    };
+    // Keep both formats even for works with hundreds of backdrops.
+    const backdrops = ranked(data?.backdrops).slice(0, 6).map((image) => source(image, "backdrop"));
+    const posters = ranked(data?.posters).map((image) => source(image, "poster"));
+    return selectArt([...backdrops, ...posters]);
+  }
+  return [];
 }

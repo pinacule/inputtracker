@@ -1,0 +1,33 @@
+/* Work-page gallery only; no shell/home overrides. */
+.work-art { min-width: 0; }
+.work-art-header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.work-art-header h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-2xl); color: var(--display-color); }
+.work-art-header > span { font-size: var(--text-sm); color: var(--text-muted); text-align: right; }
+.work-art-feature { display: block; position: relative; width: 100%; aspect-ratio: 16 / 9; max-height: 620px; padding: 0; overflow: hidden; background: var(--bg-canvas); border: var(--border-width) var(--border-style) var(--border-default); border-radius: var(--radius-lg); cursor: zoom-in; }
+.work-art-feature img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.work-art-expand { position: absolute; bottom: var(--space-3); right: var(--space-3); padding: var(--space-2) var(--space-3); background: var(--bg-surface); color: var(--text-primary); font-size: var(--text-sm); border-radius: var(--radius-sm); }
+.work-art-thumbnails { display: flex; gap: var(--space-3); overflow-x: auto; padding: var(--space-3) var(--space-1) var(--space-2); }
+.work-art-thumbnail { flex: 0 0 104px; height: 72px; padding: var(--space-1); background: var(--bg-canvas); border: 2px solid var(--border-default); border-radius: var(--radius-sm); cursor: pointer; transition: border-color var(--duration-fast) var(--ease-standard); }
+.work-art-thumbnail[aria-pressed="true"] { border-color: var(--accent-primary); }
+.work-art-thumbnail img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.work-art-lightbox { box-sizing: border-box; position: fixed; inset: 0; width: 100%; height: 100%; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: var(--space-6); border: 0; background: var(--bg-canvas); color: var(--text-primary); }
+.work-art-lightbox[open] { display: flex; flex-direction: column; gap: var(--space-4); }
+.work-art-lightbox::backdrop { background: var(--bg-overlay); }
+.work-art-lightbox-header, .work-art-lightbox footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.work-art-lightbox-header > div { min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.work-art-lightbox-header strong { overflow-wrap: anywhere; font-family: var(--font-display); font-size: var(--text-xl); }
+.work-art-lightbox-header span, .work-art-lightbox footer > span { font-size: var(--text-sm); color: var(--text-muted); }
+.work-art-lightbox button { flex-shrink: 0; min-height: 44px; padding: var(--space-2) var(--space-4); border: var(--border-width) var(--border-style) var(--border-default); border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--text-primary); cursor: pointer; }
+.work-art-lightbox button:disabled { color: var(--text-muted); cursor: default; }
+.work-art-lightbox-image { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.work-art-lightbox-image img { width: 100%; height: 100%; object-fit: contain; }
+@media (max-width: 639px) {
+  .work-art-header { align-items: center; }
+  .work-art-header > span { max-width: 150px; }
+  .work-art-feature { aspect-ratio: 4 / 3; }
+  .work-art-thumbnail { flex-basis: 88px; height: 64px; }
+  .work-art-expand { font-size: var(--text-xs); }
+  .work-art-lightbox { padding: var(--space-3); }
+  .work-art-lightbox footer > span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .work-art-thumbnail { transition: none; } }

@@ -13,6 +13,15 @@ export type { Category } from "./category.ts";
 
 export type MetaProvider = "anilist" | "tvmaze" | "cinemeta" | "itunes" | "openlibrary" | "tmdb";
 
+/** GET /api/meta-art/:provider/:id. URLs are local proxies, never provider URLs. */
+export interface WorkArtImage {
+  url: string;
+  kind: "backdrop" | "banner" | "poster" | "cover";
+  width: number | null;
+  height: number | null;
+}
+export interface WorkArtResult { images: WorkArtImage[] }
+
 /** One search result: enough to show a row with a small cover and pick it. */
 export interface LookupHit {
   provider: MetaProvider;
@@ -226,6 +235,8 @@ export interface LibraryResult {
 export interface LibraryWorkDetail extends LibraryWork {
   /** Stored snapshot for logging this work again; never reconstructed from display/progress fields. */
   work_snapshot?: WorkDetails | ManualWork | null;
+  /** Lazy display-only gallery endpoint; absent on legacy clients, null with no metadata link. */
+  art_url?: string | null;
   description: string | null;
   genres: string[];
   creators: string[];

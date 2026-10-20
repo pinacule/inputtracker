@@ -8,6 +8,7 @@
  */
 
 import { writeCoverUrlCache } from "./cache.ts";
+import { artSource, selectArt } from "./art-types.ts";
 import {
   fetchProviderJson,
   readValidatedImageResponse,
@@ -213,7 +214,12 @@ export async function getItunesWork(
       },
     },
     remoteCoverUrl,
+    remoteArt: selectArt([artSource(highResItunesArtwork(item.artworkUrl100 ?? item.artworkUrl60), "cover")]),
   };
+}
+
+export function highResItunesArtwork(url: unknown): string | null {
+  return upscaleItunesArtwork(url)?.replace(/\b600x600(?=[a-z.]|$)/gi, "1200x1200") ?? null;
 }
 
 export async function fetchItunesCover(

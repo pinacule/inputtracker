@@ -15,6 +15,8 @@ import type { Config } from "../../core/config.ts";
 import { normalizeImageType } from "../covers.ts";
 import { normalizeForSearch } from "../search.ts";
 import type { RemoteImageResult } from "./http.ts";
+import { ART_CONTENT_TYPES, artSource, MAX_WORK_ART, type ArtSource } from "./art-types.ts";
+import { MAX_META_COVER_BYTES } from "./http.ts";
 import {
   isMetaProvider,
   isValidProviderId,
@@ -231,6 +233,67 @@ export function writeBannerSource(config: Config, provider: MetaProvider, id: st
 
 export function metaBannerCacheDir(config: Config): string {
   return join(storageBaseDir(config), "covers", "meta-banner");
+}
+
+/** Separate display-only source list; never rewrite a stored work snapshot. */
+export function readArtSources(config: Config, provider: MetaProvider, id: string, nowMs: number, allowStale = false): ArtSource[] | null {
+  if (!isMetaProvider(provider) || !isValidProviderId(id)) return null;
+  try {
+    const raw = JSON.parse(readFileSync(join(metadataCacheDir(config), `art_${provider}_${id}.json`), "utf8")) as { savedAt: number; sources: ArtSource[] };
+    if (!Number.isFinite(raw.savedAt) || (!allowStale && nowMs - raw.savedAt >= WORK_CACHE_TTL_MS) || !Array.isArray(raw.sources) || raw.sources.length > MAX_WORK_ART) return null;
+    const sources: ArtSource[] = [];
+    for (const source of raw.sources) {
+      if (!source || !["backdrop", "banner", "poster", "cover"].includes(source.kind)) return null;
+      const validated = artSource(source.url, source.kind, source.width, source.height);
+      if (!validated) return null;
+      sources.push(validated);
+    }
+    return sources;
+  } catch { return null; }
+}
+
+export function writeArtSources(config: Config, provider: MetaProvider, id: string, sources: ArtSource[], nowMs: number): void {
+  if (!isMetaProvider(provider) || !isValidProviderId(id)) return;
+  try {
+    mkdirSync(metadataCacheDir(config), { recursive: true });
+    writeFileSync(join(metadataCacheDir(config), `art_${provider}_${id}.json`), JSON.stringify({ savedAt: nowMs, sources: sources.slice(0, MAX_WORK_ART) }));
+  } catch { /* Best-effort. */ }
+}
+
+export function metaArtCacheDir(config: Config): string {
+  return join(storageBaseDir(config), "covers", "meta-art");
+}
+
+/** Key bytes by source, not index: a refreshed/reordered list cannot serve the wrong image. */
+function artImagePath(config: Config, url: string): string {
+  return join(metaArtCacheDir(config), sha256Hex(url));
+}
+
+export function readCachedArt(config: Config, url: string): RemoteImageResult | null {
+  try {
+    const path = artImagePath(config, url);
+    const contentType = normalizeImageType(readFileSync(`${path}.type`, "utf8"));
+    const bytes = new Uint8Array(readFileSync(`${path}.img`));
+    return contentType && ART_CONTENT_TYPES.has(contentType) && bytes.byteLength > 0 && bytes.byteLength <= MAX_META_COVER_BYTES ? { bytes, contentType } : null;
+  } catch { return null; }
+}
+
+export function artImageAbsent(config: Config, url: string, nowMs: number): boolean {
+  try {
+    const savedAt = Number(readFileSync(`${artImagePath(config, url)}.none`, "utf8"));
+    return Number.isFinite(savedAt) && nowMs - savedAt < WORK_CACHE_TTL_MS;
+  } catch { return false; }
+}
+
+export function writeCachedArt(config: Config, url: string, image: RemoteImageResult | null, nowMs: number): void {
+  try {
+    const path = artImagePath(config, url);
+    mkdirSync(dirname(path), { recursive: true });
+    if (image) {
+      writeFileSync(`${path}.img`, image.bytes);
+      writeFileSync(`${path}.type`, image.contentType);
+    } else writeFileSync(`${path}.none`, String(nowMs));
+  } catch { /* Best-effort. */ }
 }
 
 export function readCachedMetaBanner(config: Config, provider: MetaProvider, id: string): RemoteImageResult | null {

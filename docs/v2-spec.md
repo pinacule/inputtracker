@@ -438,3 +438,25 @@ snapshots, and new provider results explicitly return a value or `null`.
 
 AniList's narrative-sequel boundary and append-only archive repair are documented in
 `docs/metadata-accuracy.md`; the richer responsive header is documented in `web/DESIGN.md`.
+
+## 22. Work artwork gallery (W18)
+
+- `LibraryWorkDetail.art_url` is an optional local gallery-list endpoint (null without metadata),
+  separate from `work_snapshot`. Numeric TMDB IDs retain movie/TV kind in this route.
+- `GET /api/meta-art/:provider/:id` returns `WorkArtResult` (`images`, at most eight local
+  `url`, `kind`, nullable `width`/`height`); `GET /api/meta-art/:provider/:id/:n` proxies raster bytes
+  for indices 0–7. Both strictly validate paths and reject query parameters. No source URL is exposed.
+- Lazy GET-only provider resolution: TMDB images with `include_image_language=en,null`, original
+  backdrops/posters ranked by votes then size; AniList banner/extraLarge cover only, reused from
+  existing lookup caches (its public host rejects GET, so uncached art stays hidden until normal
+  lookup/refresh; custom GET-capable endpoints can use a narrow GraphQL query); TVmaze original backgrounds/banners/posters; Cinemeta
+  background/poster; Open Library edition covers (`-L`, `default=false` to reject blanks); iTunes
+  artwork at 1200px. Existing provider calls seed art when they already include these fields.
+- Lists and absent/failed art share the 30-day work TTL in `metadata-cache`; image bytes live in
+  `covers/meta-art`, keyed by source hash to prevent stale index/reordering collisions. Concurrent
+  list resolutions/downloads share requests. Image timeout, type allow-list and 5MB cap reuse the
+  metadata HTTP helpers; SVG is rejected. Cached bytes remain usable with metadata disabled.
+  Browser index URLs revalidate because lists may reorder; disk bytes remain permanent.
+- Gallery fetches do not change archive snapshots, events, overrides or other library reads.
+  Unavailable sections are hidden; a large featured image, thumbnail selector and modal lightbox
+  sit below the hero. Keyboard navigation, focus containment/restoration and reduced motion apply.

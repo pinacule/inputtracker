@@ -9,6 +9,7 @@
 
 import { fetchOpenLibraryCover } from "../openlibrary.ts";
 import { readProviderHint, writeCoverUrlCache, writeProviderHint } from "./cache.ts";
+import { artSource, selectArt, type ArtSource } from "./art-types.ts";
 import {
   fetchProviderJson,
   readValidatedImageResponse,
@@ -366,6 +367,7 @@ export async function getOpenLibraryWork(
     null;
 
   // Best-effort `/works/:id/editions.json` when pages or isbn are missing
+  let editionArt: ArtSource[] | undefined;
   if (pages === null || isbn === null) {
     try {
       const edRes = await fetchProviderJson<OpenLibraryEditionsResponse>(
@@ -378,6 +380,7 @@ export async function getOpenLibraryWork(
         : Array.isArray(edRes.data?.editions)
           ? edRes.data!.editions!
           : [];
+      editionArt = openLibraryEditionArt(entries, ctx, data.covers);
       if (entries.length > 0) {
         if (pages === null) {
           pages = medianPages(
@@ -468,7 +471,21 @@ export async function getOpenLibraryWork(
       external_ids: externalIds,
     },
     remoteCoverUrl,
+    remoteArt: editionArt,
   };
+}
+
+function openLibraryEditionArt(entries: OpenLibraryEditionEntry[], ctx: ProviderContext, covers?: number[] | null): ArtSource[] {
+  const ids: unknown[] = [...(Array.isArray(covers) ? covers : []), ...entries.flatMap((entry) => Array.isArray(entry?.covers) ? entry.covers : [])];
+  return selectArt(ids.filter((id): id is number => typeof id === "number" && Number.isSafeInteger(id) && id > 0)
+    .map((id) => artSource(`${ctx.metaConfig.openlibrary_covers_url}/b/id/${id}-L.jpg?default=false`, "cover")));
+}
+
+export async function getOpenLibraryArt(id: string, ctx: ProviderContext): Promise<ArtSource[]> {
+  if (!/^OL\d+W$/.test(id)) return [];
+  const { data } = await fetchProviderJson<OpenLibraryEditionsResponse>(ctx, "openlibrary", `${ctx.metaConfig.openlibrary_url}/works/${id}/editions.json?limit=50`);
+  const entries = Array.isArray(data?.entries) ? data.entries : Array.isArray(data?.editions) ? data.editions : [];
+  return openLibraryEditionArt(entries, ctx);
 }
 
 export async function fetchOpenLibraryMetaCover(

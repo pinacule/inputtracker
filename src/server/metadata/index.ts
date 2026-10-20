@@ -27,6 +27,7 @@ import {
   readCachedMetaBanner,
   writeCachedMetaBanner,
   metaBannerCacheDir,
+  writeArtSources,
 } from "./cache.ts";
 import {
   defaultMetadataLimiter,
@@ -67,6 +68,7 @@ import {
   isValidProviderId,
   META_PROVIDERS,
   metaCoverUrl,
+  metaArtUrl,
   parseRuntimeMinutes,
   PROVIDER_ID_RE,
   type ProviderContext,
@@ -339,6 +341,10 @@ export async function lookupWork(
     categoryOverride
   );
   writeBannerSource(deps.config, provider, id, fetched.remoteBannerUrl ?? null, nowMs);
+  if (fetched.remoteArt !== undefined) {
+    const artId = metaArtUrl(provider, id, fetched.work.category).split("/").at(-1)!;
+    writeArtSources(deps.config, provider, artId, fetched.remoteArt, nowMs);
+  }
   return fetched.work;
 }
 

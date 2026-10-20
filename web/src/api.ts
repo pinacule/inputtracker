@@ -38,6 +38,7 @@ import type {
   SettingsView,
   SourceStatus,
   WorkDetails,
+  WorkArtResult,
   WorkEdit,
   WorkStatus,
   YearReviewV2,
@@ -1121,6 +1122,10 @@ export function getLibraryWork(key: string): Promise<LibraryWorkDetail> {
   );
 }
 
+export function getWorkArt(url: string): Promise<WorkArtResult> {
+  return getJson<WorkArtResult>(url);
+}
+
 export interface SeriesParams {
   bucket: "day" | "week" | "month";
   from?: string;
@@ -1313,4 +1318,3 @@ export function importAchriom(
   });
   return postForm<AchriomImportResult>(path, form);
 }
-
