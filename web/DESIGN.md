@@ -1,5 +1,27 @@
 # InputTracker Web UI — Design System & Information Architecture (`web/DESIGN.md`)
 
+## Direction: Editorial (D1)
+
+Home is a magazine spread, not a dashboard: near-black paper, warm cream ink,
+system serif display numerals and small-cap sans labels. One theme accent marks
+actions and selection; category stacks use cream tones and listening/short-form
+hatching, with explicit category names in the entry list and month ledger.
+Hairline rules and alignment replace cards, capsules and chip clouds.
+
+The selected day's exact time is the headline. On phones the seven-day typographic
+strip follows it, before the work list; on desktop it shares an asymmetric spread
+with the headline. Norms are fine rules on the same scale, plus aligned Logged / Usual
+miniatures (the existing eight-week/30-day calculation is unchanged). The month
+is a full-width cadence of thin daily marks and an aligned category ledger.
+A native Contents disclosure holds multi-select checkboxes and an All reset.
+Date links, navigation, folded music/YouTube, short-form time, Log/Add and context
+menus retain their behaviour. Motion is a four-pixel page reveal, disabled for
+reduced motion. All five dark theme IDs remain; the editorial shell is scoped to
+Calendar, leaving other pages' code and palettes untouched.
+
+This direction supersedes the historical Home layout descriptions below (pills,
+month card beside the day panel and category chip filtering).
+
 ## Aesthetic Direction: Calm Nocturnal Reading Room & Personal Archive (v2.2)
 
 InputTracker is both a daily media log and a **long-term personal archive** of everything watched, read, and listened to. Design A v2.2 refines the reading-room aesthetic around six core principles:

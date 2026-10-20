@@ -506,3 +506,47 @@
   font-size: var(--text-xs);
   color: var(--text-secondary);
 }
+
+/* D1 Editorial shell — scoped to Calendar; other pages keep their own system. */
+.app-shell--editorial {
+  --bg-canvas: #11110f;
+  --bg-surface: #191917;
+  --bg-surface-raised: #22221e;
+  --bg-subtle: #25251f;
+  --bg-muted: #30302a;
+  --text-primary: #f2ebdc;
+  --text-secondary: #bcb4a5;
+  --text-muted: #a49c8e;
+  --border-subtle: #36352f;
+  --border-default: #49473f;
+  --border-strong: #777266;
+  --text-on-accent: #11110f;
+  --sidebar-width: 212px;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", "URW Palladio L", P052,
+    Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+}
+:root[data-theme="midnight"] .app-shell--editorial { --bg-canvas: #101214; --bg-surface: #181b1d; --bg-surface-raised: #222629; }
+:root[data-theme="forest"] .app-shell--editorial { --bg-canvas: #101310; --bg-surface: #191d18; --bg-surface-raised: #222820; }
+:root[data-theme="obsidian"] .app-shell--editorial { --bg-canvas: #111112; --bg-surface: #1a1a1b; --bg-surface-raised: #242425; }
+:root[data-theme="plum"] .app-shell--editorial { --bg-canvas: #141114; --bg-surface: #1d191d; --bg-surface-raised: #282228; }
+.app-shell--editorial .app-sidebar { background: var(--bg-canvas); padding: 40px 24px; gap: 32px; }
+.app-shell--editorial .sidebar-brand { padding: 0; gap: 0; }
+.app-shell--editorial .sidebar-brand-mark { display: none; }
+.app-shell--editorial .sidebar-brand-title { font-size: 1.4375rem; font-weight: 400; letter-spacing: -0.045em; }
+.app-shell--editorial .sidebar-brand-tagline { margin-top: 8px; letter-spacing: 0.14em; color: var(--text-secondary); }
+.app-shell--editorial .sidebar-add-wrap .ui-btn { border-radius: 0; background: none; border: 1px solid var(--border-strong); color: var(--text-primary); box-shadow: none; font-size: 0.8125rem; }
+.app-shell--editorial .sidebar-add-wrap .ui-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.app-shell--editorial .sidebar-search-input { background: none; border: 0; border-bottom: 1px solid var(--border-default); border-radius: 0; padding-left: 24px; font-size: 0.8125rem; }
+.app-shell--editorial .sidebar-search-icon { left: 0; }
+.app-shell--editorial .sidebar-nav-heading { padding: 0 0 12px; color: var(--text-secondary); letter-spacing: 0.14em; }
+.app-shell--editorial .sidebar-nav-link { padding: 12px 0; border-radius: 0; background: none; min-height: 44px; font-size: 0.875rem; }
+.app-shell--editorial .sidebar-nav-link--active { color: var(--accent-primary); }
+.app-shell--editorial .sidebar-nav-icon { display: none; }
+.app-shell--editorial .sidebar-nav-link--active .sidebar-nav-link-main::before { content: "—"; }
+.app-shell--editorial .sidebar-footer { background: none; border-radius: 0; border-top: 1px solid var(--border-default); padding: 16px 0 0; }
+.app-shell--editorial .sidebar-settings-link { padding: 8px 0; border-radius: 0; }
+.app-shell--editorial .mobile-topbar { background: var(--bg-canvas); padding: 14px 20px; }
+.app-shell--editorial .mobile-tabbar { background: var(--bg-canvas); box-shadow: none; }
+.app-shell--editorial .mobile-tab { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.app-shell--editorial .mobile-tab--active::before { border-radius: 0; height: 1px; left: 20%; right: 20%; }
+.app-shell--editorial .ui-icon-btn { border-radius: 0; }

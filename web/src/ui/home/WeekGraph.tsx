@@ -7,6 +7,8 @@ import type { RollingGraphModel } from "../../lib/home-norm";
 import { formatMinutes } from "../../lib/stats";
 import { IconButton } from "../IconButton";
 import { ChevronLeftIcon, ChevronRightIcon } from "../icons";
+import { HomeTimeDisplay } from "./HomeTimeDisplay";
+import { NormComparison } from "./NormComparison";
 
 export interface WeekGraphProps {
   readonly model: RollingGraphModel;
@@ -16,9 +18,7 @@ export interface WeekGraphProps {
 }
 
 /**
- * Rolling seven-day pills, with weekday median markers on the same minute scale.
- * Answers "What did I do today and this week?" at a glance on phone and desktop,
- * and acts as a fast 7-day thumb switcher.
+ * Thin typographic columns; fine weekday median rules share the minute scale.
  */
 export function WeekGraph({
   model,
@@ -26,14 +26,15 @@ export function WeekGraph({
   onSelectDate,
   onStepWindow,
 }: WeekGraphProps) {
+  const usualTotal = [...model.norms.values()].reduce((sum, minutes) => sum + minutes, 0);
   return (
     <section
-      class="home-card home-week-card"
+      class="home-week-card"
       aria-label={`${model.heading} activity graph`}
     >
       <div class="home-week-header">
         <div class="home-week-titles">
-          <h2 class="home-section-title">{model.heading}</h2>
+          <h3 class="home-kicker">{model.heading}</h3>
         </div>
 
         <div class="home-week-totals">
@@ -44,6 +45,11 @@ export function WeekGraph({
             <ChevronRightIcon size={17} />
           </IconButton>
         </div>
+      </div>
+
+      <div class="home-week-summary">
+        <HomeTimeDisplay minutes={model.weekMinutes} class="home-time--week" />
+        <span class="home-week-key"><span aria-hidden="true" />Usual</span>
       </div>
 
       {/* 7-Day Interactive Stacked Bar Columns */}
@@ -65,7 +71,8 @@ export function WeekGraph({
             "home-week-day",
             day.isSelected ? "home-week-day--selected" : "",
             day.isToday ? "home-week-day--today" : "",
-            !day.isCurrentMonth ? "home-week-day--outside" : "",
+             !day.isCurrentMonth ? "home-week-day--outside" : "",
+             day.totalMinutes === 0 ? "home-week-day--quiet" : "",
           ]
             .filter(Boolean)
             .join(" ");
@@ -84,7 +91,7 @@ export function WeekGraph({
                 class="home-week-day-value tabular-nums"
                 aria-hidden="true"
               >
-                {day.durationLabel}
+                {day.totalMinutes === 0 ? "—" : day.durationLabel}
               </span>
 
               <span class="home-week-bar-well" aria-hidden="true">
@@ -98,7 +105,7 @@ export function WeekGraph({
                     {day.segments.map((seg) => (
                       <span
                         key={seg.category}
-                        class="home-week-bar-seg"
+                        class={`home-week-bar-seg home-tone--${seg.category}`}
                         style={{
                           flexGrow: seg.sharePct,
                           flexBasis: 0,
@@ -132,11 +139,7 @@ export function WeekGraph({
           );
         })}
       </div>
-      <div class="home-week-comparisons tabular-nums" aria-live="polite">
-        <p>{model.daySentence}</p>
-        <p>{model.windowSentence}</p>
-        <span class="home-week-sub">Faint line: your usual amount · weekday median over 8 weeks, or 30-day median with little history</span>
-      </div>
+      <NormComparison actual={model.weekMinutes} norm={usualTotal} label={model.heading} />
     </section>
   );
 }
