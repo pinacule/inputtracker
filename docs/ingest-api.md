@@ -141,6 +141,8 @@ snapshot wins, so the sender must not replay stale snapshots out of order.
 
 This time appears in Calendar, heatmaps, Insights, Reviews and totals, but never
 creates a Library work, play count, item count or ranking entry. Hourly charts
-omit daily totals because their hour placement is unknown. Phone app time stays
+omit daily totals because their hour placement is unknown. For `app: "youtube"` the phone sends the YouTube app's whole screen time; on read the
+server subtracts that day's recorded phone video plays (`phone_play`, not music), so only
+Shorts and browsing remain (never below 0). Phone app time stays
 separate from PC ActivityWatch time; only measured PC Shorts suppress same-day
 Takeout estimates. The phone app itself is outside this server contract.
