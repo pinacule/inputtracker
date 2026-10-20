@@ -19,7 +19,7 @@ for attempt in $(seq 0 "${RETRY_MAX:-8}"); do
     PROMPT="$CONT"; SESSION="$(cat "$T/session" 2>/dev/null)"
   fi
   r=$("$REPO/scripts/run-worker.sh" "$TASK" "$WORKER" "$MODEL" "$PROMPT" ${SESSION:+"$SESSION"} | tail -1)
-  if [ "$r" = error ] && grep -q "different Azure OpenAI resource" "$T/oc.jsonl" 2>/dev/null; then
+  if [ "$r" = error ] && grep -qE "different Azure OpenAI resource|encrypted content for item .* could not be verified" "$T/oc.jsonl" 2>/dev/null; then
     # AgentRouter moved the session to another Azure resource; its stored response items are gone
     # there, so resuming fails too. Start a fresh session that continues from the files on disk.
     echo "[$TASK] router switched Azure resource (attempt $attempt), restarting fresh" >&2
