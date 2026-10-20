@@ -30,6 +30,11 @@ for attempt in $(seq 0 "${RETRY_MAX:-8}"); do
     PROMPT="$PROMPT_FRESH"; SESSION=""
     continue
   fi
+  if [ "$r" = error ] && grep -q '"provider.transport"' "$T/oc.jsonl" 2>/dev/null; then
+    # Connection dropped mid-response: the session is intact, resume it after a short wait.
+    echo "[$TASK] connection lost (attempt $attempt), resuming" >&2
+    continue
+  fi
   [ "$r" != limit ] && { echo "$r"; exit 0; }
   echo "[$TASK] rate-limited (attempt $attempt), resuming in ${RETRY_WAIT:-90}s" >&2
 done
