@@ -4,7 +4,6 @@ import type {
   LibraryWork,
 } from "../api";
 import type { OpenArchiveOptions } from "../lib/archive-form";
-import { toggleCategoryChip } from "../lib/category-filter";
 import { categoryPluralLabel } from "../lib/categories";
 import { formatMinutes } from "../lib/stats";
 import {
@@ -31,11 +30,11 @@ import {
 import {
   AddIcon,
   Button,
-  CategoryChips,
   Skeleton,
 } from "../ui";
 import {
   DayDetailPanel,
+  CategoryIndex,
   MonthRhythmCard,
   WeekGraph,
 } from "../ui/home";
@@ -53,7 +52,7 @@ export interface CalendarProps {
   onOpenEditWork?: (work: LibraryWork) => void;
 }
 
-/** Rolling seven days and selected-day detail first; month summary alongside on desktop. */
+/** An editorial spread: selected-day headline, seven-day ledger, full-width month. */
 export function Calendar({
   date,
   initialMonth,
@@ -197,11 +196,6 @@ export function Calendar({
   const handleCategoriesChange = (nextCats: Category[]) => {
     setSelectedCategories(nextCats);
     syncUrlHash(selectedDate, currentMonth, nextCats, explicitDate);
-  };
-
-  const handleToggleSingleCategory = (cat: Category) => {
-    const next = toggleCategoryChip(selectedCategories, cat);
-    handleCategoriesChange(next);
   };
 
   // Apply optimistic work overrides to library works
@@ -352,10 +346,13 @@ export function Calendar({
 
   return (
     <div class="page-container home-page">
-      {/* Today jump and primary add action; week navigation belongs with the pills. */}
+      {/* Magazine masthead; date navigation lives with the respective sections. */}
       <header class="home-topbar">
         <div class="home-month-nav">
-          <h1 class="home-month-title">Your days</h1>
+          <div>
+            <span class="home-kicker">The personal media journal</span>
+            <h1 class="home-month-title">Your days<span class="home-title-stop">.</span></h1>
+          </div>
 
           {!isViewingToday && (
             <button
@@ -387,19 +384,12 @@ export function Calendar({
         </div>
       </header>
 
-      {/* Multi-Select Category Filter Bar ("All" includes YouTube & Music) */}
-      <div class="home-filter-bar">
-        <CategoryChips
-          selected={selectedCategories}
-          onChange={handleCategoriesChange}
-          totals={chipTotals}
-          availableCategories={unfilteredMonthModels.availableCategories}
-          includeYoutubeInAll={true}
-          showCounts="hours"
-          syncUrl={false}
-          ariaLabel="Filter calendar by category"
-        />
-      </div>
+      <CategoryIndex
+        selected={selectedCategories}
+        onChange={handleCategoriesChange}
+        totals={chipTotals}
+        availableCategories={unfilteredMonthModels.availableCategories}
+      />
 
       {error && (
         <div class="home-error-banner" role="alert">
@@ -415,57 +405,34 @@ export function Calendar({
       )}
 
       {loading ? (
-        <div class="home-workspace" aria-busy="true">
-          <div class="home-inspector-col">
-            <div class="home-card">
-              <Skeleton height="120px" />
-            </div>
-            <div class="home-card">
-              <Skeleton height="220px" />
-            </div>
-          </div>
-          <div class="home-stage-col">
-            <div class="home-card">
-              <Skeleton height="110px" />
-            </div>
-            <div class="home-card">
-              <Skeleton height="360px" />
-            </div>
-          </div>
+        <div class="home-workspace home-loading" aria-busy="true" role="status">
+          <span class="sr-only">Loading your journal</span>
+          <Skeleton height="280px" />
+          <Skeleton height="240px" />
         </div>
       ) : !error && bundle ? (
         <div class="home-workspace" aria-busy={loading}>
-          {/* Pills and selected day: first on phone, left on desktop. */}
-          <div class="home-inspector-col">
-            <WeekGraph
-              model={weekModel}
-              todayStr={todayStr}
-              onSelectDate={handleSelectDate}
-              onStepWindow={handleStepWindow}
-            />
-
-            <div>
-              <DayDetailPanel
-                model={dayDetailModel}
-                singleCategory={singleSelectedCategory}
-                onSelectDate={handleSelectDate}
+          <DayDetailPanel
+            model={dayDetailModel}
+            usualMinutes={weekModel.norms.get(selectedDate) ?? 0}
+            singleCategory={singleSelectedCategory}
+            onSelectDate={handleSelectDate}
+            todayStr={todayStr}
+            onOpenAdd={onOpenAdd}
+            weekGraph={
+              <WeekGraph
+                model={weekModel}
                 todayStr={todayStr}
-                onOpenAdd={onOpenAdd}
+                onSelectDate={handleSelectDate}
+                onStepWindow={handleStepWindow}
               />
-            </div>
-          </div>
-
-          {/* Compact month summary on the right, below the day panel on phone. */}
-          <div class="home-stage-col">
-            <MonthRhythmCard
-              model={monthRhythm}
-              todayStr={todayStr}
-              selectedCategories={selectedCategories}
-              onSelectDate={handleSelectDate}
-              onToggleCategory={handleToggleSingleCategory}
-            />
-
-          </div>
+            }
+          />
+          <MonthRhythmCard
+            model={monthRhythm}
+            todayStr={todayStr}
+            onSelectDate={handleSelectDate}
+          />
         </div>
       ) : null}
     </div>

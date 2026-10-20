@@ -1,4 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
+import type { ComponentChildren } from "preact";
 import type { Category } from "../../api";
 import {
   categoryCssColor,
@@ -25,9 +26,13 @@ import {
 } from "../icons";
 import { QuickRatingPill } from "../QuickRating";
 import { HomeWorkThumb } from "./HomeWorkThumb";
+import { HomeTimeDisplay } from "./HomeTimeDisplay";
+import { NormComparison } from "./NormComparison";
 
 export interface DayDetailPanelProps {
   readonly model: HomeDayDetailModel;
+  readonly usualMinutes: number;
+  readonly weekGraph?: ComponentChildren;
   readonly singleCategory?: Category;
   readonly onSelectDate: (date: string) => void;
   readonly todayStr?: string;
@@ -117,7 +122,7 @@ function DayWorkItemRow({ row }: { row: HomeDayWorkRow }) {
 
   return (
     <li
-      class="home-day-row"
+      class={`home-day-row home-tone--${row.category}`}
       tabIndex={0}
       {...bindContextMenu(menuTarget)}
     >
@@ -143,7 +148,8 @@ function DayWorkItemRow({ row }: { row: HomeDayWorkRow }) {
             aria-hidden="true"
           />
           <span>
-            {row.subtitle ?? categoryPluralLabel(row.category)}
+            <span class="home-row-category">{categoryPluralLabel(row.category)}{row.subtitle ? " / " : ""}</span>
+            {row.subtitle}
           </span>
         </div>
 
@@ -186,13 +192,15 @@ function DayWorkItemRow({ row }: { row: HomeDayWorkRow }) {
  * Selected Day Detail Panel:
  * - Single clean plain-words day heading ("Today", "Yesterday", "Saturday 17 October")
  *   with no duplicate numeric date above it.
- * - Proportional category share bar for the day.
+ * - Exact time headline with a visual norm comparison and the seven-day strip.
  * - Work-grouped items with real covers only where they exist.
  * - YouTube plays collapsed into one calm expandable line ("12 videos · 48m").
  * - Music plays without ratings, always collapsed into one expandable line.
  */
 export function DayDetailPanel({
   model,
+  usualMinutes,
+  weekGraph,
   singleCategory,
   onSelectDate,
   todayStr,
@@ -212,7 +220,7 @@ export function DayDetailPanel({
 
   return (
     <section
-      class="home-card home-day-panel"
+      class="home-day-panel"
       aria-label={`Activity for ${model.heading}`}
     >
       {/* Clean single-line plain words day header */}
@@ -241,11 +249,6 @@ export function DayDetailPanel({
         </div>
 
         <div class="home-day-header-right">
-          {model.totalMinutes > 0 && (
-            <strong class="home-day-total tabular-nums">
-              {formatMinutes(model.totalMinutes)}
-            </strong>
-          )}
           {onOpenAdd && (
             <Button
               variant="secondary"
@@ -264,6 +267,13 @@ export function DayDetailPanel({
         </div>
       </div>
 
+      <div key={model.date} class="home-day-hero" aria-live="polite" aria-atomic="true">
+        <HomeTimeDisplay minutes={model.totalMinutes} class="home-time--hero" />
+        <span class="home-kicker">Time on the record</span>
+        <NormComparison actual={model.totalMinutes} norm={usualMinutes} label={model.heading} />
+      </div>
+      {weekGraph}
+
       {/* Day Category Proportion Bar (when the day has activity) */}
       {model.segments.length > 0 && (
         <div class="home-day-cat-strip">
@@ -275,9 +285,10 @@ export function DayDetailPanel({
             {model.segments.map((seg) => (
               <span
                 key={seg.category}
-                class="home-share-bar-seg"
+                 class={`home-share-bar-seg home-tone--${seg.category}`}
                 style={{
-                  width: `${Math.max(3, seg.sharePct)}%`,
+                   flexGrow: seg.sharePct,
+                   flexBasis: 0,
                   backgroundColor: categoryCssColor(seg.category),
                 }}
                 title={`${categoryPluralLabel(seg.category)}: ${
@@ -286,22 +297,6 @@ export function DayDetailPanel({
                     : `${seg.count} items`
                 }`}
               />
-            ))}
-          </div>
-          <div class="home-day-cat-tags">
-            {model.segments.map((seg) => (
-              <span key={seg.category} class="home-day-cat-tag tabular-nums">
-                <span
-                  class={`ui-tab-dot ui-tab-dot--${seg.category}`}
-                  aria-hidden="true"
-                />
-                <span>{categoryPluralLabel(seg.category)}</span>
-                <span class="home-day-cat-tag-val">
-                  {seg.minutes > 0
-                    ? formatMinutes(seg.minutes)
-                    : `${seg.count}`}
-                </span>
-              </span>
             ))}
           </div>
         </div>
@@ -330,9 +325,10 @@ export function DayDetailPanel({
       ) : (
         <ul class="home-day-list">
           {model.shortformMinutes > 0 && (
-            <li class="home-day-row home-day-row--shortform">
-               <HomeWorkThumb coverUrl={null} category="shortform" size="sm" />
-               <span class="home-day-row-title">Short-form · {Math.round(model.shortformMinutes)} min</span>
+             <li class="home-day-row home-day-row--shortform">
+                <HomeWorkThumb coverUrl={null} category="shortform" size="sm" />
+                <span class="home-day-row-body home-day-row-title">Short-form</span>
+                <strong class="home-day-row-duration">{Math.round(model.shortformMinutes)} min</strong>
             </li>
           )}
           {/* 1. Long-form / Story Works */}
@@ -350,7 +346,8 @@ export function DayDetailPanel({
                     ? "home-day-collapse-trigger home-day-collapse-trigger--open"
                     : "home-day-collapse-trigger"
                 }
-                aria-expanded={musicExpanded}
+                 aria-expanded={musicExpanded}
+                 aria-controls={`home-music-${model.date}`}
                 onClick={() => setMusicExpanded((v) => !v)}
               >
                 <span
@@ -387,7 +384,7 @@ export function DayDetailPanel({
               </button>
 
               {musicExpanded && (
-                <ul class="home-day-drawer-list">
+                <ul id={`home-music-${model.date}`} class="home-day-drawer-list">
                   {model.music.tracks.map((track) => (
                     <MusicTrackRow key={track.workKey} track={track} />
                   ))}
@@ -406,7 +403,8 @@ export function DayDetailPanel({
                     ? "home-day-collapse-trigger home-day-collapse-trigger--open"
                     : "home-day-collapse-trigger"
                 }
-                aria-expanded={ytExpanded}
+                 aria-expanded={ytExpanded}
+                 aria-controls={`home-youtube-${model.date}`}
                 onClick={() => setYtExpanded((v) => !v)}
               >
                 <span
@@ -443,7 +441,7 @@ export function DayDetailPanel({
               </button>
 
               {ytExpanded && (
-                <div class="home-yt-drawer">
+                <div id={`home-youtube-${model.date}`} class="home-yt-drawer">
                   {model.youtube.channels.map((ch) => {
                     const chMenuTarget: ContextMenuTarget = {
                       kind: "youtube-channel",

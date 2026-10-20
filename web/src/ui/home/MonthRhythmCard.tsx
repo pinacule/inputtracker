@@ -1,224 +1,81 @@
 import { useState } from "preact/hooks";
-import type { Category } from "../../api";
-import {
-  categoryCssColor,
-  categoryPluralLabel,
-  formatCategoryUnits,
-} from "../../lib/categories";
-import {
-  formatCleanDayHeading,
-  type MonthRhythmModel,
-  type MonthSkylineBar,
-} from "../../lib/home";
+import { categoryCssColor, categoryPluralLabel, formatCategoryUnits } from "../../lib/categories";
+import { formatCleanDayHeading, type MonthRhythmModel } from "../../lib/home";
 import { formatMinutes } from "../../lib/stats";
+import { HomeTimeDisplay } from "./HomeTimeDisplay";
 
 export interface MonthRhythmCardProps {
   readonly model: MonthRhythmModel;
   readonly todayStr: string;
-  readonly selectedCategories: readonly Category[];
   readonly onSelectDate: (date: string) => void;
-  readonly onToggleCategory: (category: Category) => void;
 }
 
-/**
- * Month Rhythm & Skyline Graph Card:
- * Replaces numerical KPI boxes with two visual graphs for the month:
- * 1. Proportional Category Share Bar + clickable category breakdown pills.
- * 2. 31-day Daily Skyline Stacked Bar Chart (click any day bar to select that day).
- */
-export function MonthRhythmCard({
-  model,
-  todayStr,
-  selectedCategories,
-  onSelectDate,
-  onToggleCategory,
-}: MonthRhythmCardProps) {
-  const [hoveredDay, setHoveredDay] = useState<MonthSkylineBar | null>(null);
-
-  const inspectedBar =
-    hoveredDay ??
-    model.skyline.find((b) => b.isSelected) ??
-    null;
+/** A full-width rhythm line and aligned category ledger, without a second filter. */
+export function MonthRhythmCard({ model, todayStr, onSelectDate }: MonthRhythmCardProps) {
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
+  const inspectedBar = model.skyline.find((bar) => bar.date === hoveredDate)
+    ?? model.skyline.find((bar) => bar.isSelected);
 
   return (
-    <section
-      class="home-card home-rhythm-card"
-      aria-label={`${model.heading} overview graph`}
-    >
-      <h2 class="home-section-title">{model.heading}</h2>
-      {/* Top summary row */}
-      <div class="home-rhythm-header">
-        <div class="home-rhythm-summary">
-          <strong class="home-rhythm-total tabular-nums">
-            {formatMinutes(model.totalMinutes)}
-          </strong>
-          <span class="home-rhythm-meta tabular-nums">
-            {model.activeDays === 0
-              ? `No activity in ${model.heading}`
-              : `${model.activeDays} active ${
-                  model.activeDays === 1 ? "day" : "days"
-                }`}
-            {model.deltaLabel ? ` · ${model.deltaLabel}` : ""}
-          </span>
+    <section class="home-rhythm-card" aria-label={`${model.heading} overview graph`}>
+      <div class="home-rhythm-heading">
+        <div>
+          <span class="home-kicker">The month in view</span>
+          <h2 class="home-rhythm-title">{model.heading}</h2>
         </div>
-
-        {inspectedBar && (inspectedBar.totalMinutes > 0 || inspectedBar.totalCount > 0) && (
-          <div class="home-rhythm-readout tabular-nums" aria-live="polite">
-            <span>{formatCleanDayHeading(inspectedBar.date, todayStr)}</span>
-            <strong>
-              {inspectedBar.totalMinutes > 0
-                ? formatMinutes(inspectedBar.totalMinutes)
-                : `${inspectedBar.totalCount} items`}
-            </strong>
-          </div>
-        )}
+        <a class="home-section-link" href={`#/review?month=${model.month}`}>Month review <span aria-hidden="true">↗</span></a>
       </div>
-
+      <div class="home-rhythm-header">
+        <HomeTimeDisplay minutes={model.totalMinutes} class="home-time--month" />
+        <div class="home-rhythm-meta">
+          <span>{model.activeDays} active {model.activeDays === 1 ? "day" : "days"}</span>
+          {model.deltaLabel && <span>{model.deltaLabel}</span>}
+        </div>
+      </div>
+      <div class="home-rhythm-readout" aria-live="polite" aria-atomic="true">
+        {inspectedBar ? <><span>{formatCleanDayHeading(inspectedBar.date, todayStr)}</span><strong>{inspectedBar.totalMinutes > 0 ? formatMinutes(inspectedBar.totalMinutes) : inspectedBar.totalCount > 0 ? `${inspectedBar.totalCount} items` : "Nothing logged"}</strong></> : <span>Daily record</span>}
+      </div>
+      <div class="home-skyline" role="group" aria-label={`Daily activity bars for ${model.heading}`} onMouseLeave={() => setHoveredDate(null)}>
+        {model.skyline.map((bar) => {
+          const showTick = [1, 8, 15, 22, model.daysInMonth].includes(bar.dayOfMonth);
+          const future = bar.date > todayStr;
+          const label = `${formatCleanDayHeading(bar.date, todayStr)}: ${bar.totalMinutes > 0 ? formatMinutes(bar.totalMinutes) : bar.totalCount > 0 ? `${bar.totalCount} items` : "no activity"}`;
+          return (
+            <button key={bar.date} type="button"
+              class={`home-skyline-col${bar.isSelected ? " home-skyline-col--selected" : ""}${future ? " home-skyline-col--future" : ""}`}
+              disabled={future} aria-pressed={bar.isSelected} aria-current={bar.isToday ? "date" : undefined} aria-label={label}
+              onMouseEnter={() => setHoveredDate(bar.date)} onFocus={() => setHoveredDate(bar.date)} onBlur={() => setHoveredDate(null)}
+              onClick={() => onSelectDate(bar.date)}>
+              <span class="home-skyline-well" aria-hidden="true">
+                {bar.heightRatio > 0 ? (
+                  <span class="home-skyline-stack" style={{ height: `${bar.heightRatio * 100}%` }}>
+                    {bar.segments.map((seg) => (
+                      <span key={seg.category} class={`home-skyline-seg home-tone--${seg.category}`}
+                        style={{ flexGrow: seg.sharePct, flexBasis: 0, backgroundColor: categoryCssColor(seg.category) }}
+                        title={`${categoryPluralLabel(seg.category)}: ${formatMinutes(seg.minutes)}`} />
+                    ))}
+                  </span>
+                ) : <span class="home-skyline-dot" />}
+              </span>
+              <span class="home-skyline-tick" aria-hidden="true">{showTick ? bar.dayOfMonth : ""}</span>
+            </button>
+          );
+        })}
+      </div>
       {(model.undatedMinutes ?? 0) > 0 && (
-        <p class="home-week-sub">Includes {formatMinutes(model.undatedMinutes!)} known only to this month, not shown in daily bars.</p>
+        <p class="home-rhythm-undated">{formatMinutes(model.undatedMinutes!)} dated to the month only; not placed on the daily line.</p>
       )}
-
-      {model.categoryShares.length > 0 && (
-        <>
-          {/* 1. Proportional Category Share Bar */}
-          <div
-            class="home-share-bar home-share-bar--lg"
-            role="img"
-            aria-label={`Category share for ${model.heading}`}
-          >
-            {model.categoryShares.map((s) => (
-              <span
-                key={s.category}
-                class="home-share-bar-seg"
-                style={{
-                  width: `${Math.max(2.5, s.sharePct)}%`,
-                  backgroundColor: categoryCssColor(s.category),
-                }}
-                title={`${s.label}: ${
-                  s.totalMinutes > 0
-                    ? formatMinutes(s.totalMinutes)
-                    : formatCategoryUnits(s.category, s.units)
-                } (${Math.round(s.sharePct)}%)`}
-              />
-            ))}
-          </div>
-
-          {/* Inline Category Breakdown Legend Pills */}
-          <div class="home-rhythm-cats" role="group" aria-label="Month categories">
-            {model.categoryShares.map((s) => {
-              const isSelected = selectedCategories.includes(s.category);
-              const valLabel =
-                s.totalMinutes > 0
-                  ? formatMinutes(s.totalMinutes)
-                  : formatCategoryUnits(s.category, s.units);
-              return (
-                <button
-                  key={s.category}
-                  type="button"
-                  class={
-                    isSelected
-                      ? "home-rhythm-cat-pill home-rhythm-cat-pill--active"
-                      : "home-rhythm-cat-pill"
-                  }
-                  aria-pressed={isSelected}
-                  onClick={() => onToggleCategory(s.category)}
-                >
-                  <span
-                    class={`ui-tab-dot ui-tab-dot--${s.category}`}
-                    aria-hidden="true"
-                  />
-                  <span>{s.label}</span>
-                  <strong class="tabular-nums">{valLabel}</strong>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* 2. 31-Day Daily Skyline Graph */}
-          <div
-            class="home-skyline"
-            role="group"
-            aria-label={`Daily activity bars for ${model.heading}`}
-            onMouseLeave={() => setHoveredDay(null)}
-          >
-            {model.skyline.map((bar) => {
-              const showTick =
-                bar.dayOfMonth === 1 ||
-                bar.dayOfMonth === 8 ||
-                bar.dayOfMonth === 15 ||
-                bar.dayOfMonth === 22 ||
-                bar.dayOfMonth === model.daysInMonth ||
-                bar.isSelected;
-
-              const plainDay = formatCleanDayHeading(bar.date, todayStr);
-              const barLabel =
-                bar.totalMinutes > 0
-                  ? `${plainDay}: ${formatMinutes(bar.totalMinutes)}`
-                  : bar.totalCount > 0
-                    ? `${plainDay}: ${bar.totalCount} items`
-                    : `${plainDay}: 0m`;
-
-              const classes = [
-                "home-skyline-col",
-                bar.isSelected ? "home-skyline-col--selected" : "",
-                bar.isToday ? "home-skyline-col--today" : "",
-              ]
-                .filter(Boolean)
-                .join(" ");
-
-              return (
-                <button
-                  key={bar.date}
-                  type="button"
-                  class={classes}
-                  aria-pressed={bar.isSelected}
-                  aria-label={barLabel}
-                  onMouseEnter={() => setHoveredDay(bar)}
-                  onFocus={() => setHoveredDay(bar)}
-                  onClick={() => onSelectDate(bar.date)}
-                >
-                  <span class="home-skyline-well" aria-hidden="true">
-                    {bar.heightRatio > 0 ? (
-                      <span
-                        class="home-skyline-stack"
-                        style={{
-                          height: `${Math.round(bar.heightRatio * 100)}%`,
-                        }}
-                      >
-                        {bar.segments.map((seg) => (
-                          <span
-                            key={seg.category}
-                            class="home-skyline-seg"
-                            style={{
-                              flexGrow: Math.max(1, seg.sharePct),
-                              backgroundColor: categoryCssColor(seg.category),
-                            }}
-                            title={`${categoryPluralLabel(
-                              seg.category
-                            )}: ${formatMinutes(seg.minutes)}`}
-                          />
-                        ))}
-                      </span>
-                    ) : (
-                      <span class="home-skyline-dot" />
-                    )}
-                  </span>
-                  <span
-                    class={
-                      bar.isSelected
-                        ? "home-skyline-tick home-skyline-tick--selected tabular-nums"
-                        : "home-skyline-tick tabular-nums"
-                    }
-                    aria-hidden="true"
-                  >
-                    {showTick ? bar.dayOfMonth : ""}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </>
-      )}
+      {model.categoryShares.length > 0 ? (
+        <dl class="home-month-ledger" aria-label="Month totals by category">
+          {model.categoryShares.map((share, index) => (
+            <div key={share.category} class={`home-ledger-entry home-tone--${share.category}`}>
+              <dt><span class="home-ledger-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>{share.label}</dt>
+              <dd>{share.totalMinutes > 0 ? formatMinutes(share.totalMinutes) : formatCategoryUnits(share.category, share.units)}</dd>
+              <span class="home-ledger-track" aria-hidden="true"><span style={{ width: `${share.sharePct}%`, backgroundColor: categoryCssColor(share.category) }} /></span>
+            </div>
+          ))}
+        </dl>
+      ) : <p class="home-month-empty">An unwritten month. Your next entry starts the record.</p>}
     </section>
   );
 }
