@@ -18,6 +18,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { isShortform } from "./shortform.ts";
 import { categoryOf } from "../core/category.ts";
 import {
   CONSUMPTION_KINDS,
@@ -172,14 +173,14 @@ function computeTotals(rows: readonly PreparedEvent[]): ReviewTotals {
   const titles = new Set<string>();
   let seconds = 0;
   for (const row of rows) {
-    if (row.precision === "day") {
+    if (row.precision === "day" && (!isShortform(row.event) || row.minutes > 0)) {
       days.add(row.date);
     }
-    titles.add(`${row.event.source}:::${row.title}`);
+    if (!isShortform(row.event)) titles.add(`${row.event.source}:::${row.title}`);
     seconds += row.event.duration_seconds ?? 0;
   }
   return {
-    items: rows.length,
+    items: rows.filter((r) => !isShortform(r.event)).length,
     minutes: seconds / 60,
     active_days: days.size,
     titles: titles.size,
@@ -254,6 +255,7 @@ export function computeYearReview(
   const channelCounts = new Map<string, number>();
 
   for (const row of yearRows) {
+    const itemCount = isShortform(row.event) ? 0 : 1;
     const source = row.event.source;
     let sourceRows = rowsBySource.get(source);
     if (!sourceRows) {
@@ -266,7 +268,7 @@ export function computeYearReview(
       items: 0,
       seconds: 0,
     };
-    mediaType.items += 1;
+    mediaType.items += itemCount;
     mediaType.seconds += row.event.duration_seconds ?? 0;
     byMediaTypeData[row.event.media_type] = mediaType;
 
@@ -274,22 +276,23 @@ export function computeYearReview(
       const monthKey = row.date.slice(0, 7);
       const month = byMonthData.get(monthKey) ?? { minutes: 0, count: 0 };
       month.minutes += row.minutes;
-      month.count += 1;
+      month.count += itemCount;
       byMonthData.set(monthKey, month);
     }
 
     if (row.precision === "day") {
       const weekday = byWeekdayData.get(row.weekday) ?? { minutes: 0, count: 0 };
       weekday.minutes += row.minutes;
-      weekday.count += 1;
+      weekday.count += itemCount;
       byWeekdayData.set(row.weekday, weekday);
 
       const day = byDayData.get(row.date) ?? { minutes: 0, count: 0 };
       day.minutes += row.minutes;
-      day.count += 1;
+      day.count += itemCount;
       byDayData.set(row.date, day);
     }
 
+    if (isShortform(row.event)) continue;
     const titleKey = `${source}:::${row.title}`;
     const group = titleGroups.get(titleKey);
     if (group) {

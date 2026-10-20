@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
+import { MostPlayed } from "../ui/MostPlayed";
 import {
   getGoals,
   getHeatmapDays,
@@ -629,7 +630,7 @@ export function Insights({
             (rangePreset === "all" ? libMatch?.total_minutes ?? 0 : 0)
         ),
         works: libMatch?.works ?? 0,
-        units: fromSeries?.units ?? libMatch?.units ?? 0,
+        units: cat === "shortform" ? 0 : fromSeries?.units ?? libMatch?.units ?? 0,
       };
     }).filter((c) => c.total_minutes > 0 || c.units > 0);
 
@@ -796,6 +797,11 @@ export function Insights({
       </div>
 
       {/* Chart 1: Stacked Minutes by Category Over Time */}
+      <MostPlayed categories={selectedCategories} />
+      <Card padding="md" title="Short-form time" subtitle="Daily time only — no archived videos">
+        <Stat label="Short-form" value={formatMinutes(points.reduce((sum, p) => sum + (p.minutes_by_category.shortform ?? 0), 0))} category="shortform"
+          sparkline={<Sparkline values={points.map((p) => p.minutes_by_category.shortform ?? 0)} category="shortform" label="Short-form time trend" />} />
+      </Card>
       <Card
         padding="md"
         title={`Minutes by Category (${resolvedRange.label})`}
@@ -846,6 +852,7 @@ export function Insights({
           <PunchCardChart
             cells={heatmapHours?.cells ?? []}
             unplacedCount={heatmapHours?.unplaced_count ?? 0}
+            unplacedMinutes={heatmapHours?.unplaced_minutes ?? 0}
             title="Hour by weekday rhythm"
           />
         </Card>

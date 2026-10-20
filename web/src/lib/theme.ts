@@ -107,6 +107,7 @@ const SHARED_DARK_CATEGORIES: Readonly<Record<Category, CategoryThemeColors>> = 
     border: "#474037",
     solid: "#9c9080",
   },
+  shortform: { fg: "#b1d3ff", bg: "#192638", border: "#354f70", solid: "#6194cf" },
 };
 
 export const DARK_THEMES: ReadonlyArray<DarkThemeDefinition> = [

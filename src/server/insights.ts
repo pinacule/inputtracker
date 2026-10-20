@@ -14,6 +14,7 @@
 
 import type { Database } from "bun:sqlite";
 import { categoryOf } from "../core/category.ts";
+import { isShortform } from "./shortform.ts";
 import {
   CONSUMPTION_KINDS,
   coverUrlFor,
@@ -107,6 +108,7 @@ function activeDaysBySource(
     if (!CONSUMPTION_KINDS.has(event.source_kind)) {
       continue;
     }
+    if (isShortform(event) && !(event.duration_seconds && event.duration_seconds > 0)) continue;
     if (eventPrecision(event) !== "day") {
       continue;
     }
@@ -239,6 +241,7 @@ export function computeOnThisDay(
     .filter(
       (event) =>
         CONSUMPTION_KINDS.has(event.source_kind) &&
+        !isShortform(event) &&
         eventPrecision(event) === "day"
     )
     .map((event) => ({

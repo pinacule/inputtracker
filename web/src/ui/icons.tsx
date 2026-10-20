@@ -372,6 +372,7 @@ export function CategoryIcon({
     case "audiobook":
       return <AudiobookIcon size={size} class={className} />;
     case "youtube":
+    case "shortform":
       return <YoutubeIcon size={size} class={className} />;
     case "podcast":
       return <PodcastIcon size={size} class={className} />;
