@@ -156,3 +156,10 @@ export function formatCleanDayHeading(
   }
   return `${weekday} ${day} ${monthName} ${year}`;
 }
+
+/** "2026-09" → "August": the month before the reviewed one, for "+12% vs August". */
+export function previousMonthName(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return "previous month";
+  return new Date(Date.UTC(y, m - 2, 1)).toLocaleString("en-GB", { month: "long", timeZone: "UTC" });
+}

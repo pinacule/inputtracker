@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
+import { previousMonthName } from "../lib/format-date";
 import {
   getMonthReview,
   getYearReviewV2,
@@ -167,6 +168,7 @@ function WorkShowcaseGrid({
     </div>
   );
 }
+
 
 export function Review({
   initialView = "month",
@@ -546,8 +548,8 @@ export function Review({
                             filteredMonth.previous_month_minutes
                           )}
                         </strong>{" "}
-                        vs previous month (
-                        {formatMinutes(filteredMonth.total_minutes)})
+                        vs {previousMonthName(filteredMonth.month)} (
+                        {formatMinutes(filteredMonth.previous_month_minutes)})
                       </>
                     }
                   />
