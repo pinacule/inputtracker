@@ -1313,8 +1313,7 @@ export function saveArchiveEntry(
   return saveTx();
 }
 
-/** Read the authoritative active entry for editing; list summaries are deliberately lossy. */
-export function getArchiveEntry(db: Database, entryIdRaw: string): ArchiveRequest {
+function latestArchiveEntryRow(db: Database, entryIdRaw: string): { entryId: string; raw: Record<string, unknown> | null } {
   if (!UUID_RE.test(entryIdRaw)) {
     throw new ArchiveValidationError("Invalid entry_id: expected a UUID");
   }
@@ -1324,7 +1323,40 @@ export function getArchiveEntry(db: Database, entryIdRaw: string): ArchiveReques
      AND source_id LIKE ? ORDER BY id DESC LIMIT 1;`
   ).get(`archive:${entryId}:%`);
   if (!row) throw new ArchiveNotFoundError(entryId);
-  const raw = parseJsonObject(row.raw);
+  return { entryId, raw: parseJsonObject(row.raw) };
+}
+
+/**
+ * Every archive entry's validated work snapshot, as getArchiveEntry(...).work would return it,
+ * from one read (entry ids lowercase). Validation runs on first use, so a bad entry throws only
+ * when it is asked for, as getArchiveEntry would.
+ */
+export function readArchiveEntryWorks(db: Database): (entryId: string) => ArchiveRequest["work"] {
+  const latest = new Map<string, unknown>();
+  const rows = db.query<{ source_id: string; raw: string | null }, []>(
+    `SELECT source_id, raw FROM events_latest WHERE source = 'manual' AND source_kind = 'archive'
+     ORDER BY id DESC;`
+  ).all();
+  for (const row of rows) {
+    const entryId = row.source_id.split(":")[1]?.toLowerCase();
+    if (entryId && !latest.has(entryId)) latest.set(entryId, parseJsonObject(row.raw)?.["work"]);
+  }
+  const validated = new Map<string, ArchiveRequest["work"]>();
+  return (entryIdRaw) => {
+    if (!UUID_RE.test(entryIdRaw)) throw new ArchiveValidationError("Invalid entry_id: expected a UUID");
+    const entryId = entryIdRaw.toLowerCase();
+    const known = validated.get(entryId);
+    if (known) return known;
+    if (!latest.has(entryId)) throw new ArchiveNotFoundError(entryId);
+    const work = validateWork(latest.get(entryId));
+    validated.set(entryId, work);
+    return work;
+  };
+}
+
+/** Read the authoritative active entry for editing; list summaries are deliberately lossy. */
+export function getArchiveEntry(db: Database, entryIdRaw: string): ArchiveRequest {
+  const { entryId, raw } = latestArchiveEntryRow(db, entryIdRaw);
   const work = validateWork(raw?.["work"]);
   const status = validateArchiveStatus(raw?.["status"]);
   // Ratings are bound to the work since the work-identity change; fall back to the title.

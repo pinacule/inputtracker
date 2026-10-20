@@ -18,6 +18,7 @@ import {
   isValidDateStr,
   resolveHomeSelection,
 } from "../lib/home";
+import { completeHistoryStart } from "../lib/data-completeness";
 import { buildRollingGraphModel, clampWindowEnd, rollingWindowDates, shiftWindowEnd } from "../lib/home-norm";
 import {
   fetchHomePageBundle,
@@ -286,7 +287,7 @@ export function Calendar({
         windowEnd,
         todayStr,
         bundle?.normSeries.points ?? [],
-        bundle?.normSeries.history_start ?? null
+        completeHistoryStart(bundle?.normSeries.history_start ?? null)
       ),
     [filteredDays, selectedDate, windowEnd, todayStr, bundle?.normSeries]
   );
@@ -396,7 +397,7 @@ export function Calendar({
         <div class="home-workspace" aria-busy={loading}>
           <DayDetailPanel
             model={dayDetailModel}
-            usualMinutes={weekModel.norms.get(selectedDate) ?? 0}
+            usualMinutes={weekModel.hasNorms ? weekModel.norms.get(selectedDate) ?? 0 : null}
             singleCategory={singleSelectedCategory}
             onSelectDate={handleSelectDate}
             todayStr={todayStr}

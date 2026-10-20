@@ -78,6 +78,8 @@ export interface RollingGraphModel extends WeekGraphModel {
   readonly windowSentence: string;
   readonly norms: ReadonlyMap<string, number>;
   readonly normRatios: ReadonlyMap<string, number>;
+  /** False while there is no complete history to compare against: hide every "usual". */
+  readonly hasNorms: boolean;
 }
 
 export function buildRollingGraphModel(
@@ -111,7 +113,7 @@ export function buildRollingGraphModel(
     heading: isCurrent ? "Last 7 days" : formatWeekRangeHeading(dates, today).heading,
     isCurrentWeek: isCurrent, todayMinutes: dayMap.get(today)?.minutes ?? 0, weekMinutes,
     activeDays: days.filter((d) => d.totalMinutes > 0 || d.totalCount > 0).length,
-    maxDayMinutes, days, norms,
+    maxDayMinutes, days, norms, hasNorms: historyStart !== null,
     normRatios: new Map([...norms].map(([date, norm]) => [date, norm / ceiling])),
     daySentence: dayNormSentence(comparisonDay, today, dayMap.get(comparisonDay)?.minutes ?? 0,
       usualMinutes(comparisonDay, totals, historyStart)),

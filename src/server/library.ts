@@ -48,7 +48,7 @@ import {
 } from "./aggregate.ts";
 import { getWorkAnnotations, saveAnnotation } from "./annotations.ts";
 import { resolveWorkKey } from "../core/work-identity.ts";
-import { getArchiveEntry, saveArchiveEntry } from "./archive.ts";
+import { getArchiveEntry, readArchiveEntryWorks, saveArchiveEntry } from "./archive.ts";
 import {
   cleanMusicArtist,
   cachedItunesCoverId,
@@ -90,7 +90,9 @@ import { tenthsToRating } from "./ratings.ts";
 import { normalizeForSearch } from "./search.ts";
 import {
   getYoutubeVideoWorkDetail,
+  readYoutubeWorkLookups,
   resolveYoutubeLibraryWorkFields,
+  type YoutubeWorkLookups,
 } from "./youtube-routes.ts";
 import { getFavoriteVideoIds } from "../sources/youtube/takeout.ts";
 import { rankLibraryWorks, workPresentation } from "./work-presentation.ts";
@@ -285,6 +287,8 @@ export function buildAllLibraryWorks(
 
   const components = groupEventsIntoWorkComponents(events, db);
   const youtubeEnrichmentMap = readYoutubeEnrichmentByVideoId(db);
+  let youtubeLookups: YoutubeWorkLookups | null = null;
+  let archiveEntryWork: ReturnType<typeof readArchiveEntryWorks> | null = null;
   const allWorks: InternalLibraryWork[] = [];
 
   for (const comp of components) {
@@ -327,7 +331,7 @@ export function buildAllLibraryWorks(
         const workSnap = parseJsonObject(raw?.["work"]);
         if (workSnap) {
           if (typeof raw?.["entry_id"] === "string") {
-            workSnapshot = getArchiveEntry(db, raw["entry_id"]).work;
+            workSnapshot = (archiveEntryWork ??= readArchiveEntryWorks(db))(raw["entry_id"]);
           }
           if (
             typeof workSnap["title"] === "string" &&
@@ -751,7 +755,8 @@ export function buildAllLibraryWorks(
 
     const ytFields =
       effectiveCategory === "youtube"
-        ? resolveYoutubeLibraryWorkFields(db, workEvents, effectiveTitle, key)
+        ? resolveYoutubeLibraryWorkFields(db, workEvents, effectiveTitle, key,
+            youtubeLookups ??= readYoutubeWorkLookups(db, youtubeEnrichmentMap))
         : { channel: null, topic: override?.topic ?? null };
 
     // Resolve `creator`: author (books/audiobooks), artist (music), channel (YouTube), studio/creator, else null.

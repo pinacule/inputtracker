@@ -32,7 +32,8 @@ import { NormComparison } from "./NormComparison";
 
 export interface DayDetailPanelProps {
   readonly model: HomeDayDetailModel;
-  readonly usualMinutes: number;
+  /** The day's usual time, or null while history is incomplete (no comparison shown). */
+  readonly usualMinutes: number | null;
   readonly weekGraph?: ComponentChildren;
   readonly singleCategory?: Category;
   readonly onSelectDate: (date: string) => void;
@@ -256,7 +257,9 @@ export function DayDetailPanel({
       <div key={model.date} class="home-day-hero" aria-live="polite" aria-atomic="true">
         <HomeTimeDisplay minutes={model.totalMinutes} class="home-time--hero" />
         <span class="home-kicker">Time on the record</span>
-        <NormComparison actual={model.totalMinutes} norm={usualMinutes} label={model.heading} />
+        {usualMinutes !== null && (
+          <NormComparison actual={model.totalMinutes} norm={usualMinutes} label={model.heading} />
+        )}
       </div>
       </div>
       {weekGraph}

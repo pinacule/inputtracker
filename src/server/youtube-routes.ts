@@ -408,6 +408,20 @@ function mostCommonTopic(
   return sorted[0]![0];
 }
 
+/** Whole-table lookups for [resolveYoutubeLibraryWorkFields]; read once per library build, not per work. */
+export interface YoutubeWorkLookups {
+  enrichmentMap: ReturnType<typeof readYoutubeEnrichmentByVideoId>;
+  channelTopics: ReturnType<typeof getChannelTopicsMap>;
+  workTopicOverrides: ReturnType<typeof readWorkTopicOverrides>;
+}
+
+export function readYoutubeWorkLookups(
+  db: Database,
+  enrichmentMap: ReturnType<typeof readYoutubeEnrichmentByVideoId> = readYoutubeEnrichmentByVideoId(db)
+): YoutubeWorkLookups {
+  return { enrichmentMap, channelTopics: getChannelTopicsMap(db), workTopicOverrides: readWorkTopicOverrides(db) };
+}
+
 /**
  * Compute `LibraryWork.channel` and `LibraryWork.topic` for a YouTube work in
  * `src/server/library.ts`.
@@ -416,11 +430,10 @@ export function resolveYoutubeLibraryWorkFields(
   db: Database,
   workEvents: readonly ConsumptionEvent[],
   canonicalTitle: string,
-  workKey: string
+  workKey: string,
+  lookups: YoutubeWorkLookups = readYoutubeWorkLookups(db)
 ): { channel: string | null; topic: string | null } {
-  const enrichmentMap = readYoutubeEnrichmentByVideoId(db);
-  const channelTopics = getChannelTopicsMap(db);
-  const workTopicOverrides = readWorkTopicOverrides(db);
+  const { enrichmentMap, channelTopics, workTopicOverrides } = lookups;
 
   let channel: string | null = null;
   for (let i = workEvents.length - 1; i >= 0; i--) {

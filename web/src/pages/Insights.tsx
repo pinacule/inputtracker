@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
+import { rangeIsComplete } from "../lib/data-completeness";
 import { MostPlayed } from "../ui/MostPlayed";
 import {
   getGoals,
@@ -751,21 +752,31 @@ export function Insights({
         </Card>
 
         <Card padding="md">
-          <Stat
-            label={`Average per ${resolvedRange.bucket}`}
-            value={formatMinutes(avgPerBucket)}
-            category={singleCategory}
-            sparkline={
-              <Sparkline
-                values={bucketTotals}
-                category={singleCategory}
-                label={`Average per ${resolvedRange.bucket}`}
-              />
-            }
-            sublabel={`Across ${points.length || 1} ${resolvedRange.bucket}${
-              points.length === 1 ? "" : "s"
-            }`}
-          />
+          {rangeIsComplete(resolvedRange.from) ? (
+            <Stat
+              label={`Average per ${resolvedRange.bucket}`}
+              value={formatMinutes(avgPerBucket)}
+              category={singleCategory}
+              sparkline={
+                <Sparkline
+                  values={bucketTotals}
+                  category={singleCategory}
+                  label={`Average per ${resolvedRange.bucket}`}
+                />
+              }
+              sublabel={`Across ${points.length || 1} ${resolvedRange.bucket}${
+                points.length === 1 ? "" : "s"
+              }`}
+            />
+          ) : (
+            // History is still incomplete: a count, not an average.
+            <Stat
+              label={`Active ${resolvedRange.bucket}s`}
+              value={`${bucketTotals.filter((m) => m > 0).length} of ${points.length}`}
+              category={singleCategory}
+              sublabel="No averages until the history is complete"
+            />
+          )}
         </Card>
 
         <Card padding="md">

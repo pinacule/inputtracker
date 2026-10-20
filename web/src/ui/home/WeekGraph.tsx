@@ -50,7 +50,7 @@ export function WeekGraph({
 
       <div class="home-week-summary">
         <HomeTimeDisplay minutes={model.weekMinutes} class="home-time--week" />
-        <span class="home-week-key"><span aria-hidden="true" />Usual</span>
+        {model.hasNorms && <span class="home-week-key"><span aria-hidden="true" />Usual</span>}
       </div>
 
       {/* 7-Day Interactive Stacked Bar Columns */}
@@ -85,7 +85,7 @@ export function WeekGraph({
               class={classes}
               aria-pressed={day.isSelected}
               aria-current={day.isToday ? "date" : undefined}
-              aria-label={`${ariaSummary}; usual ${formatMinutes(model.norms.get(day.date) ?? 0)}`}
+              aria-label={model.hasNorms ? `${ariaSummary}; usual ${formatMinutes(model.norms.get(day.date) ?? 0)}` : ariaSummary}
               onClick={() => onSelectDate(day.date)}
             >
               <span
@@ -121,7 +121,9 @@ export function WeekGraph({
                 ) : (
                   <span class="home-week-bar-Baseline" />
                 )}
-                <span class="home-week-norm-marker" style={{ bottom: `${(model.normRatios.get(day.date) ?? 0) * 100}%` }} />
+                {model.hasNorms && (
+                  <span class="home-week-norm-marker" style={{ bottom: `${(model.normRatios.get(day.date) ?? 0) * 100}%` }} />
+                )}
               </span>
 
               <span class="home-week-day-footer" aria-hidden="true">
@@ -141,7 +143,7 @@ export function WeekGraph({
         })}
       </div>
       <CategoryLegend entries={sumLegend(model.days.map((d) => d.segments))} label={`${model.heading} by category`} />
-      <NormComparison actual={model.weekMinutes} norm={usualTotal} label={model.heading} />
+      {model.hasNorms && <NormComparison actual={model.weekMinutes} norm={usualTotal} label={model.heading} />}
     </section>
   );
 }
