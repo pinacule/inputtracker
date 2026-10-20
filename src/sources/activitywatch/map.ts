@@ -13,6 +13,7 @@
 
 import type { NewEvent } from "../../core/events.ts";
 import { localParts } from "../../core/time.ts";
+import { intervalDayRecords, type TimeInterval } from "../../core/shortform.ts";
 import type { AwRawEvent } from "./types.ts";
 
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
@@ -21,6 +22,7 @@ export interface MapBucketOptions {
   bucketId: string;
   device: string;
   includeMusic?: boolean;
+  shortformTz?: string;
   /** Timezone for per-video per-local-day merging when merging is enabled. */
   tz?: string;
   /** Minimum watched minutes per video per local day (0 disables filtering). */
@@ -167,6 +169,7 @@ export function mapBucketEvents(
   );
 
   const plays: RawPlay[] = [];
+  const shorts: TimeInterval[] = [];
   let currentPlay: RawPlay | null = null;
   let previousEventEndMs = 0;
 
@@ -178,6 +181,17 @@ export function mapBucketEvents(
     const videoId = extractVideoId(ev.data?.url, options.includeMusic);
     if (!videoId) {
       // Non-video events in between don't end the play
+      continue;
+    }
+
+    if (/\/shorts\//.test(new URL(ev.data!.url!).pathname)) {
+      if (currentPlay) { plays.push(currentPlay); currentPlay = null; }
+      // Foreground Shorts time is useful even when muted; no per-item minimum.
+      const start = Date.parse(normalizeTimestamp(ev.timestamp));
+      const duration = ev.duration;
+      if (typeof duration === "number" && Number.isFinite(duration) && duration > 0) {
+        shorts.push([start, start + duration * 1000]);
+      }
       continue;
     }
 
@@ -212,7 +226,7 @@ export function mapBucketEvents(
     plays.push(currentPlay);
   }
 
-  const result: NewEvent[] = [];
+  const result: NewEvent[] = intervalDayRecords(shorts, "aw", options.shortformTz ?? options.tz ?? "Europe/Bratislava");
 
   for (const play of plays) {
     let audibleDuration = 0;
@@ -316,7 +330,7 @@ export function mergePlaysByVideoDay(
   const groups = new Map<string, NewEvent[]>();
 
   for (const play of plays) {
-    if (play.media_type === "music") {
+    if (play.media_type === "music" || play.source_kind === "shortform_day") {
       kept.push(play);
       continue;
     }

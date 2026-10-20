@@ -380,6 +380,14 @@
 .ui-tab-dot--music {
   background-color: var(--cat-music-solid);
 }
+.ui-tab-dot--shortform { background-color: var(--cat-shortform-solid); }
+.ui-stat--shortform .ui-stat-value { color: var(--cat-shortform-fg); }
+.ui-progress--shortform .ui-progress-fill { background-color: var(--cat-shortform-solid); }
+.ui-cover--cat-shortform .ui-cover-fallback { background: linear-gradient(145deg, var(--cat-shortform-tile-start), var(--cat-shortform-tile-end)); }
+.ui-badge--shortform { background-color: var(--cat-shortform-bg); color: var(--cat-shortform-fg); border-color: var(--cat-shortform-border); }
+.most-played-controls { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.most-played-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-4); }
+.most-played-grid .yt-insights-bar-top { flex-wrap: wrap; gap: var(--space-1); }
 .ui-tab-dot--other {
   background-color: var(--cat-other-solid);
 }

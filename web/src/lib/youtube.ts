@@ -65,7 +65,7 @@ export interface YoutubeVideoGroup {
 
 /**
  * Sorts a list of `LibraryWork`s according to `LibrarySortV2`
- * (`"recent" | "time" | "title" | "category" | "creator"`).
+ * (`"plays" | "recent" | "time" | "title" | "category" | "creator"`).
  */
 export function sortLibraryWorks(
   works: readonly LibraryWork[],
@@ -73,6 +73,8 @@ export function sortLibraryWorks(
 ): LibraryWork[] {
   const copy = [...works];
   switch (sort) {
+    case "plays":
+      return copy.sort((a, b) => b.units - a.units || b.total_minutes - a.total_minutes || a.title.localeCompare(b.title) || a.key.localeCompare(b.key));
     case "time":
       return copy.sort((a, b) => {
         if (b.total_minutes !== a.total_minutes) {
@@ -132,7 +134,7 @@ export function sortLibraryWorks(
 }
 
 /**
- * Sorts `YoutubeVideo[]` by `"recent"`, `"time"` (watch time), or `"topic"`.
+ * Sorts `YoutubeVideo[]` by `"plays"`, `"recent"`, `"time"` (watch time), or `"topic"`.
  */
 export function sortYoutubeVideos(
   videos: readonly YoutubeVideo[],
@@ -140,6 +142,8 @@ export function sortYoutubeVideos(
 ): YoutubeVideo[] {
   const copy = [...videos];
   switch (sort) {
+    case "plays":
+      return copy.sort((a, b) => b.plays - a.plays || b.watched_minutes - a.watched_minutes || a.title.localeCompare(b.title) || a.key.localeCompare(b.key));
     case "time":
       return copy.sort((a, b) => {
         if (b.watched_minutes !== a.watched_minutes) {

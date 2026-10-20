@@ -1070,6 +1070,15 @@ export function listArchive(
 
 export type LibrarySort = LibrarySortV2;
 
+export type { TopKind, TopBy, TopEntry, TopResult } from "../../src/core/contract";
+export function getTop(params: {
+  kind: import("../../src/core/contract").TopKind;
+  by?: import("../../src/core/contract").TopBy;
+  from?: string; to?: string; limit?: number;
+}): Promise<import("../../src/core/contract").TopResult> {
+  return getJson(withQuery("/api/top", { ...params, limit: params.limit?.toString() }));
+}
+
 export interface LibraryParams {
   category?: CategoryListParam;
   exclude?: CategoryListParam;
@@ -1216,7 +1225,7 @@ export function getYoutubeOverview(
   );
 }
 
-export type YoutubeVideoSort = "recent" | "time" | "topic";
+export type YoutubeVideoSort = "recent" | "plays" | "time" | "topic";
 
 export interface YoutubeVideosParams {
   channel?: string;
@@ -1299,5 +1308,3 @@ export function importAchriom(
   });
   return postForm<AchriomImportResult>(path, form);
 }
-
-

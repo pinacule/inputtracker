@@ -72,7 +72,7 @@ import { enrichYoutubeVideos } from "../sources/youtube/enrich.ts";
 import { handleEventBatch } from "./ingest-events.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
 import { getYoutubeThumb, isValidYoutubeVideoId } from "./thumbs.ts";
-import { handleYoutubePlays } from "./ingest.ts";
+import { handleShortform, handleYoutubePlays } from "./ingest.ts";
 import { registerAchriomRoutes } from "./achriom-routes.ts";
 import { registerLookupRoutes } from "./lookup-routes.ts";
 import {
@@ -1132,6 +1132,12 @@ export function createApp(deps: AppDeps): Hono {
       return c.json({ error: err }, 400);
     }
     return handleYoutubePlays(c, { db, config, nowMs: deps.nowMs });
+  });
+
+  app.post("/api/ingest/shortform", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) return c.json({ error: err }, 400);
+    return handleShortform(c, { db, config, nowMs: deps.nowMs });
   });
 
   // GET /api/sync/status — latest run per source (read-only)

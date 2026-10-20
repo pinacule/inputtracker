@@ -766,7 +766,7 @@ export function parseWorkEdit(input: unknown): ParsedWorkEdit {
     hasCategory = true;
     if (obj.category === null) {
       category = null;
-    } else if (isCategory(obj.category)) {
+    } else if (isCategory(obj.category) && obj.category !== "shortform") {
       category = obj.category;
     } else {
       throw new WorkOverrideValidationError(

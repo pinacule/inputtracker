@@ -29,7 +29,7 @@ export function parseEventBatch(input: unknown, nowMs = Date.now()): NewEvent[] 
     text("title", 500);
     text("parent_title", 200);
     text("device", 32);
-    if (value.media_type !== "video" && value.media_type !== "music" && !(value.source_kind === "shortform_day" && value.media_type === "other")) fail("media_type");
+    if (value.media_type !== "video" && value.media_type !== "music" && !(value.source_kind === "shortform_day" && (value.media_type === "shortform" || value.media_type === "other"))) fail("media_type");
     for (const field of ["season", "episode"]) {
       if (value[field] !== undefined && value[field] !== null) fail(field);
     }

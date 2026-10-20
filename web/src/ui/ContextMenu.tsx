@@ -636,7 +636,7 @@ export function ContextMenuHost({
       {subPanel === "category" && (
         <div class="ui-context-menu-subpanel">
           <div class="ui-context-menu-cat-grid">
-            {CATEGORIES.map((cat) => (
+            {CATEGORIES.filter((cat) => cat !== "shortform").map((cat) => (
               <button
                 key={cat}
                 type="button"
