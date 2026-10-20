@@ -6,6 +6,7 @@ import type { Config, MetadataConfig } from "../../core/config.ts";
 import type { CommunityScore } from "../../core/contract.ts";
 import type { Category, LookupHit, MetaProvider, SeasonInfo, WorkDetails } from "../../core/contract.ts";
 import type { Limiter } from "../openlibrary.ts";
+import type { ArtSource } from "./art-types.ts";
 
 export type { Category, LookupHit, MetaProvider, SeasonInfo, WorkDetails };
 
@@ -38,6 +39,13 @@ export function metaCoverUrl(provider: MetaProvider, providerId: string): string
 
 export function metaBannerUrl(provider: MetaProvider, providerId: string): string {
   return `/api/meta-banner/${provider}/${providerId}`;
+}
+
+/** TMDB movie/TV IDs share a numeric namespace; artwork must retain the kind. */
+export function metaArtUrl(provider: MetaProvider, id: string, category?: Category): string {
+  const artId = provider === "tmdb" && /^\d+$/.test(id) && (category === "film" || category === "series")
+    ? `${category === "series" ? "tv" : "movie"}-${id}` : id;
+  return `/api/meta-art/${provider}/${artId}`;
 }
 
 /** Missing, malformed and zero-vote placeholder scores are not public ratings. */
@@ -82,6 +90,7 @@ export interface WorkWithCover {
   work: WorkDetails;
   remoteCoverUrl?: string | null;
   remoteBannerUrl?: string | null;
+  remoteArt?: ArtSource[];
 }
 
 export interface ProviderContext {

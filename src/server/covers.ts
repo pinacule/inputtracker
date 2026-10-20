@@ -97,6 +97,15 @@ export function coverCacheDir(config: Config): string {
   return join(dirname(config.storage.db_path), "covers");
 }
 
+/** Reuse a confident title-cover match for display-only music/audiobook art, without searching. */
+export function cachedItunesCoverId(config: Config, itemId: string): string | null {
+  if (!isValidCoverId(itemId)) return null;
+  try {
+    const source = readFileSync(cachePaths(config, itemId).srcPath, "utf8").trim();
+    return /^itunes:(\d{1,64})$/.exec(source)?.[1] ?? null;
+  } catch { return null; }
+}
+
 /**
  * Normalize an image content-type to a bare `image/<subtype>` media type.
  * Parameters (`; charset=…`) are dropped and anything that is not a well-formed

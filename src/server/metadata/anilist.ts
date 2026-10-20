@@ -11,7 +11,8 @@
  * - Anime with format `MOVIE` have `runtime_minutes` and `seasons: []`.
  */
 
-import { writeCoverUrlCache } from "./cache.ts";
+import { readBannerSource, readCoverUrlCache, writeCoverUrlCache } from "./cache.ts";
+import { artSource, selectArt, type ArtSource } from "./art-types.ts";
 import {
   fetchProviderJson,
   readValidatedImageResponse,
@@ -922,7 +923,27 @@ export async function getAnilistWork(
     },
     remoteCoverUrl,
     remoteBannerUrl,
+    remoteArt: selectArt([
+      artSource(remoteBannerUrl, "banner"),
+      artSource(initialMedia.coverImage?.extraLarge ?? rootMedia.coverImage?.extraLarge, "cover"),
+    ]),
   };
+}
+
+/** Reuse existing lookup sources first: AniList's public GraphQL host rejects GET. */
+export async function getAnilistArt(id: string, ctx: ProviderContext): Promise<ArtSource[]> {
+  if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id))) return [];
+  const banner = readBannerSource(ctx.config, "anilist", id, ctx.now());
+  const cover = readCoverUrlCache(ctx.config, "anilist", id);
+  if (banner || cover) return selectArt([artSource(banner?.url, "banner"), artSource(cover, "cover")]);
+  // Custom GET-capable endpoints may support GraphQL queries; never fall back to a POST.
+  if (new URL(ctx.metaConfig.anilist_url).hostname === "graphql.anilist.co") return [];
+  const url = new URL(ctx.metaConfig.anilist_url);
+  url.searchParams.set("query", "query($id:Int!){Media(id:$id,type:ANIME){bannerImage coverImage{extraLarge}}}");
+  url.searchParams.set("variables", JSON.stringify({ id: Number(id) }));
+  const { data } = await fetchProviderJson<{ data?: { Media?: AniListMediaNode | null } }>(ctx, "anilist", url.toString());
+  const media = data?.data?.Media;
+  return selectArt([artSource(media?.bannerImage, "banner"), artSource(media?.coverImage?.extraLarge, "cover")]);
 }
 
 export async function fetchAnilistCover(

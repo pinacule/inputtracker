@@ -116,6 +116,18 @@ Routes are hash-based and parsed by `parseAppRoute(hash)`:
 
 ---
 
+## Work artwork gallery (W18)
+
+`WorkArt.tsx` / `work-art.css` add a full-width Art section immediately after the hero, before
+seasons and the existing Rating/History row. A contained large image preserves the full poster or
+backdrop without cropping; the fixed 16:9 stage (4:3 on phones) and thumbnail sizes reserve space.
+Wide imagery is featured first, otherwise the largest known image. Images load lazily through
+local `/api/meta-art` URLs only; failed images are removed and empty/unavailable art has no box.
+Native thumbnail buttons expose selection, and the featured button opens a full-screen native
+modal dialog: the shell becomes inert, Tab/Shift-Tab cycle controls, Esc closes, arrows navigate,
+and closing restores focus. All colours/geometry use theme tokens; reduced motion removes the
+selection transition. CSS targets 375px and 1440px without changing home/shell styles.
+
 ## Themes
 
 `theme.ts` owns IDs, labels, validation, persistence and category colours. Each new skin lives in `web/src/styles/themes/<id>.css`, imported by `index.css`. Preview scopes (`.theme-preview[data-theme]`) reset to the default tokens then use the same overrides as `:root[data-theme]`; there is no second preview design.

@@ -3,7 +3,7 @@ import type { Config } from "../core/config.ts";
 import type { CommunityScore, LibraryWork, LibraryWorkDetail, MetaProvider, WorkDetails, WorkRank } from "../core/contract.ts";
 import { parseExternalIds, parseJsonObject, type ConsumptionEvent } from "./aggregate.ts";
 import { readWorkCache } from "./metadata/cache.ts";
-import { cleanDescription, isMetaProvider, isValidProviderId, metaBannerUrl, normalizeCommunityScore, parseYear } from "./metadata/types.ts";
+import { cleanDescription, isMetaProvider, isValidProviderId, metaArtUrl, metaBannerUrl, normalizeCommunityScore, parseYear } from "./metadata/types.ts";
 
 export function cleanNames(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -20,12 +20,12 @@ export function readCommunityScore(value: unknown): CommunityScore | null {
   return normalizeCommunityScore(obj["source"] as CommunityScore["source"], obj["value_10"], 10, obj["votes"]);
 }
 
-type Presentation = Pick<LibraryWorkDetail, "description" | "genres" | "creators" | "narrators" | "year" | "banner_url" | "community_score">;
+type Presentation = Pick<LibraryWorkDetail, "description" | "genres" | "creators" | "narrators" | "year" | "banner_url" | "community_score" | "art_url">;
 type MetaLink = { provider: MetaProvider; provider_id: string };
 
 export function workPresentation(
   events: readonly ConsumptionEvent[],
-  linked: { meta: MetaLink | null; meta_work: WorkDetails | null } | null,
+  linked: { meta: MetaLink | null; meta_work: WorkDetails | null; meta_unlinked?: boolean } | null,
   config?: Config,
   category?: LibraryWork["category"]
 ): Presentation {
@@ -70,8 +70,11 @@ export function workPresentation(
   const metaCreators = cleanNames(meta?.["creators"]);
   const metaGenres = cleanNames(meta?.["genres"]);
   const target = targets[0];
+  // Reclassifying a film must not turn its numeric TMDB ID into a different TV work.
+  const artCategory = meta?.["category"] === "film" || meta?.["category"] === "series" ? meta["category"] : category;
   const banner = meta?.["banner_url"] === undefined ? fallback?.["banner_url"] : meta["banner_url"];
   return {
+    art_url: target && !linked?.meta_unlinked ? metaArtUrl(target.provider, target.provider_id, artCategory) : null,
     description: cleanDescription(meta?.["description"]) ?? cleanDescription(fallback?.["description"]) ?? absDescription,
     genres: metaGenres.length ? metaGenres : cleanNames(fallback?.["genres"]).length ? cleanNames(fallback?.["genres"]) : absGenres,
     creators: metaCreators.length ? metaCreators : cleanNames(fallback?.["creators"]).length ? cleanNames(fallback?.["creators"]) : absAuthors,

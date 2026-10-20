@@ -19,6 +19,7 @@ import {
 import { formatLocalDay } from "../lib/format-date";
 import { canRateCategory } from "../lib/rating";
 import { WorkBanner, WorkContext } from "../ui/WorkContext";
+import { WorkArt } from "../ui/WorkArt";
 import { sourceLabel } from "../lib/sources";
 import { formatMinutes } from "../lib/stats";
 import {
@@ -560,6 +561,8 @@ export function WorkPage({
               </div>
             </div>
           </Card>
+
+          <WorkArt key={`${effectiveWorkDetail.key}:${effectiveWorkDetail.art_url}`} url={effectiveWorkDetail.art_url} title={effectiveWorkDetail.title} />
 
           {/* Compact Seasons Grid (for Series & Anime) */}
           {effectiveWorkDetail.seasons.length > 0 && (

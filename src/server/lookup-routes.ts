@@ -9,6 +9,7 @@ import type { Database } from "bun:sqlite";
 import type { Hono } from "hono";
 import { isCategory, type Category } from "../core/category.ts";
 import { type Config, redactString } from "../core/config.ts";
+import { getMetaArtImage, getMetaArtList } from "./metadata/art.ts";
 import {
   getMetaCover,
   getMetaBanner,
@@ -56,6 +57,26 @@ function toMetadataDeps(deps: LookupRouteDeps): MetadataDeps {
 }
 
 export function registerLookupRoutes(app: Hono, deps: LookupRouteDeps): void {
+  app.get("/api/meta-art/:provider/:id/:n?", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) return c.json({ error: err }, 400);
+    const provider = c.req.param("provider");
+    const id = c.req.param("id");
+    const n = c.req.param("n");
+    if (!isMetaProvider(provider)) return c.json({ error: "Invalid metadata provider" }, 400);
+    if (!isValidProviderId(id)) return c.json({ error: "Invalid provider id" }, 400);
+    if (n === undefined) return c.json(await getMetaArtList(provider, id, toMetadataDeps(deps)), 200, { "Cache-Control": "no-cache" });
+    if (!/^[0-7]$/.test(n)) return c.json({ error: "Invalid artwork index (0–7)" }, 400);
+    const image = await getMetaArtImage(provider, id, Number(n), toMetadataDeps(deps));
+    if (!image) return c.json({ error: "Artwork not available" }, 404);
+    return new Response(image.bytes, { headers: {
+      "Content-Type": image.contentType,
+      // The source list can reorder at its TTL; the disk cache is permanent, not index URLs.
+      "Cache-Control": "public, max-age=0, must-revalidate",
+      "X-Content-Type-Options": "nosniff",
+    } });
+  });
+  app.all("/api/meta-art/*", (c) => c.json({ error: "Invalid meta-art path" }, 400));
   app.get("/api/meta-banner/:provider/:id", async (c) => {
     const err = validateQueryParams(c.req.url, []);
     if (err) return c.json({ error: err }, 400);
