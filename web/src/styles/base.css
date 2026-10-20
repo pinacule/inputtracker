@@ -150,11 +150,13 @@ button:disabled {
 /* --- Page Structure Primitives --- */
 .page-container {
   min-width: 0;
-  box-shadow: var(--content-frame);
+  background-color: var(--page-reading-bg);
+  border: var(--page-reading-border);
+  box-shadow: var(--page-reading-shadow);
   border-radius: var(--content-frame-radius);
-  width: 100%;
+  width: calc(100% - 2 * var(--reading-gutter));
   max-width: var(--content-max-width);
-  margin: 0 auto;
+  margin: var(--reading-gutter) auto;
   padding: var(--space-4) var(--space-4) var(--space-8);
   display: flex;
   flex-direction: column;
@@ -188,13 +190,12 @@ button:disabled {
   gap: var(--space-1);
 }
 
-:root[data-theme="cwm"] .page-header-titles { background-color: var(--bg-surface); }
+.page-header-actions { min-width: 0; max-width: 100%; }
 
 .home-topbar {
   background-image: var(--header-art);
   background-size: 100% 100%;
 }
-:root[data-theme="cwm"] .home-topbar h1 { background-color: var(--bg-surface); }
 
 /* Class-styled headings on existing pages still receive skin typography. */
 :root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) :is(h1, h2, h3, h4) {
@@ -223,21 +224,11 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
-/* Shared navigation skin hooks, kept separate from D1's shell layout. */
-:root:not([data-theme="espresso"]):not([data-theme="midnight"]):not([data-theme="forest"]):not([data-theme="obsidian"]):not([data-theme="plum"]) :is(.sidebar-nav-link, .sidebar-settings-link, .mobile-tab, .more-sheet-link-title) {
+/* Shared navigation typography; Editorial's scoped rules keep its old labels. */
+:is(.sidebar-nav-link, .sidebar-settings-link, .mobile-tab, .more-sheet-link-title) {
   font-family: var(--font-body);
   text-transform: var(--label-case);
   letter-spacing: var(--label-tracking);
-}
-:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) :is(.sidebar-nav-link--active, .sidebar-settings-link--active, .mobile-tab--active) {
-  background-color: var(--nav-active-bg);
-  color: var(--nav-active-color);
-}
-:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) :is(.app-sidebar, .mobile-tabbar, .mobile-topbar) {
-  box-shadow: var(--nav-shadow);
-}
-:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) :is(.sidebar-nav-link, .mobile-tab) {
-  box-shadow: var(--nav-item-shadow);
 }
 :root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) .sidebar-search-input:focus-visible {
   outline: var(--focus-width) var(--focus-style) var(--focus-ring);

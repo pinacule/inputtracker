@@ -283,29 +283,21 @@
   color: var(--text-muted);
 }
 
+.ui-card-header .calendar-today-btn { color: var(--title-control-color, var(--text-primary)); }
+.ui-card-header .ui-icon-btn { color: var(--title-control-color, var(--text-secondary)); }
+.ui-card-header .ui-icon-btn:hover:not(:disabled) {
+  color: var(--title-control-color, var(--text-primary));
+  background-color: var(--title-control-hover-bg, var(--bg-subtle));
+}
+
 .ui-icon {
   stroke-width: var(--icon-stroke);
   stroke-linecap: var(--icon-cap);
   stroke-linejoin: var(--icon-join);
 }
 
-/* Shared title-bar hooks also cover cards with hand-written header markup. */
-:root:is([data-theme="workbench"], [data-theme="cwm"]) :is(.home-section-header, .home-week-header, .home-day-header, .home-card > .home-section-title) {
-  background-color: var(--card-title-bg);
-  padding: var(--card-title-padding);
-  box-shadow: var(--card-title-shadow);
-  color: var(--card-title-color);
-}
-:root:is([data-theme="workbench"], [data-theme="cwm"]) :is(.home-section-header, .home-week-header, .home-day-header) :is(h2, h3, .home-section-title, .ui-icon-btn) {
-  color: var(--card-title-color);
-}
-:root:is([data-theme="workbench"], [data-theme="cwm"]) .home-card > .home-section-title {
-  color: var(--card-title-color);
-}
-:root:is([data-theme="workbench"], [data-theme="cwm"]) .home-day-header .home-day-total {
-  color: var(--card-title-color);
-}
-:root:is([data-theme="workbench"], [data-theme="cwm"]) :is(.ui-card-header, .ui-sheet-header, .home-week-header, .home-day-header) {
+/* Card and dialog title bars may invert their ink. Home uses reading-pane tokens. */
+:root:is([data-theme="workbench"], [data-theme="cwm"]) :is(.ui-card-header, .ui-sheet-header) {
   --focus-ring: var(--card-title-color);
 }
 

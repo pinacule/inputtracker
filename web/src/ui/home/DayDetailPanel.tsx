@@ -224,6 +224,8 @@ export function DayDetailPanel({
       class="home-day-panel"
       aria-label={`Activity for ${model.heading}`}
     >
+      {/* Contents in the Editorial spread; an opaque pane in wallpaper skins. */}
+      <div class="home-day-overview">
       {/* Clean single-line plain words day header */}
       <div class="home-day-header">
         <div class="home-day-heading-group">
@@ -256,8 +258,10 @@ export function DayDetailPanel({
         <span class="home-kicker">Time on the record</span>
         <NormComparison actual={model.totalMinutes} norm={usualMinutes} label={model.heading} />
       </div>
+      </div>
       {weekGraph}
 
+      <div class="home-day-entries">
       {/* Day Category Proportion Bar (when the day has activity) */}
       {model.segments.length > 0 && (
         <div class="home-day-cat-strip">
@@ -533,6 +537,7 @@ export function DayDetailPanel({
           )}
         </ul>
       )}
+      </div>
     </section>
   );
 }

@@ -132,4 +132,79 @@ describe("app skins", () => {
       }
     }
   });
+
+  test("wallpaper skins opt into opaque reading panes and their own navigation", () => {
+    const app = read("web/src/App.tsx");
+    expect(app).toContain('["espresso", "midnight", "forest", "obsidian", "plum"].includes(theme)');
+    for (const id of skinIds) {
+      const props = themeProperties(id);
+      expect(props["--page-reading-bg"]).toBe("var(--bg-surface)");
+      expect(props["--home-panel-bg"]).toBe("var(--bg-surface)");
+      expect(props["--home-group-display"]).toBe("flex");
+      expect(props["--mobile-nav-active-bg"]).toBe("var(--nav-active-bg)");
+      expect(props["--home-number-margin"]).toBe("0px");
+      expect(props["--home-week-value-wrap"]).toBe("normal");
+      const resolve = (value: string): string => value.startsWith("var(")
+        ? resolve(props[value.slice(4, -1)]!) : value;
+      expect(contrastRatio(resolve(props["--nav-active-color"]!), resolve(props["--nav-active-bg"]!)), id).toBeGreaterThanOrEqual(4.5);
+      if (id === "signal") {
+        expect(props["--home-page-bg"]).toBe("var(--bg-surface)");
+        expect(props["--home-panel-border"]).toBe("0px solid transparent");
+        expect(props["--content-frame"]).not.toBe("none");
+      } else {
+        expect(props["--home-panel-border"]).toContain("1px solid");
+      }
+      if (id === "workbench" || id === "cwm") {
+        expect(resolve(props["--title-control-color"]!)).toBe(resolve(props["--card-title-color"]!));
+        expect(contrastRatio(resolve(props["--home-title-label-color"]!), resolve(props["--home-title-bg"]!))).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  test("original skins keep transparent Editorial groups and shared styles have no theme exceptions", () => {
+    for (const id of ["espresso", "midnight", "forest", "obsidian", "plum"]) {
+      const props = themeProperties(id);
+      expect(props["--home-panel-bg"]).toBe("transparent");
+      expect(props["--home-group-display"]).toBe("contents");
+      expect(props["--reading-gutter"]).toBe("0px");
+      expect(props["--home-number-tracking"]).toBe("-0.075em");
+    }
+    for (const file of ["home.css", "shell.css"]) {
+      const css = read(`web/src/styles/${file}`);
+      expect(css).not.toContain("data-theme=");
+      expect(css).not.toMatch(/#[\da-f]{6}\b/i);
+    }
+    const home = read("web/src/styles/home.css");
+    expect(home).toContain("font-family: var(--font-numbers)");
+    expect(home).toContain("prefers-reduced-motion: reduce");
+    const day = read("web/src/ui/home/DayDetailPanel.tsx");
+    expect(day).toContain('class="home-day-overview"');
+    expect(day).toContain('class="home-day-entries"');
+    expect(day).toContain("<CategoryLegend");
+  });
+
+  test("bundled families serve live skins and their previews without scaled fallback headings", () => {
+    const fonts = read("web/src/styles/fonts.css");
+    for (const id of skinIds) expect(fonts).toContain(`.theme-preview[data-theme="${id}"]`);
+    for (const name of ["Instrument Serif", "Inter", "Oswald", "Roboto Condensed", "IBM Plex Mono", "Courier Prime", "Pixelify Sans"]) {
+      expect(fonts).toContain(`font-family: "${name}"`);
+    }
+    for (const id of skinIds) {
+      const css = read(`web/src/styles/themes/${id}.css`);
+      expect(css).not.toMatch(/--font-[\w-]+:\s*"/);
+      expect(css).not.toContain("transform: scale");
+    }
+    expect(tokens).not.toMatch(/--font-[\w-]+:[^;]*"/);
+    expect(read("web/src/styles/shell.css")).toContain(".sidebar-settings-link--active:hover");
+    expect(read("web/src/styles/base.css")).toContain(".page-header-actions { min-width: 0; max-width: 100%; }");
+  });
+
+  test("Espresso retains its previous explicit font cascade", () => {
+    const fonts = read("web/src/styles/fonts.css");
+    const espresso = properties(fonts.split(':root[data-theme="espresso"]')[1]!.split("\n}")[0]!);
+    expect(espresso["--font-serif"]).toStartWith('"Iowan Old Style"');
+    expect(espresso["--font-sans"]).toStartWith('-apple-system');
+    expect(fonts).toContain('--font-serif: "Instrument Serif"');
+    expect(fonts).toContain('--font-sans: "Inter"');
+  });
 });

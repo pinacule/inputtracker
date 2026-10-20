@@ -2,9 +2,6 @@
 :root[data-theme="hermes"],
 .theme-preview[data-theme="hermes"] {
   color-scheme: dark;
-  --font-serif: "Oswald", "Bebas Neue", "Roboto Condensed", "Arial Narrow", Impact,
-    "DejaVu Sans Condensed", "DejaVu Sans", sans-serif;
-  --font-sans: "Roboto Condensed", "Arial Narrow", "DejaVu Sans", sans-serif;
   --font-display: var(--font-serif);
   --font-body: var(--font-sans);
   --font-numbers: var(--font-mono);
@@ -70,14 +67,40 @@
   --wallpaper: repeating-linear-gradient(90deg, transparent 0 119px, #b8c9ff06 119px 120px);
   --wallpaper-size: 120px 120px;
   --header-art: repeating-conic-gradient(from 9deg at 78% 55%, #bfceff25 0deg 0.2deg, transparent 0.2deg 7.5deg);
-}
 
-/* Synthesize the tall condensed silhouette even on machines with only a
-   regular sans fallback, without changing the heading's layout box. */
-:root[data-theme="hermes"] :is(h1, h2, h3, h4),
-.theme-preview[data-theme="hermes"] .theme-preview-heading {
-  transform: scale(0.84, 1.15);
-  transform-origin: left center;
+  --reading-gutter: 12px;
+  --page-reading-bg: var(--bg-surface);
+  --page-reading-border: 1px solid var(--border-default);
+  --home-panel-bg: var(--bg-surface);
+  --home-panel-border: 1px solid var(--border-default);
+  --home-panel-radius: var(--radius-lg);
+  --home-panel-padding: 16px;
+  --home-group-display: flex;
+  --home-group-gap: 20px;
+  --home-column-gap: 24px;
+  --home-topbar-padding: 16px;
+  --home-topbar-padding-wide: 24px;
+  --home-topbar-rule: var(--home-panel-border);
+  --home-contents-rule: var(--home-panel-border);
+  --home-week-padding: 16px;
+  --home-week-padding-wide: 24px;
+  --home-week-rule: var(--home-panel-border);
+  --home-week-rule-wide: var(--home-panel-border);
+  --home-month-padding: 16px;
+  --home-month-padding-wide: 24px;
+  --home-month-rule: var(--home-panel-border);
+  --home-label-font: var(--font-display);
+  --home-label-tracking: var(--label-tracking);
+  --home-number-tracking: -0.04em;
+  --home-number-margin: 0px;
+  --home-week-value-wrap: normal;
+  --shell-brand-size: 1.25rem;
+  --shell-brand-bg: var(--accent-block);
+  --shell-brand-weight: var(--display-weight);
+  --shell-brand-tracking: var(--display-tracking);
+  --mobile-nav-active-bg: var(--nav-active-bg);
+  --mobile-nav-marker: var(--nav-active-color);
+  --mobile-nav-shadow: var(--nav-shadow);
 }
 
 :root[data-theme="hermes"] :is(.ui-btn--primary, .ui-icon-btn--primary) {

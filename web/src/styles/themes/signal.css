@@ -2,8 +2,6 @@
 :root[data-theme="signal"],
 .theme-preview[data-theme="signal"] {
   color-scheme: dark;
-  --font-serif: "Courier Prime", "American Typewriter", "Courier New", "Liberation Mono", serif;
-  --font-sans: "IBM Plex Mono", "DejaVu Sans Mono", "Courier New", ui-monospace, monospace;
   --font-body: var(--font-sans);
   --font-display: var(--font-serif);
   --font-numbers: var(--font-mono);
@@ -67,6 +65,24 @@
   --wallpaper-repeat: no-repeat;
   --texture-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Cpath fill='%23ffffff' filter='url(%23grain)' d='M0 0h180v180H0z'/%3E%3C/svg%3E");
   --texture-opacity: 0.1;
+
+  --reading-gutter: 12px;
+  --page-reading-bg: var(--bg-surface);
+  --home-page-bg: var(--bg-surface);
+  --home-panel-bg: var(--bg-surface);
+  --home-group-display: flex;
+  --home-column-gap: 32px;
+  --home-label-font: var(--font-display);
+  --home-label-tracking: var(--label-tracking);
+  --home-number-tracking: -0.04em;
+  --home-number-margin: 0px;
+  --home-week-value-wrap: normal;
+  --shell-brand-size: 1.125rem;
+  --shell-brand-weight: var(--display-weight);
+  --shell-brand-tracking: 0.04em;
+  --mobile-nav-active-bg: var(--nav-active-bg);
+  --mobile-nav-marker: var(--nav-active-color);
+  --mobile-nav-shadow: var(--nav-shadow);
 }
 
 :root[data-theme="signal"] :is(.page-eyebrow, .ui-stat-label),
