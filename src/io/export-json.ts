@@ -18,7 +18,7 @@
  */
 
 import type { Database } from "bun:sqlite";
-import type { AnnotationRow, EventRow, GoalRow } from "../core/schema.ts";
+import type { AnnotationRow, EventRow, GoalRow, WorkOverrideRow } from "../core/schema.ts";
 
 export const EXPORT_FORMAT = "inputtracker-export";
 export const EXPORT_VERSION = 2;
@@ -57,6 +57,8 @@ export interface ExportEnvelope {
   events: EventRow[];
   goals: GoalRow[];
   annotations: AnnotationRow[];
+  work_overrides: WorkOverrideRow[];
+  work_key_aliases: Array<{ old_key: string; new_key: string; created_at: string }>;
 }
 
 /** Read every event row, oldest first (`ORDER BY id`). */
@@ -90,6 +92,10 @@ export function exportJson(db: Database): string {
     events: selectAllEvents(db),
     goals: selectAllGoals(db),
     annotations: selectAllAnnotations(db),
+    work_overrides: db.query<WorkOverrideRow, []>("SELECT * FROM work_overrides ORDER BY id ASC;").all(),
+    work_key_aliases: db.query<{ old_key: string; new_key: string; created_at: string }, []>(
+      "SELECT old_key, new_key, created_at FROM work_key_aliases ORDER BY id ASC;"
+    ).all(),
   };
   return JSON.stringify(envelope, null, 2);
 }

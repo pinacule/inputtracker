@@ -1,0 +1,10 @@
+[Unit]
+Description=InputTracker PC push (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@APP_DIR@
+PassEnvironment=INPUTTRACKER_CONFIG
+ExecStart=@BUN@ run src/cli/index.ts push %i

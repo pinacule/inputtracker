@@ -45,7 +45,8 @@ import {
   parseJsonObject,
   type ConsumptionEvent,
 } from "./aggregate.ts";
-import { saveAnnotation } from "./annotations.ts";
+import { getWorkAnnotations, saveAnnotation } from "./annotations.ts";
+import { resolveWorkKey } from "../core/work-identity.ts";
 import { saveArchiveEntry } from "./archive.ts";
 import {
   cleanMusicArtist,
@@ -160,7 +161,7 @@ function readAllLatestAnnotations(db: Database): AnnotationRecord[] {
   const rows = db
     .query<AnnotationRecord, []>(
       `SELECT id, source, title, rating, rating_tenths, note, created_at
-       FROM annotations_latest
+        FROM annotations_latest WHERE work_key IS NULL
        ORDER BY id DESC;`
     )
     .all();
@@ -262,6 +263,7 @@ export function buildAllLibraryWorks(
   }
 
   const annotations = readAllLatestAnnotations(db);
+  const workAnnotations = getWorkAnnotations(db);
   const annotationsByNormTitle = new Map<string, AnnotationRecord[]>();
   for (const ann of annotations) {
     const nt = normalizeForSearch(ann.title);
@@ -274,7 +276,7 @@ export function buildAllLibraryWorks(
     list.push(ann);
   }
 
-  const components = groupEventsIntoWorkComponents(events);
+  const components = groupEventsIntoWorkComponents(events, db);
   const youtubeEnrichmentMap = readYoutubeEnrichmentByVideoId(db);
   const allWorks: InternalLibraryWork[] = [];
 
@@ -675,10 +677,11 @@ export function buildAllLibraryWorks(
       }
     }
 
-    const rawRating = bestAnnotation ? bestAnnotation.rating : (override?.rating ?? null);
+    const boundAnnotation = workAnnotations.get(key);
+    const rawRating = boundAnnotation ? boundAnnotation.rating : bestAnnotation ? bestAnnotation.rating : (override?.rating ?? null);
     // No ratings for music tracks (spec section 15).
     const rating = effectiveCategory === "music" ? null : rawRating;
-    const note = bestAnnotation ? bestAnnotation.note : (override?.note ?? null);
+    const note = boundAnnotation ? boundAnnotation.note : bestAnnotation ? bestAnnotation.note : (override?.note ?? null);
 
     // History items (newest first).
     const history = [...workEvents]
@@ -1043,6 +1046,7 @@ export function getLibraryWorkDetail(
   tz: string = "Europe/Bratislava",
   config?: Config
 ): LibraryWorkDetail | null {
+  key = resolveWorkKey(db, key);
   if (key.startsWith("youtube:video:")) {
     return getYoutubeVideoWorkDetail(db, key, tz);
   }
@@ -1094,6 +1098,7 @@ export async function editLibraryWork(
   }
 
   const parsed = parseWorkEdit(input);
+  key = resolveWorkKey(db, key);
   const tz = opts.tz ?? "Europe/Bratislava";
   const nowIso = opts.nowIso ?? new Date().toISOString();
 
@@ -1135,53 +1140,54 @@ export async function editLibraryWork(
     }
   }
 
-  saveWorkOverride(db, key, parsed, current, metaWork, nowIso);
+  db.transaction(() => {
+    saveWorkOverride(db, key, parsed, current, metaWork, nowIso);
 
-  // Sync rating / note into the append-only annotations table so every read
-  // path (library, reviews, search, title-history, progress, /api/annotations)
-  // returns the exact same rating and note.
-  if (
-    target &&
-    (parsed.hasRating ||
-      parsed.hasNote ||
-      (parsed.hasTitle &&
-        (target.detail.rating !== null || target.detail.note !== null)))
-  ) {
-    const nextRating = parsed.hasRating
-      ? parsed.ratingTenths === null
-        ? null
-        : parsed.ratingTenths / 10
-      : target.detail.rating;
-    const nextNote = parsed.hasNote ? parsed.note : target.detail.note;
-    const primarySource = target.work.sources[0] ?? "manual";
+    // Sync rating / note into the append-only annotations table so every read
+    // path (library, reviews, search, title-history, progress, /api/annotations)
+    // returns the exact same rating and note.
+    if (
+      target &&
+      (parsed.hasRating || parsed.hasNote || parsed.hasMeta ||
+        (parsed.hasTitle &&
+          (target.detail.rating !== null || target.detail.note !== null)))
+    ) {
+      const nextRating = parsed.hasRating
+        ? parsed.ratingTenths === null
+          ? null
+          : parsed.ratingTenths / 10
+        : target.detail.rating;
+      const nextNote = parsed.hasNote ? parsed.note : target.detail.note;
+      const primarySource = target.work.sources[0] ?? "manual";
 
-    const titlesToSync = new Set<string>([target.work.title]);
-    if (parsed.hasTitle && parsed.title !== null) {
-      titlesToSync.add(parsed.title);
-    }
-    for (const ev of target.events) {
-      const wTitle = eventWorkTitleForGrouping(ev, categoryOf(ev));
-      if (wTitle.trim() !== "") {
-        titlesToSync.add(wTitle.trim());
+      const titlesToSync = new Set<string>([target.work.title]);
+      if (parsed.hasTitle && parsed.title !== null) {
+        titlesToSync.add(parsed.title);
+      }
+      for (const ev of target.events) {
+        const wTitle = eventWorkTitleForGrouping(ev, categoryOf(ev));
+        if (wTitle.trim() !== "") {
+          titlesToSync.add(wTitle.trim());
+        }
+      }
+
+      for (const t of titlesToSync) {
+        if (t && t.trim() !== "") {
+          saveAnnotation(
+            db,
+            {
+              source: primarySource,
+              work_key: key,
+              title: t.trim(),
+              rating: nextRating,
+              note: nextNote,
+            },
+            nowIso
+          );
+        }
       }
     }
-
-    for (const t of titlesToSync) {
-      if (t && t.trim() !== "") {
-        saveAnnotation(
-          db,
-          {
-            source: primarySource,
-            title: t.trim(),
-            rating: nextRating,
-            note: nextNote,
-          },
-          nowIso
-        );
-      }
-    }
-  }
-
+  })();
   if (!target) {
     // A single YouTube video (checked above).
     return getYoutubeVideoWorkDetail(db, key, tz)!;
@@ -1453,6 +1459,7 @@ export async function refreshLibraryWorkMetadata(
   }
 
   const tz = opts.tz ?? opts.config.timezone ?? "Europe/Bratislava";
+  key = resolveWorkKey(db, key);
   const nowIso = opts.nowIso ?? new Date().toISOString();
   const dryRun = Boolean(opts.dryRun);
 
@@ -1580,7 +1587,7 @@ export async function refreshLibraryWorkMetadata(
     includeHidden: true,
     config: opts.config,
   });
-  let updated = updatedWorks.find((item) => item.work.key === key);
+  let updated = updatedWorks.find((item) => item.work.key === resolveWorkKey(db, key));
   if (!updated && entryIds.size > 0) {
     updated = updatedWorks.find((item) =>
       item.detail.history.some((h) => h.entry_id !== null && entryIds.has(h.entry_id))

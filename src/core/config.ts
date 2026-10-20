@@ -53,17 +53,23 @@ export interface YoutubeConfig {
 
 export interface IngestConfig {
   /**
-   * Shared bearer token for `POST /api/ingest/youtube-plays`. Empty disables
+   * Shared bearer token for both ingest endpoints. Empty disables
    * ingest; a non-empty token must be at least 32 characters. Never logged.
    */
   token: string;
 }
 
 export interface ActivityWatchConfig {
+  mode?: "pull" | "push";
   url: string;
   timeout_s: number;
   device: string;
   include_music: boolean;
+}
+
+export interface PushConfig {
+  server_url: string;
+  token: string;
 }
 
 export interface NotifyConfig {
@@ -120,6 +126,7 @@ export interface Config {
    */
   ingest?: IngestConfig;
   activitywatch?: ActivityWatchConfig;
+  push?: PushConfig;
   notify: NotifyConfig;
   /** Redacted plain object (JSON.stringify uses this automatically). */
   toJSON(): unknown;
@@ -374,6 +381,10 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   });
 
   const awTable = readTable(file, "activitywatch", "activitywatch");
+  const awMode = readString(awTable, "mode", "activitywatch.mode", "pull");
+  if (awMode !== "pull" && awMode !== "push") {
+    throw new Error('Config key "activitywatch.mode" must be pull or push');
+  }
   const awDevice = readString(awTable, "device", "activitywatch.device", "pc");
   if (
     awDevice.length < 1 ||
@@ -385,6 +396,7 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     );
   }
   const activitywatch: ActivityWatchConfig = {
+    mode: awMode,
     url: readString(
       awTable,
       "url",
@@ -405,6 +417,20 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
       false
     ),
   };
+
+  const pushTable = readTable(file, "push", "push");
+  const pushToken = readString(pushTable, "token", "push.token", "");
+  if (pushToken !== "" && (pushToken.length < 32 || /[\s\x00-\x1f\x7f]/.test(pushToken))) {
+    throw new Error('Config key "push.token" must be at least 32 characters without whitespace');
+  }
+  const push = { server_url: readString(pushTable, "server_url", "push.server_url", "") } as PushConfig;
+  if (push.server_url !== "") {
+    try {
+      const url = new URL(push.server_url);
+      if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error();
+    } catch { throw new Error('Config key "push.server_url" must be an HTTP(S) URL without credentials, query or fragment'); }
+  }
+  Object.defineProperty(push, "token", { value: pushToken, enumerable: false });
 
   const notifyTable = readTable(file, "notify", "notify");
   const notify: NotifyConfig = {
@@ -517,6 +543,7 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     metadata,
     ingest,
     activitywatch,
+    push,
     notify,
   } as Config;
 
@@ -572,6 +599,7 @@ function secretsFrom(value: unknown): string[] {
   if (isConfigLike(value)) {
     add((value as Config).audiobookshelf?.token);
     add((value as Config).notify?.ntfy_token);
+    add((value as Config).push?.token);
     if ((value as Config).ingest) {
       add((value as Config).ingest?.token);
     }
@@ -587,6 +615,7 @@ function secretsFrom(value: unknown): string[] {
   if (activeConfig) {
     add(activeConfig.audiobookshelf.token);
     add(activeConfig.notify?.ntfy_token);
+    add(activeConfig.push?.token);
     if (activeConfig.ingest) {
       add(activeConfig.ingest.token);
     }
@@ -641,6 +670,7 @@ export function redact(value: unknown): string {
 /** Replace every configured token (ABS API key, ntfy token) in free text. */
 export function redactString(text: string, config: Config): string {
   const secrets: string[] = [];
+  if (config.push?.token) secrets.push(config.push.token);
   const abs = config?.audiobookshelf?.token;
   if (typeof abs === "string" && abs !== "") {
     secrets.push(abs);

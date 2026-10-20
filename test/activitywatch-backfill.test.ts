@@ -519,8 +519,8 @@ describe("ActivityWatch backfill (test/activitywatch-backfill.test.ts)", () => {
     expect(syncEventsCall).toBeDefined();
     const parsed = new URL(syncEventsCall!);
 
-    // Start should be cursor - 10 min = 2026-10-15T11:50:00.000Z
-    expect(parsed.searchParams.get("start")).toBe("2026-10-15T11:50:00.000Z");
+    // Rebuild the entire cursor day after an outage, not a partial day total.
+    expect(parsed.searchParams.get("start")).toBe("2026-10-14T22:00:00.000Z");
     expect(parsed.searchParams.get("end")).toBe(fixedNow.toISOString());
   });
 

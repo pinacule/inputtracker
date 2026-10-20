@@ -12,6 +12,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { getWorkKeyAliases, resolveWorkKeyIn, resolveWorkKey } from "../core/work-identity.ts";
 import { createHash } from "node:crypto";
 import { CATEGORIES, categoryOf, isCategory, type Category } from "../core/category.ts";
 import type {
@@ -462,7 +463,8 @@ export interface GroupedWorkComponent<E extends EventForWorkGrouping> {
  * stable keys.
  */
 export function groupEventsIntoWorkComponents<E extends EventForWorkGrouping>(
-  events: readonly E[]
+  events: readonly E[],
+  db?: Database
 ): GroupedWorkComponent<E>[] {
   const eventsByCategory = new Map<Category, E[]>();
   for (const ev of events) {
@@ -555,7 +557,19 @@ export function groupEventsIntoWorkComponents<E extends EventForWorkGrouping>(
     }
   }
 
-  return result;
+  if (!db) return result;
+  const aliases = getWorkKeyAliases(db);
+  const joined = new Map<string, GroupedWorkComponent<E>>();
+  for (const comp of result) {
+    comp.key = resolveWorkKeyIn(aliases, comp.key);
+    const previous = joined.get(comp.key);
+    if (previous) {
+      previous.events.push(...comp.events);
+      previous.eventTitles.push(...comp.eventTitles);
+      previous.events.sort((a, b) => a.started_at.localeCompare(b.started_at) || a.id - b.id);
+    } else joined.set(comp.key, comp);
+  }
+  return [...joined.values()];
 }
 
 // --- Overrides table (migration v6) ------------------------------------------
@@ -657,6 +671,7 @@ function rowToLatestOverride(row: WorkOverrideRow): LatestOverride {
  */
 export function getWorkOverrides(db: Database): Map<string, LatestOverride> {
   const map = new Map<string, LatestOverride>();
+  const aliases = getWorkKeyAliases(db);
   try {
     const rows = db
       .query<WorkOverrideRow, []>(
@@ -664,10 +679,15 @@ export function getWorkOverrides(db: Database): Map<string, LatestOverride> {
       )
       .all();
     for (const row of rows) {
-      map.set(row.work_key, rowToLatestOverride(row));
+      map.set(resolveWorkKeyIn(aliases, row.work_key), rowToLatestOverride(row));
     }
   } catch {
     // Table/view may not exist on a partially-migrated test database.
+  }
+  // Raw canonical keys are also used by callers grouping a subset of events.
+  for (const oldKey of aliases.keys()) {
+    const override = map.get(resolveWorkKeyIn(aliases, oldKey));
+    if (override) map.set(oldKey, override);
   }
   return map;
 }
@@ -923,6 +943,7 @@ export function saveWorkOverride(
   metaWork: WorkDetails | null,
   nowIso?: string
 ): { rev_id: string; inserted: boolean; override: LatestOverride } {
+  workKey = resolveWorkKey(db, workKey);
   const title = edit.hasTitle ? edit.title : (current?.title ?? null);
   const category = edit.hasCategory ? edit.category : (current?.category ?? null);
   const status = edit.hasStatus ? edit.status : (current?.status ?? null);
@@ -1077,7 +1098,7 @@ export function applyWorkOverridesToEvents(
     return events;
   }
 
-  const components = groupEventsIntoWorkComponents(groupingInput);
+  const components = groupEventsIntoWorkComponents(groupingInput, db);
   const componentByEventId = new Map<
     number,
     {

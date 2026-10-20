@@ -13,8 +13,10 @@ Placeholders to replace before running anything:
 - `<port>` — the value of `server.port` (default `8787`),
 - `<snapshot>` — the backup file name, e.g. `inputtracker-2026-10-17.db`.
 
-Write access on the PC happens only through `it sync` (the two sync timers) and
-the server. `it doctor` is read-only and `it backup` only reads the database.
+After the split, the VM owns the archive. The PC pushes ActivityWatch using a
+small cursor file and leaves its old database untouched as a cold backup.
+ActivityWatch stays at `127.0.0.1:5600`: never expose it through Tailscale,
+Tailscale Serve, a reverse proxy or the firewall.
 
 ## 1. Before: prepare the VM
 
@@ -22,11 +24,12 @@ the server. `it doctor` is read-only and `it backup` only reads the database.
    listed with `tailscale status`.
 2. Install git and Bun. Bun ships a `linux-arm64` build, so the normal installer
    works: `curl -fsSL https://bun.sh/install | bash`.
-3. Clone the repository and run the environment check on the VM:
+3. Clone the repository, install dependencies, and run the environment check on the VM:
 
    ```sh
    git clone <your-repo-url> inputtracker
-   cd inputtracker
+    cd inputtracker
+    bun install --frozen-lockfile
    bun run it doctor
    ```
 
@@ -37,8 +40,13 @@ the server. `it doctor` is read-only and `it backup` only reads the database.
 ## 2. Stop writes on the PC
 
 ```sh
-systemctl --user stop inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-backup.timer inputtracker.service
+systemctl --user stop inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-sync@activitywatch.timer inputtracker-backup.timer inputtracker-weekly.timer inputtracker.service
+systemctl --user stop inputtracker-sync@audiobookshelf.service inputtracker-sync@simkl.service inputtracker-sync@activitywatch.service inputtracker-backup.service inputtracker-weekly.service
 ```
+
+Skip unit names that have never been installed. If a push timer/service already
+exists, stop both too. Wait for active oneshots to exit: stopping a timer alone
+does not stop an active service.
 
 ## 3. Snapshot and check on the PC
 
@@ -76,11 +84,14 @@ Then, on the VM, restrict the permissions and compare the checksums:
 
 ```sh
 chmod 700 <db-dir>/secrets
-chmod 600 <db-dir>/secrets/simkl-token.json inputtracker.config.toml
-sha256sum <snapshot>
+chmod 600 <db-dir>/secrets/simkl-token.json <config-path> <db_path>
+sha256sum <db_path>
 ```
 
 The two `sha256sum` outputs must match.
+Create the destination directories first and copy `secrets/` only if it exists.
+Optional `metadata/` and `covers/` directories beside the database may also be
+copied to keep cached metadata and artwork available immediately.
 
 ## 5. Configure on the VM
 
@@ -95,11 +106,20 @@ Edit `inputtracker.config.toml`:
 
 - `storage.*` paths if they differ from the PC.
 - `server.bind` / `server.port` as needed.
+- Keep `server.bind = "127.0.0.1"` when using Tailscale Serve below.
+- Run `bun run it ingest token` locally to generate a fresh random shared
+  token. Paste it privately into the VM's `[ingest] token` and the PC's
+  `[push] token`. Keep it out of logs, command arguments, screenshots and git;
+  never reuse an Audiobookshelf or Simkl token.
+- Set `[activitywatch] mode = "push"`; leave `[push]` empty on the VM.
+  The VM will skip ActivityWatch even for a manual sync request.
+- Keep `timezone`, `youtube.min_watch_minutes` and music policy aligned on
+  both machines so per-day totals and filtering agree.
 
 ## 6. Install on the VM
 
 ```sh
-scripts/install.sh
+scripts/install.sh --role server
 loginctl enable-linger <user>
 bun run it doctor
 bun run it sync audiobookshelf
@@ -108,6 +128,25 @@ bun run it sync simkl
 
 `doctor` should now be all `OK`. A `port` WARN is fine once
 `inputtracker.service` is running (the port is in use by this app).
+The installer disables existing ActivityWatch pull/push timers on the VM.
+`bun run it ingest status` must report enabled; `bun run it sync activitywatch`
+must report that local pull was skipped.
+
+Opening the VM archive applies migration 14 (`work_identity_aliases`): immutable
+work aliases plus nullable `annotations.work_key`, preserving existing rows.
+The manager must coordinate this version with other branches before deployment.
+With SQLite CLI installed, verify the configured VM database read-only:
+
+```sh
+sqlite3 -readonly <db_path> "SELECT version FROM schema_migrations WHERE version = 14;"
+sqlite3 -readonly <db_path> "PRAGMA integrity_check;"
+sqlite3 -readonly <db_path> "SELECT COUNT(*) FROM events_latest;"
+```
+
+Expect `14`, `ok`, and the migrated event count. On a synthetic test work, link
+and refresh metadata, then verify category/rating/note/topic and hidden state
+remain intact and the former work URL still resolves. No pre-existing lost
+identities are reconstructed automatically.
 
 ## 7. Move the URL
 
@@ -121,31 +160,102 @@ tailscale serve --bg <port>
 Open `https://<vm-name>.<your-tailnet>.ts.net/` on the phone and re-install the
 PWA so it points at the VM.
 
-## 8. Disable the PC units
+## 8. Configure and enable the PC push
 
-```sh
-systemctl --user disable --now inputtracker.service inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-backup.timer
+On the PC, retain its old `storage.db_path` (only the directory is used by
+push), keep ActivityWatch local, and merge these keys into existing TOML
+sections (do not duplicate sections):
+
+```toml
+[activitywatch]
+mode = "push"
+url = "http://127.0.0.1:5600"
+device = "pc"
+include_music = false
+
+[push]
+server_url = "https://<vm-name>.<your-tailnet>.ts.net"
+token = "<same-random-ingest-token>"
 ```
 
-Keep the old database on the PC as a cold backup: it is the rollback source.
+Keep filtering/timezone policy aligned with the VM, restrict the config with
+`chmod 600`, and configure `[notify]` on the PC for failure/recovery alerts.
+If the config is outside the checkout, set `INPUTTRACKER_CONFIG` in the
+systemd user environment before starting units (`systemctl --user
+set-environment INPUTTRACKER_CONFIG=<config-path>`), and persist that
+environment across logins on both machines.
+
+```sh
+scripts/install.sh --role pc
+loginctl enable-linger <user>
+bun run it push activitywatch
+systemctl --user status inputtracker-push@activitywatch.timer
+systemctl --user list-timers
+journalctl --user -u inputtracker-push@activitywatch.service -n 30
+```
+
+The PC installer disables its old server/pull/backup/weekly timers and installs
+only the push units (no web build). The first push reads the last seven days.
+Later pushes overlap the cursor's whole local day to preserve complete totals.
+State is `<directory of storage.db_path>/activitywatch-push-state.json`, mode
+0600, with an exclusive `.lock`. Do not delete it during normal updates.
+Only acknowledged buckets advance; failed chunks retry safely, including
+chunks stored by the VM whose responses were lost.
+
+On the VM, check push ingest runs in Settings and today's YouTube/music totals.
+`journalctl --user -u inputtracker.service -n 30` checks server health.
+Insertion is acknowledged before server-only enrichment/cover lookup finishes.
+A repeat without new activity should insert zero rows. During VM outages the
+PC keeps its cursor and retries every 10 minutes, sending one failure alert and
+one recovery. ActivityWatch must retain source events throughout the outage;
+never clear its buckets while history remains unconfirmed.
+
+On the VM, this read-only query shows confirmed batches (including retries):
+
+```sh
+sqlite3 -readonly <db_path> "SELECT id, status, rows_seen, rows_inserted FROM ingest_runs WHERE source = 'activitywatch' AND kind = 'push' ORDER BY id DESC LIMIT 10;"
+```
+
+For outage verification, briefly stop the VM's `inputtracker.service`, run
+`bun run it push activitywatch` on the PC twice, then restart the VM and push
+again. Expect failure on both offline runs, one failure alert, then a recovery
+alert and successful insertion/retry. New PC activity must remain in ActivityWatch.
+An abandoned `.lock` whose PID no longer exists is recovered automatically. If
+its PID was reused by an unrelated process, stop the push timer, confirm no push
+process is running, and remove only that `.lock`; retain the JSON state file.
+
+Keep the old PC database as a cold backup: push never opens it.
 
 ## 9. Roll back
 
-To move back to the PC, stop the VM, then re-enable the PC's units and serve the
-URL from the PC again:
+To move back, stop PC pushes first, stop VM writers, take a final VM snapshot,
+then restore it before enabling the PC's local units:
 
 ```sh
-# on the VM
-systemctl --user disable --now inputtracker.service inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-backup.timer
-tailscale serve reset
 # on the PC
-systemctl --user enable --now inputtracker.service inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-backup.timer
+systemctl --user disable --now inputtracker-push@activitywatch.timer
+systemctl --user stop inputtracker-push@activitywatch.service
+# on the VM
+systemctl --user disable --now inputtracker.service inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-backup.timer inputtracker-weekly.timer
+systemctl --user stop inputtracker-sync@audiobookshelf.service inputtracker-sync@simkl.service inputtracker-backup.service inputtracker-weekly.service
+bun run it backup
+tailscale serve reset
+# copy and verify the final snapshot/secrets/caches over the tailnet; on the PC:
+# after restoring the final VM snapshot and setting activitywatch.mode = "pull":
+scripts/install.sh --role local
 tailscale serve --bg <port>
 ```
 
-Syncs re-fetch from ABS and Simkl, so the PC catches up on its own; only manual
-entries and YouTube imports made on the VM in between have to be redone (or
-moved with `it export` on the VM and `it import` on the PC).
+Before enabling local units, stop all active writers and copy a final VM `.db`
+snapshot and adjacent `secrets/`, metadata and cover caches back to the PC.
+Preserve the original PC snapshot separately. This includes edits, aliases,
+phone plays and pushed history: source retention may not cover the whole split
+period, so do not assume the cold PC database can catch up by syncing alone.
+Clear PC `[push]` settings and change `activitywatch.mode` to `pull`.
+Never replace a database while its process or old WAL/SHM files are active;
+preserve the old database and its sidecars separately before restoring the snapshot.
+Native JSON export/import also carries overrides and aliases, but a full
+SQLite snapshot is the preferred migration/rollback path.
 
 ## Notes
 

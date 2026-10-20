@@ -65,6 +65,7 @@ describe("loadConfig defaults", () => {
       enrich_per_sync: 50,
     });
     expect(config.activitywatch).toEqual({
+      mode: "pull",
       url: "http://127.0.0.1:5600",
       timeout_s: 20,
       device: "pc",
@@ -160,6 +161,7 @@ describe("loadConfig file merging", () => {
     expect(config.simkl.timeout_s).toBe(15);
     expect(config.youtube.thumb_base_url).toBe("https://thumbs.example");
     expect(config.activitywatch).toEqual({
+      mode: "pull",
       url: "http://aw.example:5600",
       timeout_s: 10,
       device: "laptop-1",
@@ -407,6 +409,31 @@ describe("redaction", () => {
 });
 
 const FAKE_INGEST_TOKEN = "INGEST-FAKE-TOKEN-0123456789abcdefgh"; // 37 chars
+
+describe("PC push config", () => {
+  test("mode and endpoint load; push token is redacted from every representation", () => {
+    const token = "SYNTHETIC-PUSH-TOKEN-00000000000000000";
+    const path = writeConfig("push.toml", `[activitywatch]\nmode = "push"\n[push]\nserver_url = "https://synthetic.invalid"\ntoken = "${token}"\n`);
+    const config = loadConfig({ path, env: {} });
+    expect(config.activitywatch?.mode).toBe("push");
+    expect(config.push?.server_url).toBe("https://synthetic.invalid");
+    expect(config.push?.token).toBe(token);
+    for (const text of [String(config), JSON.stringify(config), inspect(config), redact(config), redact(`failure ${token}`), redactString(`Bearer ${token}`, config)]) {
+      expect(text).not.toContain(token);
+    }
+  });
+  test("invalid push types, short token and mode reject without echoing secrets", () => {
+    for (const [contents, field] of [
+      ['[activitywatch]\nmode = "invalid"', "activitywatch.mode"],
+      ['[push]\ntoken = "short-secret"', "push.token"],
+      ['[push]\nserver_url = 42', "push.server_url"],
+      ['push = "bad"', "push"],
+    ]) {
+      const message = captureError(() => loadConfig({ path: writeConfig("invalid-push.toml", contents!), env: {} }));
+      expect(message).toContain(field!); expect(message).not.toContain("short-secret");
+    }
+  });
+});
 
 describe("ingest config", () => {
   test("missing [ingest] yields an empty token (ingest disabled)", () => {

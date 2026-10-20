@@ -7,7 +7,8 @@
  * - Filters buckets whose type is "web.tab.current".
  * - If no web.tab.current bucket exists: finishes ok with seen 0, prints hint.
  * - Per-bucket cursor in sync_state under "activitywatch:<bucket id>".
- * - Window: start = cursor - 10 min (first run: now - 7 days), end = now.
+ * - Window includes the cursor overlap's whole local day, preserving daily
+ *   totals after outages (first run: now - 7 days), end = now.
  * - New cursor = started_at of earliest play that may still be going (ended_at
  *   within 10 minutes of end), otherwise end.
  * - One transaction per bucket via sink.write.
@@ -54,6 +55,8 @@ export interface SyncActivityWatchDeps {
   out?: (line: string) => void;
   fetch?: typeof fetch | FetchFn;
   sleep?: (ms: number) => Promise<void>;
+  /** PC push skips server-owned metadata/cover enrichment. */
+  enrich?: boolean;
 }
 
 export interface ActivityWatchSyncResult {
@@ -123,8 +126,9 @@ export async function syncActivityWatch(
       let startIso: string;
       if (cursorRow && cursorRow.cursor) {
         const cursorMs = new Date(cursorRow.cursor).getTime();
+        const overlapDay = localParts(new Date(cursorMs - TEN_MINUTES_MS).toISOString(), tz).date;
         startIso = new Date(
-          Math.min(cursorMs - TEN_MINUTES_MS, todayStartMs)
+          Math.min(cursorMs - TEN_MINUTES_MS, todayStartMs, Date.parse(localToUtcIso(overlapDay, tz)))
         ).toISOString();
       } else {
         startIso = new Date(nowDate.getTime() - SEVEN_DAYS_MS).toISOString();
@@ -202,14 +206,14 @@ export async function syncActivityWatch(
     });
 
     const enrichFetch = deps.fetch ?? client.fetch;
-    await enrichYoutubeVideos(db, {
+    if (deps.enrich !== false) await enrichYoutubeVideos(db, {
       config,
       fetch: enrichFetch as typeof fetch | undefined,
       sleep: deps.sleep,
       nowMs: () => nowDate.getTime(),
     });
 
-    if (includeMusic && config && config.covers?.external !== false) {
+    if (deps.enrich !== false && includeMusic && config && config.covers?.external !== false) {
       try {
         await backfillCovers(db, {
           config,
