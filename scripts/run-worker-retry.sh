@@ -19,6 +19,17 @@ for attempt in $(seq 0 "${RETRY_MAX:-8}"); do
     PROMPT="$CONT"; SESSION="$(cat "$T/session" 2>/dev/null)"
   fi
   r=$("$REPO/scripts/run-worker.sh" "$TASK" "$WORKER" "$MODEL" "$PROMPT" ${SESSION:+"$SESSION"} | tail -1)
+  if [ "$r" = error ] && grep -q "different Azure OpenAI resource" "$T/oc.jsonl" 2>/dev/null; then
+    # AgentRouter moved the session to another Azure resource; its stored response items are gone
+    # there, so resuming fails too. Start a fresh session that continues from the files on disk.
+    echo "[$TASK] router switched Azure resource (attempt $attempt), restarting fresh" >&2
+    [ -f "$T/oc.jsonl" ] && mv "$T/oc.jsonl" "$T/oc.resource$attempt.jsonl"
+    rm -f "$T/result" "$T/session"; sleep 20
+    PROMPT_FRESH="$T/continue-fresh.md"
+    { cat "$T/prompt.md"; printf '\n\n## Note\nA previous run of this task was cut off. Some of the work may already be in this folder (check `git status` and `git diff`); continue from there instead of starting over.\n'; } > "$PROMPT_FRESH"
+    PROMPT="$PROMPT_FRESH"; SESSION=""
+    continue
+  fi
   [ "$r" != limit ] && { echo "$r"; exit 0; }
   echo "[$TASK] rate-limited (attempt $attempt), resuming in ${RETRY_WAIT:-90}s" >&2
 done
