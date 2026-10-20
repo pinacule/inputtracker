@@ -78,7 +78,6 @@ describe("Editorial home presentation", () => {
   });
 
   test("Editorial text and the single accent meet AA on all five paper shades", async () => {
-    const shell = await Bun.file(new URL("../web/src/styles/shell.css", import.meta.url)).text();
     const tokens = await Bun.file(new URL("../web/src/styles/tokens.css", import.meta.url)).text();
     function luminance(hex: string): number {
       const rgb = hex.slice(1).match(/../g)!.map((channel) => {
@@ -87,7 +86,7 @@ describe("Editorial home presentation", () => {
       });
       return rgb[0]! * 0.2126 + rgb[1]! * 0.7152 + rgb[2]! * 0.0722;
     }
-    const papers = [...shell.matchAll(/--bg-(?:canvas|surface|surface-raised): (#[\da-f]{6})/g)].map((match) => match[1]!);
+    const papers = [...tokens.matchAll(/--editorial-(?:canvas|surface|raised): (#[\da-f]{6})/g)].map((match) => match[1]!);
     const inks = ["#f2ebdc", "#bcb4a5", "#a49c8e", ...[...tokens.matchAll(/--accent-primary: (#[\da-f]{6})/g)].map((match) => match[1]!)];
     expect(papers.length).toBeGreaterThanOrEqual(15);
     for (const paper of papers) for (const ink of inks) {

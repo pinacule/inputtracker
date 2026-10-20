@@ -14,12 +14,6 @@
   color-scheme: dark;
 
   /* --- Typography --- */
-  --font-serif: "Iowan Old Style", "Palatino Linotype", "URW Palladio L", P052,
-    Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
-    "Liberation Mono", monospace;
   --font-body: var(--font-sans);
   --font-display: var(--font-serif);
   --font-numbers: var(--font-serif);
@@ -43,6 +37,8 @@
   --card-title-padding: 0px;
   --card-title-border: 0px;
   --card-title-shadow: none;
+  --title-control-color: initial;
+  --title-control-hover-bg: initial;
   --control-shadow: var(--shadow-xs);
   --input-shadow: none;
   --nav-shadow: none;
@@ -77,6 +73,64 @@
   --scrollbar-radius: var(--radius-full);
   --cover-sheen: inset 3px 0 6px rgba(255, 255, 255, 0.16),
     inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+
+  /* D1 paper applies only to the original palettes' Calendar shell. */
+  --editorial-canvas: #11110f;
+  --editorial-surface: #191917;
+  --editorial-raised: #22221e;
+  --editorial-subtle: #25251f;
+  --editorial-muted: #30302a;
+  --editorial-ink: #f2ebdc;
+  --editorial-secondary: #bcb4a5;
+  --editorial-quiet: #a49c8e;
+  --editorial-rule-subtle: #36352f;
+  --editorial-rule: #49473f;
+  --editorial-rule-strong: #777266;
+
+  /* Reading panes. Transparent/contents defaults preserve D1's spread exactly.
+     `initial` lets a rule use its local paper/ink fallback, not root's palette. */
+  --reading-gutter: 0px;
+  --page-reading-bg: transparent;
+  --page-reading-border: 0px solid transparent;
+  --page-reading-shadow: var(--content-frame);
+  --home-page-bg: transparent;
+  --home-panel-bg: transparent;
+  --home-panel-border: 0px solid transparent;
+  --home-panel-radius: 0px;
+  --home-panel-shadow: none;
+  --home-panel-padding: 0px;
+  --home-group-display: contents;
+  --home-group-gap: 0px;
+  --home-column-gap: 48px;
+  --home-topbar-padding: 0px 0px 24px;
+  --home-topbar-padding-wide: 0px 0px 32px;
+  --home-topbar-rule: initial;
+  --home-contents-rule: initial;
+  --home-week-padding: 24px 0px 28px;
+  --home-week-padding-wide: 0px 0px 0px 32px;
+  --home-week-rule: initial;
+  --home-week-rule-wide: initial;
+  --home-month-padding: 24px 0px 0px;
+  --home-month-padding-wide: 32px 0px 0px;
+  --home-month-rule: initial;
+  --home-title-bg: transparent;
+  --home-title-padding: 0px;
+  --home-title-shadow: none;
+  --home-title-color: initial;
+  --home-title-label-color: initial;
+  --home-title-hover-bg: initial;
+  --home-label-font: var(--font-sans);
+  --home-label-tracking: 0.14em;
+  --home-number-tracking: -0.075em;
+  --home-number-margin: -0.055em;
+  --home-week-value-wrap: nowrap;
+  --shell-brand-size: var(--text-lg);
+  --shell-brand-weight: 700;
+  --shell-brand-tracking: var(--tracking-tight);
+  --shell-brand-bg: linear-gradient(145deg, var(--accent-primary), var(--accent-primary-hover));
+  --mobile-nav-active-bg: transparent;
+  --mobile-nav-marker: var(--accent-primary);
+  --mobile-nav-shadow: 0 -4px 16px rgba(31, 27, 22, 0.06);
 
   /* Type scale */
   --text-xs: 0.75rem;      /* 12px */
@@ -303,6 +357,10 @@
 .theme-preview[data-theme="midnight"] {
   color-scheme: dark;
 
+  --editorial-canvas: #101214;
+  --editorial-surface: #181b1d;
+  --editorial-raised: #222629;
+
   --bg-canvas: #0b1017;
   --bg-surface: #121924;
   --bg-surface-raised: #192230;
@@ -340,6 +398,10 @@
 :root[data-theme="forest"],
 .theme-preview[data-theme="forest"] {
   color-scheme: dark;
+
+  --editorial-canvas: #101310;
+  --editorial-surface: #191d18;
+  --editorial-raised: #222820;
 
   --bg-canvas: #0c130f;
   --bg-surface: #131e18;
@@ -379,6 +441,10 @@
 .theme-preview[data-theme="obsidian"] {
   color-scheme: dark;
 
+  --editorial-canvas: #111112;
+  --editorial-surface: #1a1a1b;
+  --editorial-raised: #242425;
+
   --bg-canvas: #0e0e11;
   --bg-surface: #16161b;
   --bg-surface-raised: #1e1e25;
@@ -416,6 +482,10 @@
 :root[data-theme="plum"],
 .theme-preview[data-theme="plum"] {
   color-scheme: dark;
+
+  --editorial-canvas: #141114;
+  --editorial-surface: #1d191d;
+  --editorial-raised: #282228;
 
   --bg-canvas: #130e16;
   --bg-surface: #1c1521;

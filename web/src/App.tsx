@@ -260,7 +260,10 @@ export function App() {
   };
 
   return (
-    <div class={loc.route === "calendar" ? "app-shell app-shell--editorial" : "app-shell"}>
+    <div
+      class={loc.route === "calendar" && ["espresso", "midnight", "forest", "obsidian", "plum"].includes(theme)
+        ? "app-shell app-shell--editorial" : "app-shell"}
+    >
       {/* Desktop Left Sidebar */}
       <aside class="app-sidebar" aria-label="Sidebar">
         <a href="#/calendar" class="sidebar-brand">

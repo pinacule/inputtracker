@@ -2,8 +2,6 @@
 :root[data-theme="workbench"],
 .theme-preview[data-theme="workbench"] {
   color-scheme: dark;
-  --font-mono: "Terminus", "Fixedsys", "IBM Plex Mono", "DejaVu Sans Mono",
-    "Lucida Console", "Courier New", ui-monospace, monospace;
   --font-sans: var(--font-mono);
   --font-serif: var(--font-mono);
   --font-body: var(--font-mono);
@@ -37,6 +35,8 @@
   --border-strong: #c0d5e2;
   --card-title-bg: #b6ccd9;
   --card-title-color: #13212c;
+  --title-control-color: var(--card-title-color);
+  --title-control-hover-bg: var(--nav-active-bg);
   --card-title-padding: 6px;
   --card-title-border: 1px;
   --card-title-shadow: inset 1px 1px 0 #e7f3fa, inset -1px -1px 0 #192a36;
@@ -75,6 +75,46 @@
   --heat-border-4: #c0d5e2;
   --wallpaper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg fill='none' stroke='%238aa6b5' stroke-opacity='.32' stroke-width='1'%3E%3Cpath d='M3 3h90v90H3zM8 8h26v15H19v22H8V8m80 0H61v12h16v23h11V8M8 88h25V73H20V57H8v31m80 0H62V74h15V56h11v32M28 30h40v36H28zM24 26h48v44H24zM34 3v9h12v10m9-19v9H49v10M34 93V81h12V74m9 19V81h-6V74M3 48h19m52 0h19M38 35h20v26H38zM31 39h7m-7 6h7m-7 6h7m-7 6h7m20-18h7m-7 6h7m-7 6h7m-7 6h7M12 12h17v7H15v23m69-30H65v4h16v25M12 84h17v-7H16V60m68 24H66v-6h15V59'/%3E%3Ccircle cx='22' cy='48' r='2'/%3E%3Ccircle cx='74' cy='48' r='2'/%3E%3Ccircle cx='46' cy='22' r='2'/%3E%3Ccircle cx='49' cy='74' r='2'/%3E%3C/g%3E%3C/svg%3E");
   --wallpaper-size: 96px 96px;
+
+  --reading-gutter: 12px;
+  --page-reading-bg: var(--bg-surface);
+  --page-reading-border: 1px solid var(--card-border);
+  --page-reading-shadow: var(--card-shadow);
+  --home-panel-bg: var(--bg-surface);
+  --home-panel-border: 1px solid var(--card-border);
+  --home-panel-shadow: var(--card-shadow);
+  --home-panel-radius: var(--radius-lg);
+  --home-panel-padding: 12px;
+  --home-group-display: flex;
+  --home-group-gap: 20px;
+  --home-column-gap: 24px;
+  --home-topbar-padding: 12px;
+  --home-topbar-padding-wide: 24px;
+  --home-topbar-rule: var(--home-panel-border);
+  --home-contents-rule: var(--home-panel-border);
+  --home-week-padding: 12px;
+  --home-week-padding-wide: 20px;
+  --home-week-rule: var(--home-panel-border);
+  --home-week-rule-wide: var(--home-panel-border);
+  --home-month-padding: 12px;
+  --home-month-padding-wide: 20px;
+  --home-month-rule: var(--home-panel-border);
+  --home-title-bg: var(--card-title-bg);
+  --home-title-color: var(--card-title-color);
+  --home-title-label-color: var(--card-title-color);
+  --home-title-padding: var(--card-title-padding);
+  --home-title-shadow: var(--card-title-shadow);
+  --home-title-hover-bg: var(--nav-active-bg);
+  --home-label-font: var(--font-display);
+  --home-label-tracking: var(--label-tracking);
+  --home-number-tracking: 0em;
+  --home-number-margin: 0px;
+  --home-week-value-wrap: normal;
+  --shell-brand-weight: var(--display-weight);
+  --shell-brand-tracking: var(--display-tracking);
+  --mobile-nav-active-bg: var(--nav-active-bg);
+  --mobile-nav-marker: var(--nav-active-color);
+  --mobile-nav-shadow: var(--nav-shadow);
 }
 
 :root[data-theme="workbench"] :is(.ui-card-subtitle, .ui-sheet-subtitle),

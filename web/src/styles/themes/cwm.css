@@ -2,8 +2,6 @@
 :root[data-theme="cwm"],
 .theme-preview[data-theme="cwm"] {
   color-scheme: light;
-  --font-mono: "Terminus", "Fixedsys", "DejaVu Sans Mono", "Lucida Console",
-    "Liberation Mono", "Courier New", ui-monospace, monospace;
   --font-sans: var(--font-mono);
   --font-serif: var(--font-mono);
   --font-body: var(--font-mono);
@@ -49,6 +47,8 @@
   --nav-active-color: #ffffff;
   --card-title-bg: #000000;
   --card-title-color: #ffffff;
+  --title-control-color: var(--card-title-color);
+  --title-control-hover-bg: var(--nav-active-bg);
   --card-title-padding: 6px;
   --focus-ring: #000000;
   --focus-style: dashed;
@@ -80,6 +80,43 @@
   --heat-border-4: #000000;
   --wallpaper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'%3E%3Cdefs%3E%3Cpattern id='d' width='3' height='3' patternUnits='userSpaceOnUse'%3E%3Cpath fill='%23000' d='M0 0h1v1H0zm1 1h1v1H1z'/%3E%3C/pattern%3E%3C/defs%3E%3Cg stroke='%23000' fill='url(%23d)' stroke-width='1'%3E%3Cpath d='M36 4 68 36 36 68 4 36zM0-32 32 0 0 32-32 0zM72 40l32 32-32 32-32-32z'/%3E%3C/g%3E%3Cpath fill='none' stroke='%23000' d='m36 16 20 20-20 20-20-20zm0 9 11 11-11 11-11-11z'/%3E%3C/svg%3E");
   --wallpaper-size: 72px 72px;
+
+  --reading-gutter: 12px;
+  --page-reading-bg: var(--bg-surface);
+  --page-reading-border: 1px solid var(--card-border);
+  --home-panel-bg: var(--bg-surface);
+  --home-panel-border: 1px solid var(--card-border);
+  --home-panel-radius: var(--radius-lg);
+  --home-panel-padding: 12px;
+  --home-group-display: flex;
+  --home-group-gap: 20px;
+  --home-column-gap: 24px;
+  --home-topbar-padding: 12px;
+  --home-topbar-padding-wide: 24px;
+  --home-topbar-rule: var(--home-panel-border);
+  --home-contents-rule: var(--home-panel-border);
+  --home-week-padding: 12px;
+  --home-week-padding-wide: 20px;
+  --home-week-rule: var(--home-panel-border);
+  --home-week-rule-wide: var(--home-panel-border);
+  --home-month-padding: 12px;
+  --home-month-padding-wide: 20px;
+  --home-month-rule: var(--home-panel-border);
+  --home-title-bg: var(--card-title-bg);
+  --home-title-color: var(--card-title-color);
+  --home-title-label-color: var(--card-title-color);
+  --home-title-padding: var(--card-title-padding);
+  --home-title-hover-bg: var(--nav-active-bg);
+  --home-label-font: var(--font-mono);
+  --home-label-tracking: var(--label-tracking);
+  --home-number-tracking: -0.04em;
+  --home-number-margin: 0px;
+  --home-week-value-wrap: normal;
+  --shell-brand-weight: var(--display-weight);
+  --shell-brand-tracking: var(--display-tracking);
+  --mobile-nav-active-bg: var(--nav-active-bg);
+  --mobile-nav-marker: var(--nav-active-color);
+  --mobile-nav-shadow: var(--nav-shadow);
 
   --cat-anime-fg: #0000aa;
   --cat-anime-bg: #ffffff;
