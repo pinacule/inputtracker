@@ -5,7 +5,6 @@ import {
   lookupWork,
   saveArchiveEntry,
   type ArchiveConsumed,
-  type ArchiveEntrySummary,
   type ArchiveRequest,
   type ArchiveResult,
   type ArchiveWhen,
@@ -71,14 +70,7 @@ export interface AddProps {
   /** Pre-selected work (e.g. from "Add more seasons" on a Work page). */
   initialWork?: WorkDetails | ManualWork | null;
   /** Pre-loaded archive entry to edit (`entry_id` reused on save). */
-  editingArchiveEntry?: {
-    entry_id: string;
-    work: WorkDetails | ManualWork;
-    consumed: ArchiveConsumed;
-    when: ArchiveWhen;
-    rating?: number | null;
-    note?: string | null;
-  } | null;
+  editingArchiveEntry?: ArchiveRequest | null;
   /** Compact mode when rendered inside a desktop Sheet dialog. */
   inSheet?: boolean;
   /** Called after an archive entry is saved. */
@@ -174,35 +166,6 @@ function formStateFromBody(body: ManualEventInput): AddFormState {
   };
 }
 
-/**
- * Reconstructs a `ManualWork` snapshot from an `ArchiveEntrySummary` when editing
- * an entry from a summary list.
- */
-export function workFromArchiveSummary(
-  summary: ArchiveEntrySummary
-): ManualWork {
-  const seasons = (summary.consumed.seasons ?? []).map((s) => ({
-    number: s.number,
-    title: `Season ${s.number}`,
-    year: null,
-    episodes: s.episodes ?? 12,
-    episode_minutes: 24,
-    total_minutes: (s.episodes ?? 12) * 24,
-    provider_id: null,
-  }));
-  return {
-    provider: "manual",
-    category: summary.category,
-    title: summary.title,
-    year: null,
-    creators: [],
-    seasons,
-    runtime_minutes:
-      summary.category === "film" ? summary.total_minutes || 120 : null,
-    pages: null,
-  };
-}
-
 export function Add({
   initialQuery = "",
   initialCategory,
@@ -261,7 +224,7 @@ export function Add({
 
   const [overrideHours, setOverrideHours] = useState<string>(() => {
     const m = editingArchiveEntry?.consumed.minutes_override;
-    return m && m > 0 ? String(Math.round((m / 60) * 10) / 10) : "";
+    return m !== undefined ? String(m / 60) : "";
   });
 
   const [when, setWhen] = useState<ArchiveWhen>(() => {
@@ -281,9 +244,11 @@ export function Add({
     editingArchiveEntry?.rating ?? null
   );
   const [note, setNote] = useState<string>(editingArchiveEntry?.note ?? "");
+  const [ratingChanged, setRatingChanged] = useState(false);
+  const [noteChanged, setNoteChanged] = useState(false);
   const [archiveStatus, setArchiveStatus] = useState<
-    "finished" | "in_progress" | "planned" | "dropped"
-  >("finished");
+    ArchiveRequest["status"]
+  >(editingArchiveEntry ? editingArchiveEntry.status : "finished");
 
   const [archiveErrors, setArchiveErrors] = useState<string[]>([]);
   const [archiveSaving, setArchiveSaving] = useState(false);
@@ -304,17 +269,21 @@ export function Add({
       setSelectedWork(editingArchiveEntry.work);
       setConsumed(editingArchiveEntry.consumed);
       const m = editingArchiveEntry.consumed.minutes_override;
-      setOverrideHours(m && m > 0 ? String(Math.round((m / 60) * 10) / 10) : "");
+      setOverrideHours(m !== undefined ? String(m / 60) : "");
       setWhen(editingArchiveEntry.when);
       setShowEndDate(Boolean(editingArchiveEntry.when.end_date));
       setRating(editingArchiveEntry.rating ?? null);
       setNote(editingArchiveEntry.note ?? "");
+      setRatingChanged(false);
+      setNoteChanged(false);
+      setArchiveStatus(editingArchiveEntry.status);
       setSavedBanner(null);
     } else if (initialWork) {
       setEntryId(undefined);
       setSelectedWork(initialWork);
       setConsumed(defaultConsumedForWork(initialWork));
       setOverrideHours("");
+      setArchiveStatus("finished");
       setSavedBanner(null);
     }
   }, [editingArchiveEntry, initialWork]);
@@ -375,39 +344,7 @@ export function Add({
       setOverrideHours("");
       setArchiveErrors([]);
     } catch {
-      // Fallback: if lookupWork fails or is offline, build a usable WorkDetails snapshot from the hit
-      const fallbackWork: WorkDetails = {
-        provider: hit.provider,
-        provider_id: hit.provider_id,
-        category: hit.category,
-        title: hit.title,
-        original_title: null,
-        year: hit.year,
-        cover_url: hit.cover_url,
-        creators: [],
-        genres: [],
-        description: hit.subtitle,
-        seasons:
-          hit.category === "anime" || hit.category === "series"
-            ? [
-                {
-                  number: 1,
-                  title: "Season 1",
-                  year: hit.year,
-                  episodes: 12,
-                  episode_minutes: 24,
-                  total_minutes: 288,
-                  provider_id: hit.provider_id,
-                },
-              ]
-            : [],
-        runtime_minutes: hit.category === "film" ? 120 : null,
-        pages: hit.category === "book" ? 300 : null,
-        external_ids: { [hit.provider]: hit.provider_id },
-      };
-      setSelectedWork(fallbackWork);
-      setConsumed(defaultConsumedForWork(fallbackWork));
-      setOverrideHours("");
+      setLookupError("Could not load full metadata. Retry or explicitly add a manual work instead.");
     } finally {
       setLoadingWorkId(null);
     }
@@ -432,9 +369,12 @@ export function Add({
   const effectiveConsumed = useMemo<ArchiveConsumed>(() => {
     const next: ArchiveConsumed = { ...consumed };
     const trimmedH = overrideHours.trim();
-    if (trimmedH !== "") {
+    const storedMinutes = editingArchiveEntry?.consumed.minutes_override;
+    if (storedMinutes !== undefined && trimmedH === String(storedMinutes / 60)) {
+      next.minutes_override = storedMinutes;
+    } else if (trimmedH !== "") {
       const h = Number(trimmedH);
-      if (Number.isFinite(h) && h > 0) {
+      if (Number.isFinite(h) && h >= 0) {
         next.minutes_override = Math.round(h * 60);
       } else {
         delete next.minutes_override;
@@ -443,7 +383,7 @@ export function Add({
       delete next.minutes_override;
     }
     return next;
-  }, [consumed, overrideHours]);
+  }, [consumed, overrideHours, editingArchiveEntry]);
 
   const timePreview = useMemo(() => {
     if (!selectedWork) return null;
@@ -514,12 +454,13 @@ export function Add({
     setArchiveErrors([]);
 
     const built = buildArchiveRequest({
+      previous: editingArchiveEntry ?? undefined,
       entry_id: entryId,
       work: selectedWork,
       consumed: effectiveConsumed,
       when: showEndDate ? when : { precision: when.precision, date: when.date },
-      rating,
-      note,
+      rating: ratingChanged ? rating : undefined,
+      note: noteChanged ? note : undefined,
       status: archiveStatus,
     });
 
@@ -542,6 +483,8 @@ export function Add({
       setSearchInput("");
       setRating(null);
       setNote("");
+      setRatingChanged(false);
+      setNoteChanged(false);
       onSavedArchive?.(result, built.request);
     } catch (err) {
       setArchiveErrors([err instanceof Error ? err.message : String(err)]);
@@ -1281,7 +1224,7 @@ export function Add({
                         { value: "planned", label: "Planned (Watchlist)" },
                         { value: "dropped", label: "Dropped" },
                       ]}
-                      value={archiveStatus}
+                      value={archiveStatus ?? "finished"}
                       onChange={(v) => setArchiveStatus(v)}
                     />
                   </div>
@@ -1725,7 +1668,7 @@ export function Add({
                   {selectedWork.category !== "music" && (
                     <RatingInput10
                       rating={rating}
-                      onChange={setRating}
+                      onChange={(value) => { setRating(value); setRatingChanged(true); }}
                       category={selectedWork.category}
                     />
                   )}
@@ -1739,9 +1682,10 @@ export function Add({
                       rows={2}
                       placeholder="Optional note or memory…"
                       value={note}
-                      onInput={(e) =>
-                        setNote((e.currentTarget as HTMLTextAreaElement).value)
-                      }
+                      onInput={(e) => {
+                        setNote((e.currentTarget as HTMLTextAreaElement).value);
+                        setNoteChanged(true);
+                      }}
                     />
                   </div>
                 </div>

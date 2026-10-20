@@ -6,6 +6,37 @@ This document records the root-cause investigation into inaccurate series runtim
 
 ## 1. Root Causes Found
 
+### 1.0 Archive consumption edits discarded linked metadata (W15)
+
+- **Root cause:** Library entry actions, work-page actions and the context menu reconstructed
+  `ManualWork` from display summaries/detail progress. Those shapes lack the stored provider,
+  external IDs and complete season catalogue. The reconstruction invented 12-episode/24-minute
+  seasons and dropped the cover. Saving replaced `raw.work`, changing an IMDb-based work key to
+  a title-based key and stranding covers and work overrides. Add's failed-lookup fallback also
+  invented a supposedly linked snapshot from a search hit.
+- **Rule:** consumption and metadata are separate. Editing loads `GET /api/archive/:entry_id`
+  (the actual stored `ArchiveRequest`), never builds metadata from a summary. Add seasons/log
+  again loads the library's `work_snapshot` (archive snapshot, metadata override or cached
+  provider details). With no snapshot, open lookup; never guess metadata or runtimes from totals.
+  Failed detail lookups remain errors rather than fabricating a linked work.
+- **Server safety net:** a manual submission for the same normalized title/category and entry
+  ID keeps the previous linked snapshot before validating consumption/calculating durations;
+  the response reports `kept_link: true`. The newest active snapshot wins over removed-unit
+  tombstones. Identical guarded re-saves still insert nothing; manual entries remain manual.
+- **Other paths:** quick edits only append work overrides; unrelated edits cannot unlink.
+  `WorkEdit.meta = null` explicitly unlinks display/log-again metadata (stored with an unlink
+  marker in the append-only override snapshot); canonical identity/history remain intact and
+  refresh does not silently relink. Resetting presentation overrides does not unlink; metadata
+  Undo captures the previous stored provider rather than using an implicit `meta: null`.
+  Offline relinking reuses archived/override snapshots; a failed Undo baseline never invents
+  an unlink. Stored snapshots take precedence over an incomplete cache, and revision order
+  (not consumption date) selects the newest snapshot. Untouched consumption fields and exact
+  time overrides round-trip even when another field changes.
+  Achriom re-import uses the existing linked snapshot even offline; changed CSV edition/runtime
+  values become consumption time overrides, not rewritten
+  provider seasons. Refresh retains known cover/IDs and missing season fields, recalculates
+  runtimes append-only, and never adds/removes watched seasons just because metadata changed.
+
 ### 1.1 TVmaze broadcast slot runtimes (`Vikings`: 89 h instead of ~65–66 h)
 - **What happened:** *Vikings* (TVmaze ID `29`, IMDb `tt2306299`, 6 seasons, 89 regular episodes) was imported with a total duration of `5340 min` (`89 h`). Real episodes are ~44–46 minutes without commercials (`~65–68 h`).
 - **Why `src/server/metadata/tvmaze.ts` got it wrong:**

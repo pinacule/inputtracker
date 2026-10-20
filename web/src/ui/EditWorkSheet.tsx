@@ -217,7 +217,6 @@ export function EditWorkSheet({
         title: null,
         category: null,
         status: null,
-        meta: null,
         topic: null,
       };
       const { detail, undo } = await performWorkEdit(work.key, resetEdit, {

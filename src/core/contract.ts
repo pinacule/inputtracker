@@ -133,6 +133,8 @@ export interface ArchiveResult {
   total_minutes: number;
   /** True when the time is an estimate (from runtimes/pages, not measured). */
   estimated: boolean;
+  /** A stale manual re-save was repaired using the entry's stored linked snapshot. */
+  kept_link?: true;
 }
 
 export interface ArchiveEntrySummary {
@@ -203,6 +205,8 @@ export interface LibraryResult {
 }
 
 export interface LibraryWorkDetail extends LibraryWork {
+  /** Stored snapshot for logging this work again; never reconstructed from display/progress fields. */
+  work_snapshot?: WorkDetails | ManualWork | null;
   /** Seasons with watched counts, when the work has seasons. */
   seasons: Array<SeasonInfo & { watched_episodes: number }>;
   /** Newest first; archive units and real sessions mixed. */
@@ -294,7 +298,8 @@ export interface SettingsView {
 
 /**
  * A partial edit of one library work, from the work page, the quick-edit menu or the quick rating.
- * Omitted fields stay as they are; `null` clears that override (back to the source's value).
+ * Omitted fields stay as they are; `null` clears that override (back to the source's value),
+ * except `meta: null`, which explicitly unlinks metadata without rewriting source history.
  * Stored append-only (a new row per edit); works from every source can be edited, including
  * Audiobookshelf/YouTube/Simkl ones (their source rows are never changed).
  * Response: the updated LibraryWorkDetail.
@@ -308,7 +313,7 @@ export interface WorkEdit {
   note?: string | null;
   /** Hidden works disappear from every view, total and chart; Settings lists them to unhide. */
   hidden?: boolean;
-  /** Link the work to a metadata entry (better cover, seasons, runtime). */
+  /** Link the work to metadata; null explicitly unlinks (canonical identity/history stay intact). */
   meta?: { provider: MetaProvider; provider_id: string } | null;
   /** YouTube works: the topic of this video (channel topics are set with /api/youtube/channel-topic). */
   topic?: string | null;

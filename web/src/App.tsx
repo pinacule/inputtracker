@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import type {
-  ArchiveConsumed,
-  ArchiveWhen,
-  Category,
-  ManualWork,
-} from "./api";
+import { loadArchiveContext, type OpenArchiveOptions } from "./lib/archive-form";
 import { getDefaultStore, subscribeQueue } from "./lib/offline-queue";
 import {
   APP_ROUTES,
@@ -21,6 +16,7 @@ import {
 } from "./lib/theme";
 import {
   dismissToast,
+  pushToast,
   subscribeToasts,
   type AppToast,
 } from "./lib/work-edits";
@@ -81,19 +77,8 @@ function OfflineBanner() {
   );
 }
 
-interface AddSheetContext {
+interface AddSheetContext extends OpenArchiveOptions {
   open: boolean;
-  date?: string;
-  category?: Category;
-  work?: ManualWork | null;
-  editingEntry?: {
-    entry_id: string;
-    work: ManualWork;
-    consumed: ArchiveConsumed;
-    when: ArchiveWhen;
-    rating?: number | null;
-    note?: string | null;
-  } | null;
 }
 
 export function App() {
@@ -200,12 +185,20 @@ export function App() {
     }
   };
 
-  const handleOpenAdd = (opts?: {
-    date?: string;
-    category?: Category;
-    work?: ManualWork;
-    editingEntry?: AddSheetContext["editingEntry"];
-  }) => {
+  const addLoadSeq = useRef(0);
+  const handleOpenAdd = (opts?: OpenArchiveOptions) => {
+    const seq = ++addLoadSeq.current;
+    if (opts?.entryId || opts?.workKey) {
+      void loadArchiveContext(opts).then((loaded) => {
+        if (seq === addLoadSeq.current) setAddSheet({ ...loaded, open: true });
+      }).catch((err: unknown) => {
+        if (seq === addLoadSeq.current) pushToast({
+          message: err instanceof Error ? err.message : "Could not load the stored archive entry.",
+          variant: "danger",
+        });
+      });
+      return;
+    }
     if (
       typeof window !== "undefined" &&
       window.innerWidth >= 768 &&
@@ -215,6 +208,7 @@ export function App() {
         open: true,
         date: opts?.date,
         category: opts?.category,
+        query: opts?.query,
         work: opts?.work ?? null,
         editingEntry: opts?.editingEntry ?? null,
       });
@@ -225,6 +219,7 @@ export function App() {
         open: true,
         date: opts?.date,
         category: opts?.category,
+        query: opts?.query,
         work: opts?.work ?? null,
         editingEntry: opts?.editingEntry ?? null,
       });
@@ -233,6 +228,7 @@ export function App() {
     const params = new URLSearchParams();
     if (opts?.date) params.set("date", opts.date);
     if (opts?.category) params.set("category", opts.category);
+    if (opts?.query) params.set("q", opts.query);
     const qs = params.toString();
     window.location.hash = qs ? `#/add?${qs}` : "#/add";
   };
@@ -513,6 +509,7 @@ export function App() {
           initialDate={addSheet.date}
           initialWork={addSheet.work}
           editingArchiveEntry={addSheet.editingEntry}
+          initialQuery={addSheet.query}
           onSavedArchive={() => {
             setAddSheet({ open: false });
           }}

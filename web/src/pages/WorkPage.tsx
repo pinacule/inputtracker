@@ -3,14 +3,11 @@ import {
   deleteArchiveEntry,
   getLibraryWork,
   refreshWorkMetadata,
-  type ArchiveConsumed,
   type ArchiveEntrySummary,
-  type ArchiveWhen,
-  type Category,
   type LibraryWorkDetail,
-  type ManualWork,
   type WorkStatus,
 } from "../api";
+import type { OpenArchiveOptions } from "../lib/archive-form";
 import {
   CATEGORY_META,
   categoryLabel,
@@ -49,18 +46,7 @@ export interface WorkPageProps {
   workKey: string;
   backHref: string;
   archiveEntries?: readonly ArchiveEntrySummary[];
-  onOpenAdd?: (opts?: {
-    category?: Category;
-    work?: ManualWork;
-    editingEntry?: {
-      entry_id: string;
-      work: ManualWork;
-      consumed: ArchiveConsumed;
-      when: ArchiveWhen;
-      rating?: number | null;
-      note?: string | null;
-    };
-  }) => void;
+  onOpenAdd?: (opts?: OpenArchiveOptions) => void;
   onOpenEditWork?: (work: EditableWorkTarget) => void;
   onChanged?: () => void;
 }
@@ -93,56 +79,9 @@ export function statusBadgeVariant(
   }
 }
 
-export function buildManualWorkFromDetail(detail: LibraryWorkDetail): ManualWork {
-  return {
-    provider: "manual",
-    category: detail.category,
-    title: detail.title,
-    year: detail.seasons[0]?.year ?? null,
-    creators: detail.creator ? [detail.creator] : [],
-    seasons:
-      detail.seasons.length > 0
-        ? detail.seasons.map((s) => ({
-            number: s.number,
-            title: `Season ${s.number}`,
-            year: s.year,
-            episodes: s.episodes,
-            episode_minutes: s.episode_minutes,
-            total_minutes: s.total_minutes,
-            provider_id: s.provider_id,
-          }))
-        : detail.category === "anime" || detail.category === "series"
-          ? [
-              {
-                number: 1,
-                title: "Season 1",
-                year: null,
-                episodes:
-                  detail.progress?.episodes_total &&
-                  detail.progress.episodes_total > 0
-                    ? detail.progress.episodes_total
-                    : 12,
-                episode_minutes: 24,
-                total_minutes: 12 * 24,
-                provider_id: null,
-              },
-            ]
-          : [],
-    runtime_minutes:
-      detail.category === "film"
-        ? Math.max(
-            90,
-            Math.round(detail.total_minutes / Math.max(1, detail.units))
-          )
-        : null,
-    pages: null,
-  };
-}
-
 export function WorkPage({
   workKey,
   backHref,
-  archiveEntries = [],
   onOpenAdd,
   onOpenEditWork,
   onChanged,
@@ -498,12 +437,10 @@ export function WorkPage({
                       size="sm"
                       leadingIcon={<AddIcon size={15} />}
                       onClick={() => {
-                        const manualWork =
-                          buildManualWorkFromDetail(effectiveWorkDetail);
                         if (onOpenAdd) {
                           onOpenAdd({
                             category: effectiveWorkDetail.category,
-                            work: manualWork,
+                            workKey: effectiveWorkDetail.key,
                           });
                         } else {
                           window.location.hash = `#/add?category=${
@@ -553,9 +490,6 @@ export function WorkPage({
                   {workArchiveEntryIds.length > 0 && (
                     <div class="work-actions-group work-actions-group--archive">
                       {workArchiveEntryIds.map((entryId, idx) => {
-                        const summary = archiveEntries.find(
-                          (e) => e.entry_id === entryId
-                        );
                         const isConfirming = confirmDeleteEntryId === entryId;
                         const suffix =
                           workArchiveEntryIds.length > 1
@@ -568,38 +502,9 @@ export function WorkPage({
                               size="sm"
                               leadingIcon={<EditIcon size={14} />}
                               onClick={() => {
-                                const manualWork =
-                                  buildManualWorkFromDetail(
-                                    effectiveWorkDetail
-                                  );
                                 onOpenAdd?.({
                                   category: effectiveWorkDetail.category,
-                                  editingEntry: {
-                                    entry_id: entryId,
-                                    work: manualWork,
-                                    consumed: summary?.consumed ?? {
-                                      seasons: effectiveWorkDetail.seasons
-                                        .filter((s) => s.watched_episodes > 0)
-                                        .map((s) =>
-                                          s.watched_episodes < s.episodes
-                                            ? {
-                                                number: s.number,
-                                                episodes: s.watched_episodes,
-                                              }
-                                            : { number: s.number }
-                                        ),
-                                      times: Math.max(
-                                        1,
-                                        effectiveWorkDetail.units
-                                      ),
-                                      progress: 1,
-                                    },
-                                    when: summary?.when ?? {
-                                      precision: "unknown",
-                                    },
-                                    rating: effectiveWorkDetail.rating,
-                                    note: effectiveWorkDetail.note,
-                                  },
+                                  entryId,
                                 });
                               }}
                             >

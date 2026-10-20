@@ -55,6 +55,7 @@ import {
   matchesCategoryFilter,
   parseCategoryFilter,
 } from "./overrides.ts";
+import { normalizeForSearch } from "./search.ts";
 
 export const ARCHIVE_SOURCE = "manual";
 export const ARCHIVE_SOURCE_KIND = "archive";
@@ -943,6 +944,21 @@ export interface SaveArchiveOptions {
   nowIso?: string;
 }
 
+/** Same-work manual submissions from stale clients/imports must not discard a metadata link. */
+function keepArchiveWorkLink(
+  incoming: WorkDetails | ManualWork,
+  previous: WorkDetails | ManualWork | null
+): WorkDetails | ManualWork {
+  if (
+    incoming.provider === "manual" && previous && previous.provider !== "manual" &&
+    incoming.category === previous.category &&
+    normalizeForSearch(incoming.title) === normalizeForSearch(previous.title)
+  ) {
+    return previous;
+  }
+  return incoming;
+}
+
 /**
  * Validate and store an archive entry (create, edit, or idempotent re-send).
  */
@@ -963,8 +979,7 @@ export function saveArchiveEntry(
   const entryId = entryIdRaw.toLowerCase();
 
   const status = validateArchiveStatus(input.status);
-  const work = validateWork(input.work);
-  const consumed = validateConsumed(input.consumed, work, status);
+  let work = validateWork(input.work);
   const when = validateWhen(input.when);
 
   let rating: number | null | undefined = undefined;
@@ -1008,6 +1023,18 @@ export function saveArchiveEntry(
   for (const row of existingLatestRows) {
     existingBySourceId.set(row.source_id, row);
   }
+
+  // Use the newest active snapshot, not a removed season's older tombstone. If the entry was
+  // deleted entirely, its newest tombstone still carries the snapshot needed to restore it.
+  const previousRow = [...existingLatestRows].reverse().find(
+    (row) => parseJsonObject(row.raw)?.["deleted"] !== true
+  ) ?? existingLatestRows[existingLatestRows.length - 1];
+  const previousWorkRaw = previousRow ? parseJsonObject(previousRow.raw)?.["work"] : null;
+  const previousWork = previousWorkRaw ? validateWork(previousWorkRaw) : null;
+  const guardedWork = keepArchiveWorkLink(work, previousWork);
+  const keptLink = guardedWork !== work;
+  work = guardedWork;
+  const consumed = validateConsumed(input.consumed, work, status);
 
   // For `unknown` precision, preserve the creation timestamp when re-sending/editing.
   let unknownCreatedIso = nowIso;
@@ -1230,6 +1257,33 @@ export function saveArchiveEntry(
     units: builtUnits.length,
     total_minutes: totalMinutes,
     estimated,
+    ...(keptLink ? { kept_link: true as const } : {}),
+  };
+}
+
+/** Read the authoritative active entry for editing; list summaries are deliberately lossy. */
+export function getArchiveEntry(db: Database, entryIdRaw: string): ArchiveRequest {
+  if (!UUID_RE.test(entryIdRaw)) {
+    throw new ArchiveValidationError("Invalid entry_id: expected a UUID");
+  }
+  const entryId = entryIdRaw.toLowerCase();
+  const row = db.query<EventRow, [string]>(
+    `SELECT * FROM events_latest WHERE source = 'manual' AND source_kind = 'archive'
+     AND source_id LIKE ? ORDER BY id DESC LIMIT 1;`
+  ).get(`archive:${entryId}:%`);
+  if (!row) throw new ArchiveNotFoundError(entryId);
+  const raw = parseJsonObject(row.raw);
+  const work = validateWork(raw?.["work"]);
+  const status = validateArchiveStatus(raw?.["status"]);
+  const annotation = getAnnotation(db, ARCHIVE_SOURCE, work.title);
+  return {
+    entry_id: entryId,
+    work,
+    consumed: validateConsumed(raw?.["consumed"], work, status),
+    when: validateWhen(raw?.["when"]),
+    ...(status !== undefined ? { status } : {}),
+    rating: annotation.rating,
+    note: annotation.note,
   };
 }
 

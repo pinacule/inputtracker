@@ -89,6 +89,10 @@ lookups are fast and gentle on the providers. Tests mock `fetch`; never hit the 
   nothing else needs to know about deletes. The history rows stay in `events` forever.
 - `rating`/`note` go to the existing annotations table (append-only), keyed like the library work.
 - `GET /api/archive?category=` → `ArchiveEntrySummary[]` (newest first) to list and edit entries.
+- `GET /api/archive/:entry_id` → `ArchiveRequest`: the stored snapshot, consumption, dates, status,
+  rating and note for editing. Summaries are display-only, not enough to reconstruct an entry.
+- A manual re-save of a linked entry with the same normalized title/category keeps the stored
+  linked snapshot and returns `ArchiveResult.kept_link: true`. Consumption edits never unlink.
 
 ## 3. Library (backend task B2)
 
@@ -101,6 +105,8 @@ lookups are fast and gentle on the providers. Tests mock `fetch`; never hit the 
 - `status`: finished when progress ≥ 0.95, every season fully watched, or an archive entry with
   progress 1 / whole seasons; in_progress when started and not finished; else unknown.
 - `GET /api/library/work?key=` → `LibraryWorkDetail`.
+  Its optional `work_snapshot` contains stored archive/override/cached metadata for logging again;
+  when absent/null the UI must look up the work, not invent seasons or runtimes from display totals.
 - Totals use the deduped events (`dedupeConsumption`), so a play seen by two sources counts once.
 
 ## 4. Reviews and charts (backend task B2)
@@ -161,7 +167,7 @@ are safe to repeat.
 ## 8. Editing any work (backend task W04)
 
 - `POST /api/library/work/edit?key=<key>` with a `WorkEdit` body; returns `LibraryWorkDetail`.
-  Partial: omitted fields unchanged, `null` clears the override. Works from every source
+  Partial: omitted fields unchanged, `null` clears the override (except `meta: null`, explicit unlink). Works from every source
   (Audiobookshelf, YouTube, Simkl, archive, Achriom import) can be edited. Overrides live in their
   own append-only table (migration v6); the latest row per work key wins. Source rows never change.
 - Overrides apply on every read: library, calendar/day, search, insights/series, reviews, totals.
@@ -169,7 +175,8 @@ are safe to repeat.
   everywhere. `hidden: true` removes the work from every view and total; `GET /api/library/hidden`
   lists hidden works so Settings can unhide them. `status` override (incl. `planned`) shows in the
   library. `meta` links the work to a metadata entry (cover via `/api/meta-cover/...`; seasons and
-  runtime for the work page).
+  runtime for the work page). Explicit `meta: null` unlinks metadata for display/logging again;
+  the stored archive snapshot and canonical identity remain intact. Other partial edits do not unlink.
 - **Work keys must be stable** across reads and syncs (they key the overrides). Derive them from a
   canonical identity (metadata provider+id, external ids, else normalised category+title), never
   from list order (the current `#2` suffixes). Old keys that differ: no migration needed (no edits

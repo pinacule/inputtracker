@@ -1,4 +1,4 @@
-import type { Category, ManualWork } from "../../api";
+import type { OpenArchiveOptions } from "../../lib/archive-form";
 import { categoryPluralLabel } from "../../lib/categories";
 import type { ContextMenuTarget } from "../../lib/context-menu";
 import type { HomeInProgressWork } from "../../lib/home";
@@ -11,11 +11,7 @@ import { HomeWorkThumb } from "./HomeWorkThumb";
 export interface InProgressShelfProps {
   readonly works: readonly HomeInProgressWork[];
   readonly selectedDate: string;
-  readonly onOpenAdd?: (prefill?: {
-    date?: string;
-    category?: Category;
-    work?: ManualWork;
-  }) => void;
+  readonly onOpenAdd?: (prefill?: OpenArchiveOptions) => void;
 }
 
 /**
@@ -154,7 +150,7 @@ export function InProgressShelf({
                         onOpenAdd({
                           date: selectedDate,
                           category: w.category,
-                          work: w.manualWorkPrefill,
+                          workKey: w.key,
                         });
                       }}
                     >

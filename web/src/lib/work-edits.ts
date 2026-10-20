@@ -9,6 +9,7 @@
 
 import {
   editWork,
+  getLibraryWork,
   getHiddenWorks,
   saveAnnotation,
   setChannelTopic,
@@ -218,7 +219,21 @@ export async function performWorkEdit(
         : (context?.topic ?? null);
   }
   if ("meta" in edit) {
-    reverseEdit.meta = prevOverride?.meta ?? null;
+    if (prevOverride?.meta !== undefined) {
+      reverseEdit.meta = prevOverride.meta;
+    } else {
+      // null is now an explicit unlink, not "undo to the archive's original link".
+      // Capture the actual stored provider before a link/unlink so Undo cannot drop it.
+      const previousDetail = await getLibraryWork(workKey).catch(() => null);
+      const snapshot = previousDetail?.work_snapshot;
+      if (snapshot) {
+        reverseEdit.meta = snapshot.provider !== "manual"
+          ? { provider: snapshot.provider, provider_id: snapshot.provider_id }
+          : null;
+      }
+      // A missing/failed detail response cannot establish that the work was manual.
+      // Do not invent an unlink for Undo when the previous link is unknown.
+    }
   }
 
   const nextOverride: StoredWorkOverride = {

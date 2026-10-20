@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type {
-  ArchiveConsumed,
-  ArchiveWhen,
   Category,
   LibraryWork,
-  ManualWork,
 } from "../api";
+import type { OpenArchiveOptions } from "../lib/archive-form";
 import { toggleCategoryChip } from "../lib/category-filter";
 import {
   buildArchiveEntryLookup,
@@ -59,19 +57,7 @@ export interface CalendarProps {
   initialCategory?: Category;
   initialCategories?: readonly Category[];
   includeYoutubeInAll?: boolean;
-  onOpenAdd?: (prefill?: {
-    date?: string;
-    category?: Category;
-    work?: ManualWork;
-    editingEntry?: {
-      entry_id: string;
-      work: ManualWork;
-      consumed: ArchiveConsumed;
-      when: ArchiveWhen;
-      rating?: number | null;
-      note?: string | null;
-    };
-  }) => void;
+  onOpenAdd?: (prefill?: OpenArchiveOptions) => void;
   onOpenEditWork?: (work: LibraryWork) => void;
 }
 

@@ -5,20 +5,18 @@ import {
   getYoutubeOverview,
   getYoutubeVideos,
   listArchive,
-  type ArchiveConsumed,
   type ArchiveEntrySummary,
-  type ArchiveWhen,
   type Category,
   type LibraryResult,
   type LibrarySort,
   type LibraryWork,
-  type ManualWork,
   type WorkStatus,
   type YoutubeOverview,
   type YoutubeVideo,
   type YoutubeVideoSort,
 } from "../api";
 import { formatArchiveWhen } from "../lib/archive-form";
+import type { OpenArchiveOptions } from "../lib/archive-form";
 import {
   CATEGORY_META,
   categoryLabel,
@@ -72,7 +70,6 @@ import {
   type EditableWorkTarget,
   type TabOption,
 } from "../ui";
-import { workFromArchiveSummary } from "./Add";
 import { WorkPage, formatWorkStatusLabel } from "./WorkPage";
 
 export interface LibraryProps {
@@ -86,18 +83,7 @@ export interface LibraryProps {
   workKey?: string;
   /** @deprecated Kept for callers that still pass it; Library "All" always excludes YouTube and Music. */
   includeYoutubeInAll?: boolean;
-  onOpenAdd?: (opts?: {
-    category?: Category;
-    work?: ManualWork;
-    editingEntry?: {
-      entry_id: string;
-      work: ManualWork;
-      consumed: ArchiveConsumed;
-      when: ArchiveWhen;
-      rating?: number | null;
-      note?: string | null;
-    };
-  }) => void;
+  onOpenAdd?: (opts?: OpenArchiveOptions) => void;
   onOpenEditWork?: (work: EditableWorkTarget) => void;
 }
 
@@ -1494,15 +1480,9 @@ export function Library({
                           size="sm"
                           leadingIcon={<EditIcon size={14} />}
                           onClick={() => {
-                            const manualWork = workFromArchiveSummary(entry);
                             onOpenAdd?.({
                               category: entry.category,
-                              editingEntry: {
-                                entry_id: entry.entry_id,
-                                work: manualWork,
-                                consumed: entry.consumed,
-                                when: entry.when,
-                              },
+                              entryId: entry.entry_id,
                             });
                           }}
                         >

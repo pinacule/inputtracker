@@ -319,6 +319,7 @@ export function coverUrlFor(event: {
   external_ids?: unknown;
 }): string | null {
   const topIds = parseExternalIds(event.external_ids);
+  if (topIds?.["meta_unlinked"] === "1") return null;
   if (topIds?.["meta_override"] === "1") {
     const metaProvider = topIds["meta_provider"];
     const metaId = topIds["meta_id"];

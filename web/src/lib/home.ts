@@ -24,7 +24,6 @@ import type {
   Category,
   CategoryTotal,
   LibraryWork,
-  ManualWork,
   ProgressItem,
   WorkStatus,
 } from "../api";
@@ -1816,7 +1815,6 @@ export interface HomeInProgressWork {
   readonly rating: number | null;
   readonly canRate: boolean;
   readonly lastAt: string | null;
-  readonly manualWorkPrefill: ManualWork;
 }
 
 /**
@@ -1928,32 +1926,6 @@ export function buildInProgressShelf(
   return inProgress.map((w) => {
     const frac = progressByTitle.get(w.title.trim().toLowerCase()) ?? null;
     const { label, percent } = formatHomeWorkProgress(w, frac);
-    const nextSeasonNum = (w.progress?.seasons_watched ?? 0) + 1;
-
-    const manualWorkPrefill: ManualWork = {
-      provider: "manual",
-      category: w.category,
-      title: w.title,
-      year: null,
-      creators: w.creator ? [w.creator] : [],
-      seasons:
-        w.category === "anime" || w.category === "series"
-          ? [
-              {
-                number: nextSeasonNum,
-                title: `Season ${nextSeasonNum}`,
-                year: null,
-                episodes: 12,
-                episode_minutes: 24,
-                total_minutes: 288,
-                provider_id: null,
-              },
-            ]
-          : [],
-      runtime_minutes: w.category === "film" ? 120 : null,
-      pages: w.category === "book" ? 300 : null,
-    };
-
     return {
       key: w.key,
       title: w.title,
@@ -1970,7 +1942,6 @@ export function buildInProgressShelf(
       rating: getWorkRatingOverride(w.key, w.rating),
       canRate: isRateableCategory(w.category),
       lastAt: w.last_at,
-      manualWorkPrefill,
     };
   });
 }
