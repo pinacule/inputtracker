@@ -129,6 +129,12 @@ export function getSeries(
   const filter = parseCategoryFilter(opts.category, opts.exclude);
   const events = getDisplayConsumptionEvents(db, undefined, tz);
 
+  const historyStart = events.reduce<string | null>((first, ev) => {
+    if (eventPrecision(ev) !== "day") return first;
+    const date = formatLocalParts(ev.started_at, tz).date;
+    return first === null || date < first ? date : first;
+  }, null);
+
   const bucketKeys =
     bucket === "day"
       ? enumerateDayBuckets(from, to)
@@ -200,6 +206,7 @@ export function getSeries(
     bucket,
     from,
     to,
+    history_start: historyStart,
     points,
   };
 }

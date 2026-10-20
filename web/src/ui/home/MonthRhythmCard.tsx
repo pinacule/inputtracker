@@ -45,6 +45,7 @@ export function MonthRhythmCard({
       class="home-card home-rhythm-card"
       aria-label={`${model.heading} overview graph`}
     >
+      <h2 class="home-section-title">{model.heading}</h2>
       {/* Top summary row */}
       <div class="home-rhythm-header">
         <div class="home-rhythm-summary">
@@ -72,6 +73,10 @@ export function MonthRhythmCard({
           </div>
         )}
       </div>
+
+      {(model.undatedMinutes ?? 0) > 0 && (
+        <p class="home-week-sub">Includes {formatMinutes(model.undatedMinutes!)} known only to this month, not shown in daily bars.</p>
+      )}
 
       {model.categoryShares.length > 0 && (
         <>

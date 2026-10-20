@@ -366,6 +366,7 @@ export function formatWorkCardMeta(work: {
   status?: string;
   units: number;
   total_minutes: number;
+  consumption_progress?: number | null;
   progress?: WorkProgressLike | null;
   seasons?: ReadonlyArray<{ episodes: number; watched_episodes?: number }>;
 }): string {
@@ -377,6 +378,10 @@ export function formatWorkCardMeta(work: {
 
   const timeLabel =
     work.total_minutes > 0 ? formatMinutes(work.total_minutes) : null;
+  if ((work.category === "book" || work.category === "audiobook") && work.consumption_progress != null) {
+    const percent = `${Math.round(work.consumption_progress * 100)}%`;
+    return [percent, timeLabel, unitLabel].filter(Boolean).join(" · ");
+  }
 
   if (timeLabel && unitLabel) {
     return `${timeLabel} · ${unitLabel}`;

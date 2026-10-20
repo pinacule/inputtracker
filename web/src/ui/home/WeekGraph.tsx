@@ -2,17 +2,21 @@ import {
   categoryCssColor,
   categoryPluralLabel,
 } from "../../lib/categories";
-import { formatCleanDayHeading, type WeekGraphModel } from "../../lib/home";
+import { formatCleanDayHeading } from "../../lib/home";
+import type { RollingGraphModel } from "../../lib/home-norm";
 import { formatMinutes } from "../../lib/stats";
+import { IconButton } from "../IconButton";
+import { ChevronLeftIcon, ChevronRightIcon } from "../icons";
 
 export interface WeekGraphProps {
-  readonly model: WeekGraphModel;
+  readonly model: RollingGraphModel;
   readonly todayStr: string;
   readonly onSelectDate: (date: string) => void;
+  readonly onStepWindow: (delta: number) => void;
 }
 
 /**
- * 7-day interactive stacked category bar graph for the selected week (Mon–Sun).
+ * Rolling seven-day pills, with weekday median markers on the same minute scale.
  * Answers "What did I do today and this week?" at a glance on phone and desktop,
  * and acts as a fast 7-day thumb switcher.
  */
@@ -20,6 +24,7 @@ export function WeekGraph({
   model,
   todayStr,
   onSelectDate,
+  onStepWindow,
 }: WeekGraphProps) {
   return (
     <section
@@ -29,28 +34,15 @@ export function WeekGraph({
       <div class="home-week-header">
         <div class="home-week-titles">
           <h2 class="home-section-title">{model.heading}</h2>
-          <span class="home-week-sub tabular-nums">
-            {model.activeDays === 0
-              ? "No activity yet"
-              : `${model.activeDays} ${
-                  model.activeDays === 1 ? "day" : "days"
-                } active`}
-          </span>
         </div>
 
-        <div class="home-week-totals tabular-nums">
-          {model.isCurrentWeek && (
-            <span class="home-week-pill home-week-pill--today">
-              <span class="home-week-pill-label">Today</span>
-              <strong>{formatMinutes(model.todayMinutes)}</strong>
-            </span>
-          )}
-          <span class="home-week-pill">
-            <span class="home-week-pill-label">
-              {model.isCurrentWeek ? "Week" : "Total"}
-            </span>
-            <strong>{formatMinutes(model.weekMinutes)}</strong>
-          </span>
+        <div class="home-week-totals">
+          <IconButton label="Previous 7 days" variant="ghost" size="sm" onClick={() => onStepWindow(-1)}>
+            <ChevronLeftIcon size={17} />
+          </IconButton>
+          <IconButton label="Next 7 days" variant="ghost" size="sm" disabled={model.endDate >= todayStr} onClick={() => onStepWindow(1)}>
+            <ChevronRightIcon size={17} />
+          </IconButton>
         </div>
       </div>
 
@@ -58,7 +50,7 @@ export function WeekGraph({
       <div
         class="home-week-bars"
         role="group"
-        aria-label="Days of the week"
+        aria-label="Seven days, oldest to newest"
       >
         {model.days.map((day) => {
           const plainDate = formatCleanDayHeading(day.date, todayStr);
@@ -85,7 +77,7 @@ export function WeekGraph({
               class={classes}
               aria-pressed={day.isSelected}
               aria-current={day.isToday ? "date" : undefined}
-              aria-label={ariaSummary}
+              aria-label={`${ariaSummary}; usual ${formatMinutes(model.norms.get(day.date) ?? 0)}`}
               onClick={() => onSelectDate(day.date)}
             >
               <span
@@ -108,7 +100,8 @@ export function WeekGraph({
                         key={seg.category}
                         class="home-week-bar-seg"
                         style={{
-                          flexGrow: Math.max(1, seg.sharePct),
+                          flexGrow: seg.sharePct,
+                          flexBasis: 0,
                           backgroundColor: categoryCssColor(seg.category),
                         }}
                         title={`${categoryPluralLabel(seg.category)}: ${formatMinutes(
@@ -120,11 +113,11 @@ export function WeekGraph({
                 ) : (
                   <span class="home-week-bar-Baseline" />
                 )}
+                <span class="home-week-norm-marker" style={{ bottom: `${(model.normRatios.get(day.date) ?? 0) * 100}%` }} />
               </span>
 
               <span class="home-week-day-footer" aria-hidden="true">
                 <span class="home-week-day-name">{day.weekdayShort}</span>
-                <span class="home-week-day-letter">{day.weekdayLetter}</span>
                 <span
                   class={
                     day.isToday
@@ -138,6 +131,11 @@ export function WeekGraph({
             </button>
           );
         })}
+      </div>
+      <div class="home-week-comparisons tabular-nums" aria-live="polite">
+        <p>{model.daySentence}</p>
+        <p>{model.windowSentence}</p>
+        <span class="home-week-sub">Faint line: your usual amount · weekday median over 8 weeks, or 30-day median with little history</span>
       </div>
     </section>
   );

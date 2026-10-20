@@ -30,6 +30,7 @@ export interface DayDetailPanelProps {
   readonly model: HomeDayDetailModel;
   readonly singleCategory?: Category;
   readonly onSelectDate: (date: string) => void;
+  readonly todayStr?: string;
   readonly onOpenAdd?: (prefill?: { date?: string; category?: Category }) => void;
 }
 
@@ -188,12 +189,13 @@ function DayWorkItemRow({ row }: { row: HomeDayWorkRow }) {
  * - Proportional category share bar for the day.
  * - Work-grouped items with real covers only where they exist.
  * - YouTube plays collapsed into one calm expandable line ("12 videos · 48m").
- * - Music plays without ratings (and collapsed when > 2 tracks on the day).
+ * - Music plays without ratings, always collapsed into one expandable line.
  */
 export function DayDetailPanel({
   model,
   singleCategory,
   onSelectDate,
+  todayStr,
   onOpenAdd,
 }: DayDetailPanelProps) {
   const [ytExpanded, setYtExpanded] = useState(false);
@@ -227,6 +229,7 @@ export function DayDetailPanel({
             </IconButton>
             <IconButton
               label="Next day"
+              disabled={todayStr !== undefined && nextDate > todayStr}
               variant="ghost"
               size="sm"
               onClick={() => onSelectDate(nextDate)}
@@ -328,8 +331,8 @@ export function DayDetailPanel({
         <ul class="home-day-list">
           {model.shortformMinutes > 0 && (
             <li class="home-day-row home-day-row--shortform">
-              <span class="ui-tab-dot ui-tab-dot--shortform" aria-hidden="true" />
-              <span>Short-form · {Math.round(model.shortformMinutes)} min</span>
+               <HomeWorkThumb coverUrl={null} category="shortform" size="sm" />
+               <span class="home-day-row-title">Short-form · {Math.round(model.shortformMinutes)} min</span>
             </li>
           )}
           {/* 1. Long-form / Story Works */}
@@ -337,16 +340,8 @@ export function DayDetailPanel({
             <DayWorkItemRow key={row.key} row={row} />
           ))}
 
-          {/* 2. Music (Direct rows when 1–2 tracks, or collapsible line when > 2) */}
-          {model.music && !model.music.collapsedByDefault && (
-            <>
-              {model.music.tracks.map((track) => (
-                <MusicTrackRow key={track.workKey} track={track} />
-              ))}
-            </>
-          )}
-
-          {model.music && model.music.collapsedByDefault && (
+          {/* Music always folds into one line, just like YouTube. */}
+          {model.music && (
             <li class="home-day-collapse-item">
               <button
                 type="button"

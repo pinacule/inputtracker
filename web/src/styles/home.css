@@ -128,8 +128,8 @@
 
 @media (min-width: 1024px) {
   .home-workspace {
-    grid-template-columns: minmax(0, 1.58fr) minmax(350px, 430px);
-    grid-template-areas: "stage inspector";
+    grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr);
+    grid-template-areas: "inspector stage";
     gap: var(--space-6);
   }
 
@@ -140,8 +140,6 @@
 
   .home-inspector-col {
     grid-area: inspector;
-    position: sticky;
-    top: var(--space-6);
     gap: var(--space-4);
   }
 }
@@ -264,8 +262,9 @@
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  padding: 6px 3px;
-  border-radius: var(--radius-md);
+  padding: 10px 2px;
+  border-radius: var(--radius-full);
+  min-width: 0;
   background-color: var(--bg-subtle);
   border: 1px solid transparent;
   transition:
@@ -301,9 +300,10 @@
 }
 
 .home-week-bar-well {
+  position: relative;
   width: 100%;
-  max-width: 24px;
-  height: 56px;
+  max-width: 28px;
+  height: 96px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -312,18 +312,18 @@
 
 .home-week-bar-stack {
   width: 100%;
-  min-height: 6px;
+  min-height: 0;
   border-radius: 4px 4px 2px 2px;
   overflow: hidden;
   display: flex;
   flex-direction: column-reverse;
-  gap: 1px;
+  gap: 0;
   transition: height var(--duration-normal) var(--ease-out);
 }
 
 .home-week-bar-seg {
   width: 100%;
-  min-height: 2px;
+  min-height: 0;
   display: block;
 }
 
@@ -335,6 +335,40 @@
   opacity: 0.6;
 }
 
+.home-week-norm-marker {
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  height: 1px;
+  background-color: var(--text-secondary);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.home-week-comparisons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+/* Opacity keeps the controls keyboard reachable and prevents layout jumps.
+   Touch users also have the existing long-press / visible More menu. */
+.home-day-row .ui-quick-rate-anchor,
+.home-yt-video-row .ui-quick-rate-anchor {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.home-day-row:hover .ui-quick-rate-anchor,
+.home-day-row:focus-within .ui-quick-rate-anchor,
+.home-yt-video-row:hover .ui-quick-rate-anchor,
+.home-yt-video-row:focus-within .ui-quick-rate-anchor {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .home-week-day-footer {
   display: flex;
   flex-direction: column;
@@ -343,7 +377,7 @@
 }
 
 .home-week-day-name {
-  display: none;
+  display: block;
   font-size: 0.68rem;
   color: var(--text-muted);
 }
@@ -691,6 +725,11 @@
   background-color: var(--cat-music-bg);
   color: var(--cat-music-fg);
   border-color: var(--cat-music-border);
+}
+.home-cat-badge--shortform {
+  background-color: var(--cat-shortform-bg);
+  color: var(--cat-shortform-fg);
+  border-color: var(--cat-shortform-border);
 }
 .home-cat-badge--other {
   background-color: var(--cat-other-bg);

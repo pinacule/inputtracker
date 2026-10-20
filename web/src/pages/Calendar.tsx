@@ -1,28 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 import type {
   Category,
   LibraryWork,
 } from "../api";
 import type { OpenArchiveOptions } from "../lib/archive-form";
 import { toggleCategoryChip } from "../lib/category-filter";
+import { categoryPluralLabel } from "../lib/categories";
+import { formatMinutes } from "../lib/stats";
 import {
   buildArchiveEntryLookup,
   buildHomeCategoryChipTotals,
   buildHomeDayDetailModel,
   buildHomeHash,
-  buildInProgressShelf,
   buildLibraryWorkLookup,
   buildMonthModels,
-  buildWeekGraphModel,
   filterAndEnrichCalendarDays,
-  formatMonthHeading,
   getTodayLocalDate,
   isValidDateStr,
-  isValidMonthStr,
-  pickDefaultDayForMonth,
   resolveHomeSelection,
-  shiftMonth,
 } from "../lib/home";
+import { buildRollingGraphModel, clampWindowEnd, rollingWindowDates, shiftWindowEnd } from "../lib/home-norm";
 import {
   fetchHomePageBundle,
   type HomePageBundle,
@@ -35,15 +32,10 @@ import {
   AddIcon,
   Button,
   CategoryChips,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  IconButton,
   Skeleton,
 } from "../ui";
 import {
   DayDetailPanel,
-  InProgressShelf,
-  MonthCalendarGrid,
   MonthRhythmCard,
   WeekGraph,
 } from "../ui/home";
@@ -61,18 +53,7 @@ export interface CalendarProps {
   onOpenEditWork?: (work: LibraryWork) => void;
 }
 
-/**
- * Home Page (`#/calendar`), designed from scratch for v2.2:
- * - Phone-first flow: This Week's 7-day stacked bar graph and Today's detail
- *   sit immediately at the top on mobile, followed by "In the middle of" and
- *   the Month rhythm & calendar grid.
- * - Desktop two-column studio (`>= 1024px`): Month Rhythm Skyline + 7-column
- *   Calendar Grid + "In the middle of" on the left stage; sticky 7-day Week Graph
- *   + Selected Day Detail inspector on the right without any modal.
- * - Graphs over numbers; covers only where a real cover URL exists; YouTube and
- *   music included in "All" with YouTube collapsed to one expandable line per day
- *   and ratings hidden for music.
- */
+/** Rolling seven days and selected-day detail first; month summary alongside on desktop. */
 export function Calendar({
   date,
   initialMonth,
@@ -87,12 +68,13 @@ export function Calendar({
     [date, initialMonth, todayStr]
   );
 
-  const [currentMonth, setCurrentMonth] = useState<string>(
-    initialResolved.month
+  const [currentMonth, setCurrentMonth] = useState<string>(() =>
+    clampWindowEnd(initialResolved.selectedDate, todayStr).slice(0, 7)
   );
   const [selectedDate, setSelectedDate] = useState<string>(
-    initialResolved.selectedDate
+    clampWindowEnd(initialResolved.selectedDate, todayStr)
   );
+  const [windowEnd, setWindowEnd] = useState(() => clampWindowEnd(initialResolved.selectedDate, todayStr));
   const [explicitDate, setExplicitDate] = useState<boolean>(
     initialResolved.explicitDate
   );
@@ -114,8 +96,6 @@ export function Calendar({
   const [error, setError] = useState<string | null>(null);
   const [overrideTick, setOverrideTick] = useState<number>(0);
 
-  const dayPanelRef = useRef<HTMLDivElement>(null);
-
   // Subscribe to optimistic work edits / quick ratings / hides
   useEffect(() => {
     return subscribeWorkEdits(() => setOverrideTick((t) => t + 1));
@@ -123,19 +103,12 @@ export function Calendar({
 
   // Sync state when route props (`?date=`, `?month=`, `?cat=`) change externally
   useEffect(() => {
-    if (isValidDateStr(date)) {
-      setSelectedDate(date);
-      setCurrentMonth(
-        isValidMonthStr(initialMonth) ? initialMonth : date.slice(0, 7)
-      );
-      setExplicitDate(true);
-    } else if (isValidMonthStr(initialMonth)) {
-      setCurrentMonth(initialMonth);
-      setSelectedDate(
-        todayStr.startsWith(initialMonth) ? todayStr : `${initialMonth}-01`
-      );
-      setExplicitDate(false);
-    }
+    const resolved = resolveHomeSelection({ date, initialMonth }, todayStr);
+    const end = clampWindowEnd(resolved.selectedDate, todayStr);
+    setSelectedDate(end);
+    setWindowEnd(end);
+    setCurrentMonth(end.slice(0, 7));
+    setExplicitDate(resolved.explicitDate);
   }, [date, initialMonth, todayStr]);
 
   useEffect(() => {
@@ -146,31 +119,18 @@ export function Calendar({
     }
   }, [initialCategory, initialCategories]);
 
-  // Fetch calendar month(s), library works, progress, and archive summaries
+  // Fetch once per window/filter, not for every pill tap.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    fetchHomePageBundle(currentMonth, selectedDate)
+    fetchHomePageBundle(currentMonth, windowEnd, selectedCategories)
       .then((res) => {
         if (cancelled) return;
         setBundle(res);
         setLoading(false);
 
-        // When viewing a non-current month without an explicit `?date=`,
-        // select the most recent active day in that month so the day panel
-        // shows real activity right away.
-        if (!explicitDate && !todayStr.startsWith(currentMonth)) {
-          const bestDay = pickDefaultDayForMonth(
-            currentMonth,
-            res.days,
-            todayStr
-          );
-          if (bestDay !== selectedDate) {
-            setSelectedDate(bestDay);
-          }
-        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -181,7 +141,7 @@ export function Calendar({
     return () => {
       cancelled = true;
     };
-  }, [currentMonth, selectedDate, explicitDate, todayStr]);
+  }, [currentMonth, windowEnd, selectedCategories, overrideTick]);
 
   const syncUrlHash = (
     nextDate: string,
@@ -202,44 +162,34 @@ export function Calendar({
     }
   };
 
-  const handleSelectDate = (nextDate: string, fromMonthGrid = false) => {
-    if (!isValidDateStr(nextDate)) return;
+  const handleSelectDate = (nextDate: string) => {
+    if (!isValidDateStr(nextDate) || nextDate > todayStr) return;
     const nextMonth = nextDate.slice(0, 7);
     setSelectedDate(nextDate);
     setExplicitDate(true);
+    if (!rollingWindowDates(windowEnd).includes(nextDate)) setWindowEnd(nextDate);
     if (nextMonth !== currentMonth) {
       setCurrentMonth(nextMonth);
     }
     syncUrlHash(nextDate, nextMonth, selectedCategories, true);
 
-    if (
-      fromMonthGrid &&
-      typeof window !== "undefined" &&
-      window.innerWidth < 1024 &&
-      dayPanelRef.current
-    ) {
-      dayPanelRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-      });
-    }
   };
 
-  const handleStepMonth = (delta: number) => {
-    const nextMonth = shiftMonth(currentMonth, delta);
-    const nextDate = todayStr.startsWith(nextMonth)
-      ? todayStr
-      : `${nextMonth}-01`;
+  const handleStepWindow = (delta: number) => {
+    const nextDate = shiftWindowEnd(windowEnd, delta, todayStr);
+    const nextMonth = nextDate.slice(0, 7);
+    setWindowEnd(nextDate);
     setCurrentMonth(nextMonth);
     setSelectedDate(nextDate);
-    setExplicitDate(false);
-    syncUrlHash(nextDate, nextMonth, selectedCategories, false);
+    setExplicitDate(true);
+    syncUrlHash(nextDate, nextMonth, selectedCategories, true);
   };
 
   const handleJumpToday = () => {
     const todayMonth = todayStr.slice(0, 7);
     setCurrentMonth(todayMonth);
     setSelectedDate(todayStr);
+    setWindowEnd(todayStr);
     setExplicitDate(false);
     syncUrlHash(todayStr, todayMonth, selectedCategories, false);
   };
@@ -322,7 +272,7 @@ export function Calendar({
             days: filteredDays,
             selectedDate,
             todayStr,
-            previousMonthMinutes: null,
+            previousMonthMinutes: bundle?.monthReview?.previous_month_minutes ?? null,
           }),
     [
       selectedCategories,
@@ -331,18 +281,21 @@ export function Calendar({
       filteredDays,
       selectedDate,
       todayStr,
+      bundle?.monthReview,
     ]
   );
 
   const weekModel = useMemo(
     () =>
-      buildWeekGraphModel(
+      buildRollingGraphModel(
         filteredDays,
         selectedDate,
+        windowEnd,
         todayStr,
-        currentMonth
+        bundle?.normSeries.points ?? [],
+        bundle?.normSeries.history_start ?? null
       ),
-    [filteredDays, selectedDate, todayStr, currentMonth]
+    [filteredDays, selectedDate, windowEnd, todayStr, bundle?.normSeries]
   );
 
   const selectedDayData = useMemo(
@@ -362,17 +315,6 @@ export function Calendar({
     [selectedDate, todayStr, selectedDayData, libraryLookup, archiveLookup]
   );
 
-  const inProgressWorks = useMemo(
-    () =>
-      buildInProgressShelf(
-        effectiveWorks,
-        selectedCategories,
-        bundle?.progressItems ?? [],
-        6
-      ),
-    [effectiveWorks, selectedCategories, bundle?.progressItems]
-  );
-
   const chipTotals = useMemo(
     () =>
       buildHomeCategoryChipTotals(
@@ -386,34 +328,34 @@ export function Calendar({
     selectedCategories.length === 1 ? selectedCategories[0] : undefined;
 
   const isViewingToday =
-    selectedDate === todayStr && currentMonth === todayStr.slice(0, 7);
+    selectedDate === todayStr && windowEnd === todayStr;
+
+  // The review also includes month-precision entries; the daily skyline never
+  // assigns those minutes to an invented day. Both comparison sides use the filter.
+  const monthRhythm = useMemo(() => {
+    const rhythm = monthModels.rhythm;
+    const review = bundle?.monthReview;
+    if (!review || review.month !== currentMonth) return rhythm;
+    return {
+      ...rhythm,
+      totalMinutes: review.total_minutes,
+      previousMonthMinutes: review.previous_month_minutes,
+      undatedMinutes: review.undated_minutes,
+      categoryShares: review.categories.filter((c) => c.total_minutes > 0).map((c) => ({
+        category: c.category, label: categoryPluralLabel(c.category), totalMinutes: c.total_minutes,
+        units: c.units, works: c.works, sharePct: review.total_minutes ? c.total_minutes / review.total_minutes * 100 : 0,
+      })),
+      deltaLabel: review.total_minutes === review.previous_month_minutes ? "Same as last month"
+        : `${formatMinutes(Math.abs(review.total_minutes - review.previous_month_minutes))} ${review.total_minutes > review.previous_month_minutes ? "more" : "less"} than last month`,
+    };
+  }, [monthModels.rhythm, bundle?.monthReview, currentMonth]);
 
   return (
     <div class="page-container home-page">
-      {/* Top Bar: Month Picker + Today Jump + Primary Add Action */}
+      {/* Today jump and primary add action; week navigation belongs with the pills. */}
       <header class="home-topbar">
         <div class="home-month-nav">
-          <IconButton
-            label="Previous month"
-            variant="default"
-            size="sm"
-            onClick={() => handleStepMonth(-1)}
-          >
-            <ChevronLeftIcon size={17} />
-          </IconButton>
-
-          <h1 class="home-month-title">
-            {formatMonthHeading(currentMonth)}
-          </h1>
-
-          <IconButton
-            label="Next month"
-            variant="default"
-            size="sm"
-            onClick={() => handleStepMonth(1)}
-          >
-            <ChevronRightIcon size={17} />
-          </IconButton>
+          <h1 class="home-month-title">Your days</h1>
 
           {!isViewingToday && (
             <button
@@ -472,7 +414,7 @@ export function Calendar({
         </div>
       )}
 
-      {loading && !bundle ? (
+      {loading ? (
         <div class="home-workspace" aria-busy="true">
           <div class="home-inspector-col">
             <div class="home-card">
@@ -491,51 +433,41 @@ export function Calendar({
             </div>
           </div>
         </div>
-      ) : (
-        <div class="home-workspace">
-          {/* Inspector Column: First on Phone (This Week + Selected Day), Sticky Right on Desktop */}
+      ) : !error && bundle ? (
+        <div class="home-workspace" aria-busy={loading}>
+          {/* Pills and selected day: first on phone, left on desktop. */}
           <div class="home-inspector-col">
             <WeekGraph
               model={weekModel}
               todayStr={todayStr}
-              onSelectDate={(d) => handleSelectDate(d, false)}
+              onSelectDate={handleSelectDate}
+              onStepWindow={handleStepWindow}
             />
 
-            <div ref={dayPanelRef}>
+            <div>
               <DayDetailPanel
                 model={dayDetailModel}
                 singleCategory={singleSelectedCategory}
-                onSelectDate={(d) => handleSelectDate(d, false)}
+                onSelectDate={handleSelectDate}
+                todayStr={todayStr}
                 onOpenAdd={onOpenAdd}
               />
             </div>
           </div>
 
-          {/* Stage Column: In the Middle Of + Month Rhythm Skyline + 7-Column Calendar Grid */}
+          {/* Compact month summary on the right, below the day panel on phone. */}
           <div class="home-stage-col">
-            <InProgressShelf
-              works={inProgressWorks}
-              selectedDate={selectedDate}
-              onOpenAdd={onOpenAdd}
-            />
-
             <MonthRhythmCard
-              model={monthModels.rhythm}
+              model={monthRhythm}
               todayStr={todayStr}
               selectedCategories={selectedCategories}
-              onSelectDate={(d) => handleSelectDate(d, false)}
+              onSelectDate={handleSelectDate}
               onToggleCategory={handleToggleSingleCategory}
             />
 
-            <MonthCalendarGrid
-              monthHeading={monthModels.rhythm.heading}
-              weeks={monthModels.weeks}
-              todayStr={todayStr}
-              onSelectDate={handleSelectDate}
-            />
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

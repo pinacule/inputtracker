@@ -53,6 +53,7 @@ import {
   cleanMusicTitle,
   hasCachedCover,
   hasCachedCoverNone,
+  parseBookAuthors,
   titleCoverId,
 } from "./covers.ts";
 import { dedupeConsumption, type DedupedEvent } from "./dedup.ts";
@@ -112,6 +113,7 @@ interface MediaProgressSignal {
   title: string | null;
   progress: number | null;
   is_finished: boolean;
+  updated_at: string;
 }
 
 function readMediaProgressSignals(db: Database): MediaProgressSignal[] {
@@ -123,10 +125,11 @@ function readMediaProgressSignals(db: Database): MediaProgressSignal[] {
         progress: number | null;
         ended_at: string | null;
         raw: string | null;
+        started_at: string;
       },
       []
     >(
-      `SELECT source_id, title, progress, ended_at, raw
+      `SELECT source_id, title, progress, ended_at, raw, started_at
        FROM events_latest
        WHERE source_kind = 'media_progress';`
     )
@@ -143,6 +146,7 @@ function readMediaProgressSignals(db: Database): MediaProgressSignal[] {
       title: r.title,
       progress: r.progress,
       is_finished: isFinished,
+      updated_at: r.started_at,
     };
   });
 }
@@ -567,6 +571,7 @@ export function buildAllLibraryWorks(
     // Status computation.
     let maxProgress: number | null = null;
     let hasFinishedSignal = false;
+    let latestAbsSignal: MediaProgressSignal | undefined;
 
     for (const ev of workEvents) {
       if (isPlannedArchiveEvent(ev)) {
@@ -584,6 +589,7 @@ export function buildAllLibraryWorks(
       if (typeof absItem === "string") {
         const sig = progressByAbsId.get(absItem);
         if (sig) {
+          if (!latestAbsSignal || sig.updated_at > latestAbsSignal.updated_at) latestAbsSignal = sig;
           if (sig.is_finished) hasFinishedSignal = true;
           if (
             sig.progress !== null &&
@@ -604,6 +610,21 @@ export function buildAllLibraryWorks(
         (maxProgress === null || titleSig.progress > maxProgress)
       ) {
         maxProgress = titleSig.progress;
+      }
+    }
+
+    // Snapshot position is authoritative, including a reset to zero. Session
+    // sums measure time spent (replays included), never percent completed.
+    if (cat === "book" || cat === "audiobook") {
+      const signal = latestAbsSignal ?? titleSig;
+      if (signal) {
+        maxProgress = signal.progress;
+        hasFinishedSignal = signal.is_finished;
+      } else {
+        const latestPosition = [...workEvents]
+          .filter((e) => e.progress !== null && e.progress !== undefined && !isPlannedArchiveEvent(e))
+          .sort((a, b) => b.started_at.localeCompare(a.started_at) || b.id - a.id)[0];
+        maxProgress = latestPosition?.progress ?? null;
       }
     }
 
@@ -729,6 +750,10 @@ export function buildAllLibraryWorks(
         : { channel: null, topic: override?.topic ?? null };
 
     // Resolve `creator`: author (books/audiobooks), artist (music), channel (YouTube), studio/creator, else null.
+    const isBook = effectiveCategory === "book" || effectiveCategory === "audiobook";
+    const cleanCreator = (value: string | null): string | null =>
+      isBook ? parseBookAuthors(value).join(", ") || null : value;
+    if (isBook) creators = creators.flatMap((c) => parseBookAuthors(c));
     let creator: string | null = null;
     if (effectiveCategory === "youtube") {
       creator = ytFields.channel ?? (creators.length > 0 ? creators.join(", ") : null);
@@ -739,18 +764,13 @@ export function buildAllLibraryWorks(
         const ev = workEvents[i]!;
         const raw = parseJsonObject(ev.raw);
         const rawMeta = parseJsonObject(raw?.["mediaMetadata"]);
-        const absAuthor =
-          (typeof rawMeta?.["authorName"] === "string" && rawMeta["authorName"].trim() !== ""
-            ? rawMeta["authorName"].trim()
-            : null) ??
-          (typeof raw?.["displayAuthor"] === "string" && raw["displayAuthor"].trim() !== ""
-            ? raw["displayAuthor"].trim()
-            : null);
+        const absAuthor = cleanCreator(typeof rawMeta?.["authorName"] === "string" ? rawMeta["authorName"] : null)
+          ?? cleanCreator(typeof raw?.["displayAuthor"] === "string" ? raw["displayAuthor"] : null);
         if (absAuthor) {
           creator = absAuthor;
           break;
         }
-        const pt = ev.parent_title?.trim() ?? "";
+        const pt = cleanCreator(ev.parent_title?.trim() ?? null) ?? "";
         if (pt !== "") {
           const isEpisodeLike =
             ev.media_type === "episode" ||
@@ -895,6 +915,7 @@ export function buildAllLibraryWorks(
       topic: ytFields.topic,
       progress,
       creator,
+      ...(isBook ? { consumption_progress: status === "planned" ? 0 : maxProgress } : {}),
       ...(favoriteVideoIds.size > 0 ? { favorite: isFavorite } : {}),
     };
 
