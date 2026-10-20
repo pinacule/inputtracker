@@ -2,15 +2,13 @@
  * Pure, DOM-free domain logic and visual models for the v2.2 Home Page (`#/calendar`).
  *
  * Design principles:
- * - Phone-first ("Today & This week" immediately visible), desktop two-column studio.
- * - Graphs over numbers: 7-day Week Stacked Bar Graph, 31-day Month Skyline Graph,
- *   proportional Category Share bars, and heat-washed Month Calendar Grid.
- * - Covers only where they carry meaning (real cover URLs on the Day Detail & In-Progress
- *   shelf; never bloated with fake letter-tile covers when `cover_url` is absent).
+ * - Phone-first rolling seven days (home-norm.ts), day detail and month summary.
+ * - Covers only where they carry meaning; compact category icons without cover art.
+ * - Legacy month-grid/shelf pure helpers remain for compatibility, not rendered on Home.
  * - YouTube and music belong on the home page and calendar ("All" includes both),
  *   but YouTube collapses into one calm expandable line per day ("12 videos · 48m"),
  *   and multiple music plays collapse cleanly as well.
- * - Ratings are hidden for music (`isRateableCategory("music") === false`).
+ * - Ratings are hidden for music and time-only short-form.
  * - Day headings are plain words ("Today", "Yesterday", "Saturday 17 October") with
  *   no duplicate numeric date above them.
  */
@@ -376,7 +374,7 @@ export function stepCalendarDateByKey(
  * - Ratings are hidden for music (`category !== "music"`).
  */
 export function isRateableCategory(category: Category): boolean {
-  return category !== "music";
+  return category !== "music" && category !== "shortform";
 }
 
 /**
@@ -455,7 +453,7 @@ export function filterAndEnrichCalendarDays(
         ? getWorkOverride(matchedWork.key)
         : getWorkOverride(lookupKey);
 
-      if (override?.hidden === true) {
+      if (override?.hidden === true || override?.status === "planned" || matchedWork?.status === "planned") {
         continue;
       }
 
@@ -557,14 +555,14 @@ export function computeCategorySegmentsFromItems(
   const useSeconds = totalSeconds > 0;
   let totalWeight = 0;
   for (const entry of byCat.values()) {
-    totalWeight += useSeconds ? Math.max(60, entry.seconds) : entry.count;
+      totalWeight += useSeconds ? entry.seconds : entry.count;
   }
 
   const segments: CategoryBarSegment[] = [];
   for (const cat of CATEGORIES) {
     const entry = byCat.get(cat);
     if (!entry) continue;
-    const weight = useSeconds ? Math.max(60, entry.seconds) : entry.count;
+    const weight = useSeconds ? entry.seconds : entry.count;
     const sharePct =
       totalWeight > 0 ? Math.round((weight / totalWeight) * 1000) / 10 : 0;
     segments.push({
@@ -780,6 +778,7 @@ export interface MonthCategoryShareItem {
 }
 
 export interface MonthRhythmModel {
+  readonly undatedMinutes?: number;
   readonly month: string;
   readonly heading: string;
   readonly totalMinutes: number;
@@ -1239,7 +1238,7 @@ export interface HomeMusicDayGroup {
   /** e.g. "14 plays · 52m" */
   readonly summaryLabel: string;
   readonly artistsPreview: string;
-  /** True when there are > 2 music plays on the day, so they collapse to one expandable line. */
+  /** Home always folds music into one expandable line. */
   readonly collapsedByDefault: boolean;
   readonly tracks: readonly HomeMusicTrackItem[];
 }
@@ -1510,6 +1509,7 @@ export function buildHomeDayDetailModel(params: {
       );
       const coverUrl = g.coverUrl ?? matchedWork?.cover_url ?? null;
       const creator = matchedWork?.creator ?? null;
+      const position = matchedWork?.consumption_progress;
 
       const archiveEntry =
         archiveLookup?.get(`${groupKey}:${date}`) ??
@@ -1535,7 +1535,9 @@ export function buildHomeDayDetailModel(params: {
         key: groupKey,
         workKey,
         title: matchedWork?.title ?? g.workTitle,
-        subtitle: summarizeWorkItemsSubtitle(
+        subtitle: position != null && (g.category === "book" || g.category === "audiobook")
+          ? [`${Math.round(position * 100)}%`, creator].filter(Boolean).join(" · ")
+          : summarizeWorkItemsSubtitle(
           g.category,
           g.workTitle,
           creator,
@@ -1784,7 +1786,7 @@ export function buildHomeDayDetailModel(params: {
       totalSeconds: musicTotalSeconds,
       summaryLabel,
       artistsPreview,
-      collapsedByDefault: tracks.length > 2,
+      collapsedByDefault: true,
       tracks,
     };
   }
@@ -1830,6 +1832,7 @@ export function formatHomeWorkProgress(
   work: LibraryWork,
   progressFraction: number | null = null
 ): { label: string; percent: number | null } {
+  progressFraction = work.consumption_progress ?? progressFraction;
   const prog = work.progress;
   if (prog) {
     const parts: string[] = [];
@@ -1869,7 +1872,7 @@ export function formatHomeWorkProgress(
 
   if (
     progressFraction !== null &&
-    progressFraction > 0 &&
+    progressFraction >= 0 &&
     progressFraction <= 1
   ) {
     const pct = Math.round(progressFraction * 100);

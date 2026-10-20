@@ -3,8 +3,8 @@
  *
  * Fetches and merges:
  * - Calendar days for the active month AND any adjacent month spanned by the
- *   selected day's Monday–Sunday week (so "This week" is complete on month boundaries).
- * - Library works (`getLibrary`), progress fractions (`getProgress`), and
+ *   rolling seven-day window (complete on month boundaries).
+ * - Library works (`getLibrary`), the 62-day norm history (`getSeries`), and
  *   archive entry summaries (`listArchive`) for work linking, covers, explicit
  *   v2.2 season/episode progress, and quick edit/delete actions.
  * - Optional month review (`getMonthReview`) for previous-month comparison.
@@ -14,22 +14,24 @@ import {
   getCalendar,
   getLibrary,
   getMonthReview,
-  getProgress,
+  getSeries,
   listArchive,
   type ArchiveEntrySummary,
   type CalendarDay,
+  type Category,
   type CategoryTotal,
   type LibraryWork,
   type MonthReview,
-  type ProgressItem,
+  type SeriesResult,
 } from "../api";
-import { getRequiredMonthsForView } from "./home";
+import { shiftDateStr } from "./home";
+import { rollingWindowDates } from "./home-norm";
 
 export interface HomePageBundle {
   readonly days: CalendarDay[];
   readonly libraryWorks: LibraryWork[];
   readonly libraryCategories: CategoryTotal[];
-  readonly progressItems: ProgressItem[];
+  readonly normSeries: SeriesResult;
   readonly archiveEntries: ArchiveEntrySummary[];
   readonly monthReview: MonthReview | null;
 }
@@ -57,9 +59,10 @@ export function mergeCalendarMonthDays(
  */
 export async function fetchHomePageBundle(
   currentMonth: string,
-  selectedDate: string
+  windowEnd: string,
+  categories: readonly Category[] = []
 ): Promise<HomePageBundle> {
-  const monthsToFetch = getRequiredMonthsForView(currentMonth, selectedDate);
+  const monthsToFetch = [...new Set([currentMonth, ...rollingWindowDates(windowEnd).map((d) => d.slice(0, 7))])];
 
   const calendarPromises = monthsToFetch.map((m) =>
     getCalendar(m).then((res) => res.days ?? [])
@@ -71,21 +74,21 @@ export async function fetchHomePageBundle(
     total_minutes: 0,
   }));
 
-  const progressPromise = getProgress()
-    .then((res) => res.in_progress ?? [])
-    .catch(() => [] as ProgressItem[]);
+  // Include eight full preceding weeks for the earliest pill, not just the last.
+  const normPromise = getSeries({ bucket: "day", from: shiftDateStr(windowEnd, -62), to: windowEnd,
+    category: categories.length ? categories : undefined });
 
   const archivePromise = listArchive().catch(
     () => [] as ArchiveEntrySummary[]
   );
 
-  const reviewPromise = getMonthReview(currentMonth).catch(() => null);
+  const reviewPromise = getMonthReview(currentMonth, { category: categories.length ? categories : undefined }).catch(() => null);
 
-  const [monthDayArrays, libraryRes, progressItems, archiveEntries, monthReview] =
+  const [monthDayArrays, libraryRes, normSeries, archiveEntries, monthReview] =
     await Promise.all([
       Promise.all(calendarPromises),
       libraryPromise,
-      progressPromise,
+      normPromise,
       archivePromise,
       reviewPromise,
     ]);
@@ -94,7 +97,7 @@ export async function fetchHomePageBundle(
     days: mergeCalendarMonthDays(monthDayArrays),
     libraryWorks: libraryRes.works ?? [],
     libraryCategories: libraryRes.categories ?? [],
-    progressItems,
+    normSeries,
     archiveEntries,
     monthReview,
   };

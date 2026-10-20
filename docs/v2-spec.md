@@ -112,6 +112,8 @@ lookups are fast and gentle on the providers. Tests mock `fetch`; never hit the 
 ## 4. Reviews and charts (backend task B2)
 
 - `GET /api/series` → `SeriesResult`: minutes per category per day/week/month for stacked charts.
+  `history_start` is the first visible day-precision observation (before date/category filtering),
+  or null when none exists; home norms count missing days after that date as zero.
 - `GET /api/review/month?month=YYYY-MM` → `MonthReview`.
 - `GET /api/review/year?year=YYYY` → `YearReviewV2`, built from the twelve months (same numbers as
   summing the month reviews, plus `year` precision archive time).
@@ -283,6 +285,10 @@ calendar/day lists, heat maps, search, stats and reviews. Totals in the response
 
 Types: the "v2.2" parts of `src/core/contract.ts` (`LibraryWork.progress`, `.creator`,
 `LibrarySortV2`, `RefreshMetadataResult`). Data rules unchanged (append-only, repeatable).
+
+`LibraryWork.consumption_progress` exposes book/audiobook position separately from logged minutes.
+The latest Audiobookshelf media-progress snapshot is authoritative (including zero/reset), otherwise
+the latest session's position is used. Session time sums are never treated as completion percentage.
 
 ## 13. Metadata accuracy (backend task W08)
 

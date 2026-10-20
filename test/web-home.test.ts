@@ -627,6 +627,9 @@ describe("home page graphs, 40-video YouTube days, and empty states", () => {
           { status: 200 }
         );
       }
+      if (url.startsWith("/api/series")) {
+        return new Response(JSON.stringify({ bucket: "day", from: "2026-07-31", to: "2026-10-01", history_start: "2026-09-29", points: [] }));
+      }
       if (url.startsWith("/api/archive")) {
         return new Response(JSON.stringify([]), { status: 200 });
       }

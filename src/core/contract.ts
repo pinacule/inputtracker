@@ -187,6 +187,8 @@ export interface LibraryWork {
   } | null;
   /** v2.2: author (books/audiobooks), artist (music), channel (YouTube), studio/creator, else null. */
   creator: string | null;
+  /** Book/audiobook position (0..1), distinct from listening time; latest ABS snapshot wins, then latest session position. */
+  consumption_progress?: number | null;
   /** v2.2 (W11): true when a track/video is in Favorite Songs. */
   favorite?: boolean;
 }
@@ -234,6 +236,8 @@ export interface SeriesResult {
   bucket: "day" | "week" | "month";
   from: string;
   to: string;
+  /** First visible day-precision observation, before range/category filtering; null for an empty archive. */
+  history_start: string | null;
   points: SeriesPoint[];
 }
 

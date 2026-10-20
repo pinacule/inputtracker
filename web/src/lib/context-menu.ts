@@ -11,7 +11,7 @@ import type {
   Category,
   WorkStatus,
 } from "../api";
-import { formatRating10 } from "./rating";
+import { canRateCategory, formatRating10 } from "./rating";
 
 export interface MenuPoint {
   readonly x: number;
@@ -145,6 +145,7 @@ export function buildContextMenuActions(
   target: ContextMenuTarget
 ): ContextMenuAction[] {
   const actions: ContextMenuAction[] = [];
+  if (target.category === "shortform") return actions; // Time-only, not a work.
 
   if (target.kind === "youtube-channel") {
     actions.push({
@@ -171,7 +172,7 @@ export function buildContextMenuActions(
   }
 
   // Rate (0..10 one decimal) — hidden for music tracks
-  if (target.category !== "music") {
+  if (canRateCategory(target.category)) {
     actions.push({
       id: "rate",
       label:

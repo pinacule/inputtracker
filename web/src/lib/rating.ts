@@ -28,7 +28,7 @@ export function canRateCategory(
   if (!category) {
     return true;
   }
-  return category.trim().toLowerCase() !== "music";
+  return !["music", "shortform"].includes(category.trim().toLowerCase());
 }
 
 /** Convert a 0..10 rating to integer tenths (0..100). */
