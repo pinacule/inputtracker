@@ -38,6 +38,8 @@ import {
   ARCHIVE_SOURCE,
   ARCHIVE_SOURCE_KIND,
   saveArchiveEntry,
+  getArchiveEntry,
+  ArchiveNotFoundError,
 } from "../server/archive.ts";
 import {
   getAnnotation,
@@ -2052,7 +2054,16 @@ export async function importAchriom(
   for (const { file, rows } of parsedFiles) {
     rowsPerFile[file] = rows.length;
     for (const row of rows) {
-      const matchedWork = await matchAchriomRowMetadata(file, row, metaDeps);
+      // Re-import changes consumption/annotations, not the linked metadata snapshot. In particular,
+      // provider outages must not turn a finished show into a guessed single manual season.
+      let storedWork: WorkDetails | null = null;
+      try {
+        const previous = getArchiveEntry(db, achriomRowEntryId(file, row));
+        if (previous.work.provider !== "manual") storedWork = previous.work;
+      } catch (err) {
+        if (!(err instanceof ArchiveNotFoundError)) throw err;
+      }
+      const matchedWork = storedWork ?? await matchAchriomRowMetadata(file, row, metaDeps);
       const mapped = mapAchriomRow(file, row, matchedWork);
       if (mapped.kind === "skip") {
         skipped.push({
@@ -2061,6 +2072,16 @@ export async function importAchriom(
           reason: mapped.reason,
         });
       } else {
+        if (storedWork) {
+          // An explicitly changed CSV edition/runtime is a consumption-time override, not a
+          // replacement metadata snapshot (including its provider season catalogue).
+          const mappedMinutes = computeArchiveRequestMinutes(mapped.request).totalMinutes;
+          const storedMinutes = computeArchiveRequestMinutes({ ...mapped.request, work: storedWork }).totalMinutes;
+          if (mappedMinutes !== storedMinutes && mapped.request.consumed.minutes_override === undefined) {
+            mapped.request.consumed.minutes_override = mappedMinutes;
+          }
+          mapped.request.work = storedWork;
+        }
         mappedArchiveEntries.push(mapped);
       }
     }

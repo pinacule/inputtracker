@@ -47,7 +47,7 @@ import {
 } from "./aggregate.ts";
 import { getWorkAnnotations, saveAnnotation } from "./annotations.ts";
 import { resolveWorkKey } from "../core/work-identity.ts";
-import { saveArchiveEntry } from "./archive.ts";
+import { getArchiveEntry, saveArchiveEntry } from "./archive.ts";
 import {
   cleanMusicArtist,
   cleanMusicTitle,
@@ -306,9 +306,12 @@ export function buildAllLibraryWorks(
     let originalTitle: string | null = null;
     let archiveCoverUrl: string | null = null;
     let archiveExplicitStatus: WorkStatus | null = null;
+    let workSnapshot: WorkDetails | ManualWork | null = null;
 
-    for (let i = workEvents.length - 1; i >= 0; i--) {
-      const ev = workEvents[i]!;
+    // Metadata freshness follows revision order, not the date the user watched the work.
+    const archiveEvents = workEvents.filter((ev) => ev.source_kind === "archive")
+      .sort((a, b) => b.id - a.id);
+    for (const ev of archiveEvents) {
       if (ev.source_kind === "archive") {
         const raw = parseJsonObject(ev.raw);
         if (archiveExplicitStatus === null && isValidWorkStatus(raw?.["status"])) {
@@ -316,6 +319,9 @@ export function buildAllLibraryWorks(
         }
         const workSnap = parseJsonObject(raw?.["work"]);
         if (workSnap) {
+          if (typeof raw?.["entry_id"] === "string") {
+            workSnapshot = getArchiveEntry(db, raw["entry_id"]).work;
+          }
           if (
             typeof workSnap["title"] === "string" &&
             workSnap["title"].trim() !== ""
@@ -353,6 +359,8 @@ export function buildAllLibraryWorks(
 
     // Apply linked metadata override (`override.meta`).
     if (override?.meta !== null && override?.meta !== undefined) {
+      // An unresolved override must open lookup, not log the underlying (different) work.
+      workSnapshot = null;
       let metaWork: WorkDetails | null = override.meta_work;
       if (metaWork === null && opts.config) {
         metaWork = readWorkCache(
@@ -363,6 +371,7 @@ export function buildAllLibraryWorks(
         );
       }
       if (metaWork !== null) {
+        workSnapshot = metaWork;
         if (Array.isArray(metaWork.seasons) && metaWork.seasons.length > 0) {
           baseSeasons = metaWork.seasons;
         }
@@ -373,7 +382,7 @@ export function buildAllLibraryWorks(
           originalTitle = metaWork.original_title;
         }
       }
-    } else if (baseSeasons.length === 0 && opts.config) {
+    } else if (!override?.meta_unlinked && baseSeasons.length === 0 && opts.config) {
       // Check on-disk work cache if the events carry a known metadata/external id
       for (let i = workEvents.length - 1; i >= 0; i--) {
         const ext = parseExternalIds(workEvents[i]!.external_ids);
@@ -399,6 +408,7 @@ export function buildAllLibraryWorks(
           if (foundCached) break;
         }
         if (foundCached) {
+          workSnapshot ??= foundCached;
           if (Array.isArray(foundCached.seasons) && foundCached.seasons.length > 0) {
             baseSeasons = foundCached.seasons;
           }
@@ -417,7 +427,7 @@ export function buildAllLibraryWorks(
     let coverUrl: string | null = null;
     if (override?.meta !== null && override?.meta !== undefined) {
       coverUrl = `/api/meta-cover/${override.meta.provider}/${override.meta.provider_id}`;
-    } else {
+    } else if (!override?.meta_unlinked) {
       for (let i = workEvents.length - 1; i >= 0; i--) {
         const c = coverUrlFor(workEvents[i]!);
         if (c !== null) {
@@ -432,6 +442,10 @@ export function buildAllLibraryWorks(
 
     const effectiveCategory: Category = override?.category ?? cat;
     const effectiveTitle: string = override?.title ?? canonicalTitle;
+    if (override?.meta_unlinked && workSnapshot) {
+      const { category, title, year, creators, seasons, runtime_minutes, pages } = workSnapshot;
+      workSnapshot = { provider: "manual", category, title, year, creators, seasons, runtime_minutes, pages };
+    }
 
     // Total minutes, units, first_at, last_at, sources.
     let totalSeconds = 0;
@@ -886,6 +900,7 @@ export function buildAllLibraryWorks(
 
     const detail: LibraryWorkDetail = {
       ...work,
+      work_snapshot: workSnapshot,
       seasons: detailSeasons,
       history,
       note,
@@ -1120,8 +1135,42 @@ export async function editLibraryWork(
   const current = currentOverrides.get(key) ?? null;
 
   let metaWork: WorkDetails | null = null;
+  if (parsed.hasMeta && parsed.meta !== null) {
+    const snapshot = target?.detail.work_snapshot;
+    if (snapshot && snapshot.provider === parsed.meta.provider &&
+        snapshot.provider_id === parsed.meta.provider_id) {
+      metaWork = snapshot;
+    }
+    // A previous metadata override is also an authoritative snapshot for offline Undo.
+    if (!metaWork) {
+      const previous = db.query<{ meta_json: string | null }, [string, string, string]>(
+        `SELECT meta_json FROM work_overrides
+         WHERE work_key = ? AND meta_provider = ? AND meta_id = ? AND meta_json IS NOT NULL
+         ORDER BY id DESC LIMIT 1;`
+      ).get(key, parsed.meta.provider, parsed.meta.provider_id);
+      const stored = parseJsonObject(previous?.meta_json);
+      if (stored?.["provider"] === parsed.meta.provider &&
+          stored["provider_id"] === parsed.meta.provider_id) {
+        metaWork = stored as unknown as WorkDetails;
+      }
+    }
+  }
+  if (!metaWork && parsed.hasMeta && parsed.meta !== null && target) {
+    // Undo/relink to the stored provider must work offline, without degrading its snapshot.
+    for (const ev of [...target.events].sort((a, b) => b.id - a.id)) {
+      if (ev.source_kind !== "archive") continue;
+      const entryId = parseJsonObject(ev.raw)?.["entry_id"];
+      if (typeof entryId !== "string") continue;
+      const snapshot = getArchiveEntry(db, entryId).work;
+      if (snapshot.provider === parsed.meta.provider &&
+          snapshot.provider_id === parsed.meta.provider_id) {
+        metaWork = snapshot;
+        break;
+      }
+    }
+  }
   if (parsed.hasMeta && parsed.meta !== null && opts.config) {
-    metaWork = readWorkCache(
+    metaWork ??= readWorkCache(
       opts.config,
       parsed.meta.provider,
       parsed.meta.provider_id,
@@ -1221,6 +1270,70 @@ interface SingleEntryRefreshOutcome {
   changed: boolean;
   minutesBefore: number;
   minutesAfter: number;
+}
+
+/**
+ * The provider's season list decides which seasons exist (a corrected chain may drop one, e.g. a
+ * spin-off that was wrongly counted as a season); known values only fill gaps in it. An empty
+ * provider list (incomplete response) keeps the previous seasons.
+ */
+function mergeRefreshedSeasons(
+  previous: SeasonInfo[],
+  fresh: SeasonInfo[],
+  watchedNumbers: ReadonlySet<number> = new Set()
+): SeasonInfo[] {
+  if (fresh.length === 0) return previous;
+  const prevByNumber = new Map(previous.map((season) => [season.number, season]));
+  const byNumber = new Map<number, SeasonInfo>();
+  for (const season of fresh) {
+    const prev = prevByNumber.get(season.number);
+    byNumber.set(season.number, prev ? {
+      ...season,
+      title: season.title ?? prev.title,
+      year: season.year ?? prev.year,
+      provider_id: season.provider_id ?? prev.provider_id,
+      episodes: season.episodes > 0 ? season.episodes : prev.episodes,
+      episode_minutes: season.episode_minutes !== null && season.episode_minutes > 0
+        ? season.episode_minutes : prev.episode_minutes,
+      total_minutes: season.total_minutes !== null && season.total_minutes > 0
+        ? season.total_minutes : prev.total_minutes,
+    } : season);
+  }
+  // A season the user watched never disappears because a provider response left it out.
+  for (const season of previous) {
+    if (!byNumber.has(season.number) && watchedNumbers.has(season.number)) {
+      byNumber.set(season.number, season);
+    }
+  }
+  return [...byNumber.values()].sort((a, b) => a.number - b.number);
+}
+
+function mergeRefreshedWork(
+  previous: WorkDetails | ManualWork | null,
+  fresh: WorkDetails,
+  watchedSeasons: ReadonlySet<number> = new Set()
+): WorkDetails {
+  if (!previous) return fresh;
+  const linked = previous.provider !== "manual" ? previous : null;
+  return {
+    ...fresh,
+    // A newly linked hand-made entry takes the provider's title; a linked one keeps its own.
+    title: linked ? previous.title : fresh.title,
+    category: previous.category,
+    year: fresh.year ?? previous.year,
+    cover_url: fresh.cover_url ?? linked?.cover_url ?? null,
+    original_title: fresh.original_title ?? linked?.original_title ?? null,
+    description: fresh.description ?? linked?.description ?? null,
+    creators: fresh.creators.length > 0 ? fresh.creators : previous.creators,
+    genres: fresh.genres.length > 0 ? fresh.genres : linked?.genres ?? [],
+    seasons: mergeRefreshedSeasons(previous.seasons, fresh.seasons, watchedSeasons),
+    // A stored page count describes the user's edition; absent provider data cannot erase it.
+    pages: previous.pages !== null && previous.pages > 0 ? previous.pages : fresh.pages,
+    runtime_minutes: fresh.runtime_minutes !== null && fresh.runtime_minutes > 0
+      ? fresh.runtime_minutes : previous.runtime_minutes,
+    // Existing canonical IDs win, even if a provider temporarily omits/misreports an ID.
+    external_ids: { ...fresh.external_ids, ...linked?.external_ids },
+  };
 }
 
 function getActiveArchiveRowsForEntry(db: Database, entryId: string): EventRow[] {
@@ -1351,60 +1464,15 @@ async function refreshSingleArchiveEntry(
     };
   }
 
-  const existingExtIds =
-    workObj &&
-    typeof workObj["external_ids"] === "object" &&
-    workObj["external_ids"] !== null &&
-    !Array.isArray(workObj["external_ids"])
-      ? (workObj["external_ids"] as Record<string, string>)
-      : {};
-
-  // The stored page count describes the user's own edition (from the add form or an import), so
-  // a refresh keeps it; and a value the provider lacks never wipes a known one (a book whose
-  // Open Library entry has no page count must not drop to 0 h).
-  const prevPages = typeof workObj?.["pages"] === "number" ? (workObj["pages"] as number) : null;
-  const prevRuntime =
-    typeof workObj?.["runtime_minutes"] === "number" ? (workObj["runtime_minutes"] as number) : null;
-  const nextWork: WorkDetails = {
-    ...freshWork,
-    category: existingCategory,
-    pages: prevPages !== null && prevPages > 0 ? prevPages : freshWork.pages,
-    runtime_minutes:
-      freshWork.runtime_minutes !== null && freshWork.runtime_minutes > 0
-        ? freshWork.runtime_minutes
-        : prevRuntime,
-    external_ids: {
-      ...existingExtIds,
-      ...freshWork.external_ids,
-    },
-  };
+  const storedEntry = getArchiveEntry(db, entryId);
+  const nextWork = mergeRefreshedWork(
+    storedEntry.work,
+    freshWork,
+    new Set((storedEntry.consumed.seasons ?? []).map((season) => season.number))
+  );
 
   const nextConsumed: ArchiveConsumed = { ...existingConsumed };
-  if (
-    Array.isArray(nextConsumed.seasons) &&
-    nextConsumed.seasons.length > 0 &&
-    nextWork.seasons.length > 0
-  ) {
-    const prevSeasons = Array.isArray(workObj?.["seasons"])
-      ? (workObj!["seasons"] as SeasonInfo[])
-      : [];
-    const allWhole = nextConsumed.seasons.every((s) => s.episodes === undefined);
-    const watchedAllPrevSeasons =
-      existingCategory === "series" &&
-      (existingStatus === "finished" || existingStatus === undefined) &&
-      allWhole &&
-      prevSeasons.length > 0 &&
-      nextConsumed.seasons.length === prevSeasons.length;
-
-    if (watchedAllPrevSeasons) {
-      nextConsumed.seasons = nextWork.seasons.map((s) => ({ number: s.number }));
-    } else {
-      const validNums = new Set(nextWork.seasons.map((s) => s.number));
-      const kept = nextConsumed.seasons.filter((s) => validNums.has(s.number));
-      nextConsumed.seasons =
-        kept.length > 0 ? kept : [{ number: nextWork.seasons[0]!.number }];
-    }
-  }
+  // A provider adding/removing seasons says nothing about what the user watched.
 
   const nextReq: ArchiveRequest = {
     entry_id: entryId,
@@ -1475,6 +1543,9 @@ export async function refreshLibraryWorkMetadata(
   const minutesBefore = target.work.total_minutes;
   const overrides = getWorkOverrides(db);
   const currentOverride = overrides.get(key) ?? null;
+  if (currentOverride?.meta_unlinked) {
+    return { ...target.detail, changed: false, minutes_before: minutesBefore, minutes_after: minutesBefore };
+  }
 
   const metaDeps: MetadataDeps = {
     config: opts.config,
@@ -1485,12 +1556,15 @@ export async function refreshLibraryWorkMetadata(
 
   let overrideChanged = false;
   if (currentOverride?.meta !== null && currentOverride?.meta !== undefined) {
-    const freshMeta = await lookupWork(
+    const lookedUpMeta = await lookupWork(
       currentOverride.meta.provider,
       currentOverride.meta.provider_id,
       metaDeps,
       target.work.category
     );
+    const freshMeta = lookedUpMeta
+      ? mergeRefreshedWork(currentOverride.meta_work, lookedUpMeta)
+      : null;
     if (
       freshMeta !== null &&
       JSON.stringify(currentOverride.meta_work) !== JSON.stringify(freshMeta)

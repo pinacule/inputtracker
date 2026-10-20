@@ -1026,6 +1026,11 @@ export function saveArchiveEntry(
   return postJson<ArchiveResult>("/api/archive", body);
 }
 
+/** Full stored entry for editing, not a display-only archive summary. */
+export function getArchiveEntry(entryId: string): Promise<ArchiveRequest> {
+  return getJson<ArchiveRequest>(`/api/archive/${encodeURIComponent(entryId)}`);
+}
+
 export interface DeleteArchiveResult {
   entry_id?: string;
   deleted?: number;
@@ -1308,3 +1313,4 @@ export function importAchriom(
   });
   return postForm<AchriomImportResult>(path, form);
 }
+

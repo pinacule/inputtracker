@@ -11,6 +11,7 @@ import {
   deleteArchiveEntry,
   listArchiveEntries,
   saveArchiveEntry,
+  getArchiveEntry,
 } from "./archive.ts";
 import { redactString } from "../core/config.ts";
 import {
@@ -135,6 +136,18 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
       if (caught instanceof ArchiveNotFoundError) {
         return c.json({ error: caught.message }, 404);
       }
+      throw caught;
+    }
+  });
+
+  app.get("/api/archive/:entry_id", (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) return c.json({ error: err }, 400);
+    try {
+      return c.json(getArchiveEntry(db, c.req.param("entry_id")));
+    } catch (caught) {
+      if (caught instanceof ArchiveValidationError) return c.json({ error: caught.message }, 400);
+      if (caught instanceof ArchiveNotFoundError) return c.json({ error: caught.message }, 404);
       throw caught;
     }
   });

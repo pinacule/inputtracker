@@ -18,10 +18,39 @@ import type {
   SeasonInfo,
   WorkDetails,
 } from "../api";
+import { getArchiveEntry, getLibraryWork } from "../api";
 import { isCategory } from "./categories";
 import { formatLocalDay } from "./format-date";
 import { validateRating10 } from "./rating";
 import { formatMinutes } from "./stats";
+
+/** All entry points hand the shell identities or real snapshots, never display reconstructions. */
+export interface OpenArchiveOptions {
+  date?: string;
+  category?: Category;
+  query?: string;
+  work?: WorkDetails | ManualWork | null;
+  editingEntry?: ArchiveRequest | null;
+  entryId?: string;
+  workKey?: string;
+}
+
+export async function loadArchiveContext(opts: OpenArchiveOptions): Promise<OpenArchiveOptions> {
+  if (opts.entryId) {
+    const editingEntry = await getArchiveEntry(opts.entryId);
+    return { ...opts, category: editingEntry.work.category, editingEntry };
+  }
+  if (opts.workKey) {
+    const detail = await getLibraryWork(opts.workKey);
+    return {
+      ...opts,
+      category: detail.work_snapshot?.category ?? detail.category,
+      work: detail.work_snapshot ?? null,
+      query: detail.title,
+    };
+  }
+  return opts;
+}
 
 const SHORT_MONTHS = [
   "Jan",
@@ -473,6 +502,8 @@ export function buildManualWork(draft: ManualWorkDraft): BuildManualWorkResult {
 }
 
 export interface BuildArchiveRequestInput {
+  /** Editing baseline: fields the user left untouched must round-trip without normalization loss. */
+  previous?: ArchiveRequest;
   entry_id?: string;
   work: WorkDetails | ManualWork | null;
   consumed: ArchiveConsumed;
@@ -504,11 +535,20 @@ export function buildArchiveRequest(
   }
 
   const isPlanned = input.status === "planned";
+  const consumedUnchanged = input.previous !== undefined &&
+    JSON.stringify(input.previous.consumed) === JSON.stringify(input.consumed);
+  const whenUnchanged = input.previous !== undefined &&
+    JSON.stringify(input.previous.when) === JSON.stringify(input.when);
+  const fieldUnchanged = (field: keyof ArchiveConsumed): boolean => input.previous !== undefined &&
+    JSON.stringify(input.previous.consumed[field]) === JSON.stringify(input.consumed[field]);
+  const allowEmpty = isPlanned || input.status === "dropped";
 
   // Validate consumed based on category
-  const consumed: ArchiveConsumed = {};
+  const consumed: ArchiveConsumed = input.previous ? { ...input.consumed } : {};
 
-  if (isPlanned) {
+  if (consumedUnchanged) {
+    Object.assign(consumed, input.previous!.consumed);
+  } else if (isPlanned && !input.previous) {
     // Planned (watchlist) works count 0 time; keep consumed minimal
     if (
       (work.category === "anime" || work.category === "series") &&
@@ -529,7 +569,9 @@ export function buildArchiveRequest(
     work.seasons.length > 0
   ) {
     const selected = input.consumed.seasons ?? [];
-    if (selected.length === 0) {
+    if (fieldUnchanged("seasons")) {
+      // Preserve imported zero/explicit episode counts when only another field changed.
+    } else if (selected.length === 0 && !allowEmpty) {
       errors.push("Select at least one season you watched.");
     } else {
       const seasonMap = new Map<number, SeasonInfo>();
@@ -537,6 +579,8 @@ export function buildArchiveRequest(
         seasonMap.set(s.number, s);
       }
       consumed.seasons = selected.map((sel) => {
+        const previous = input.previous?.consumed.seasons?.find((s) => s.number === sel.number);
+        if (previous && previous.episodes === sel.episodes) return sel;
         const info = seasonMap.get(sel.number);
         const maxEp = info?.episodes ?? 0;
         if (
@@ -546,7 +590,7 @@ export function buildArchiveRequest(
         ) {
           return {
             number: sel.number,
-            episodes: Math.max(1, Math.round(sel.episodes)),
+            episodes: Math.max(allowEmpty ? 0 : 1, Math.round(sel.episodes)),
           };
         }
         // Omit `episodes` when the whole season was watched, per contract.ts
@@ -559,14 +603,18 @@ export function buildArchiveRequest(
     work.category === "series"
   ) {
     const times = input.consumed.times ?? 1;
-    if (!Number.isInteger(times) || times < 1 || times > 1000) {
+    if (fieldUnchanged("times")) {
+      // Omitted or zero imported viewings are not a request to change them.
+    } else if (!Number.isInteger(times) || times < (allowEmpty ? 0 : 1) || times > 1000) {
       errors.push("Times watched must be a whole number of at least 1.");
     } else {
       consumed.times = times;
     }
   } else {
     const progress = input.consumed.progress ?? 1;
-    if (!Number.isFinite(progress) || progress <= 0 || progress > 1) {
+    if (fieldUnchanged("progress")) {
+      // Do not round an untouched imported progress fraction.
+    } else if (!Number.isFinite(progress) || progress < 0 || (!allowEmpty && progress === 0) || progress > 1) {
       errors.push("Progress must be between 1% and 100%.");
     } else {
       consumed.progress = Math.round(progress * 100) / 100;
@@ -574,6 +622,8 @@ export function buildArchiveRequest(
   }
 
   if (
+    !consumedUnchanged &&
+    !fieldUnchanged("minutes_override") &&
     !isPlanned &&
     input.consumed.minutes_override !== undefined &&
     input.consumed.minutes_override !== null
@@ -581,13 +631,13 @@ export function buildArchiveRequest(
     const override = Number(input.consumed.minutes_override);
     if (!Number.isFinite(override) || override < 0) {
       errors.push("Time override must be 0 or greater.");
-    } else if (override > 0) {
+    } else {
       consumed.minutes_override = Math.round(override);
     }
   }
 
   // Validate When
-  const precision = isPlanned ? "unknown" : input.when.precision;
+  const precision = whenUnchanged ? input.when.precision : isPlanned ? "unknown" : input.when.precision;
   const when: ArchiveWhen = { precision };
 
   if (precision !== "unknown") {
@@ -611,9 +661,10 @@ export function buildArchiveRequest(
       }
     }
   }
+  if (whenUnchanged) Object.assign(when, input.previous!.when);
 
   // Validate optional rating (0..10 with at most one decimal) & note
-  let rating: number | null | undefined = undefined;
+  let rating: number | null | undefined = input.rating === null ? null : undefined;
   if (input.rating !== undefined && input.rating !== null) {
     const ratingCheck = validateRating10(input.rating);
     if (!ratingCheck.ok) {
@@ -623,13 +674,13 @@ export function buildArchiveRequest(
     }
   }
 
-  let note: string | null | undefined = undefined;
+  let note: string | null | undefined = input.note === null ? null : undefined;
   if (input.note !== undefined && input.note !== null) {
     const trimmed = input.note.trim();
     if (trimmed.length > 5000) {
       errors.push("Note must be 5000 characters or fewer.");
-    } else if (trimmed.length > 0) {
-      note = trimmed;
+    } else {
+      note = trimmed || null;
     }
   }
 

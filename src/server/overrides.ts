@@ -588,6 +588,8 @@ export interface LatestOverride {
   hidden: boolean;
   meta: { provider: MetaProvider; provider_id: string } | null;
   meta_work: WorkDetails | null;
+  /** Explicit WorkEdit.meta=null, distinct from an override that never mentioned metadata. */
+  meta_unlinked: boolean;
   topic: string | null;
   created_at: string;
   edited: boolean;
@@ -606,11 +608,13 @@ function rowToLatestOverride(row: WorkOverrideRow): LatestOverride {
       : null;
 
   let metaWork: WorkDetails | null = null;
+  let metaUnlinked = false;
   if (typeof row.meta_json === "string" && row.meta_json.trim() !== "") {
     try {
       const parsed = JSON.parse(row.meta_json) as unknown;
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        metaWork = parsed as WorkDetails;
+        metaUnlinked = (parsed as Record<string, unknown>)["unlinked"] === true;
+        if (!metaUnlinked) metaWork = parsed as WorkDetails;
       }
     } catch {
       metaWork = null;
@@ -660,6 +664,7 @@ function rowToLatestOverride(row: WorkOverrideRow): LatestOverride {
     hidden,
     meta,
     meta_work: metaWork,
+    meta_unlinked: metaUnlinked,
     topic,
     created_at: row.created_at,
     edited,
@@ -965,7 +970,9 @@ export function saveWorkOverride(
   const hiddenInt = hidden ? 1 : 0;
   const metaProvider = meta?.provider ?? null;
   const metaId = meta?.provider_id ?? null;
-  const metaJson = effectiveMetaWork ? JSON.stringify(effectiveMetaWork) : null;
+  const metaUnlinked = edit.hasMeta ? edit.meta === null : (current?.meta_unlinked ?? false);
+  const metaJson = metaUnlinked ? JSON.stringify({ unlinked: true })
+    : effectiveMetaWork ? JSON.stringify(effectiveMetaWork) : null;
 
   const recordHash = workOverrideRecordHash({
     work_key: workKey,
@@ -1207,6 +1214,8 @@ export function applyWorkOverridesToEvents(
         meta_id: override.meta.provider_id,
         meta_override: "1",
       };
+    } else if (override.meta_unlinked) {
+      nextExt = { ...(parseObj(nextExt) ?? {}), meta_unlinked: "1" };
     }
 
     result.push({

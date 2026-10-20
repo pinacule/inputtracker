@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   deleteArchiveEntry,
-  type ArchiveConsumed,
-  type ArchiveWhen,
   type Category,
-  type ManualWork,
   type WorkStatus,
 } from "../api";
+import type { OpenArchiveOptions } from "../lib/archive-form";
 import { CATEGORIES, CATEGORY_META, categoryLabel } from "../lib/categories";
 import {
   buildContextMenuActions,
@@ -131,18 +129,7 @@ export function bindContextMenu(target: ContextMenuTarget) {
 
 export interface ContextMenuHostProps {
   onOpenEditWork: (work: EditableWorkTarget) => void;
-  onOpenAdd: (opts: {
-    category?: Category;
-    work?: ManualWork;
-    editingEntry?: {
-      entry_id: string;
-      work: ManualWork;
-      consumed: ArchiveConsumed;
-      when: ArchiveWhen;
-      rating?: number | null;
-      note?: string | null;
-    };
-  }) => void;
+  onOpenAdd: (opts: OpenArchiveOptions) => void;
   onDeletedArchiveEntry?: (entryId: string) => void;
 }
 
@@ -336,32 +323,10 @@ export function ContextMenuHost({
       }
       case "add_more": {
         closeContextMenu(false);
-        const manualWork: ManualWork = {
-          provider: "manual",
-          category: target.category,
-          title: target.title,
-          year: null,
-          creators: [],
-          seasons:
-            target.category === "anime" || target.category === "series"
-              ? [
-                  {
-                    number: 1,
-                    title: "Season 1",
-                    year: null,
-                    episodes: 12,
-                    episode_minutes: 24,
-                    total_minutes: 288,
-                    provider_id: null,
-                  },
-                ]
-              : [],
-          runtime_minutes: target.category === "film" ? 120 : null,
-          pages: target.category === "book" ? 300 : null,
-        };
         onOpenAdd({
           category: target.category,
-          work: manualWork,
+          workKey: target.workKey,
+          ...(target.workKey ? {} : { query: target.title }),
         });
         break;
       }
@@ -380,34 +345,9 @@ export function ContextMenuHost({
       case "edit_entry": {
         if (!target.entryId) break;
         closeContextMenu(false);
-        const manualWork: ManualWork = {
-          provider: "manual",
-          category: target.category,
-          title: target.title,
-          year: null,
-          creators: [],
-          seasons: (target.consumed?.seasons ?? []).map((s) => ({
-            number: s.number,
-            title: `Season ${s.number}`,
-            year: null,
-            episodes: s.episodes ?? 12,
-            episode_minutes: 24,
-            total_minutes: (s.episodes ?? 12) * 24,
-            provider_id: null,
-          })),
-          runtime_minutes: target.category === "film" ? 120 : null,
-          pages: null,
-        };
         onOpenAdd({
           category: target.category,
-          editingEntry: {
-            entry_id: target.entryId,
-            work: manualWork,
-            consumed: target.consumed ?? { times: 1, progress: 1 },
-            when: target.when ?? { precision: "unknown" },
-            rating: target.rating,
-            note: target.note,
-          },
+          entryId: target.entryId,
         });
         break;
       }
