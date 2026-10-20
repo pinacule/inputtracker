@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { MostPlayed } from "../ui/MostPlayed";
 import { previousMonthName } from "../lib/format-date";
 import {
   getMonthReview,
@@ -502,8 +501,6 @@ export function Review({
       )}
 
       {/* --- MONTH IN REVIEW VIEW --- */}
-      <MostPlayed categories={selectedCategories} from={view === "month" ? `${month}-01` : `${year}-01-01`}
-        to={view === "month" ? `${month}-${String(new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate()).padStart(2, "0")}` : `${year}-12-31`} />
       {view === "month" && (
         <>
           {loading && !filteredMonth ? (
