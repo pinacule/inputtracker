@@ -522,8 +522,6 @@
   --border-strong: #777266;
   --text-on-accent: #11110f;
   --sidebar-width: 212px;
-  --font-serif: "Iowan Old Style", "Palatino Linotype", "URW Palladio L", P052,
-    Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
 }
 :root[data-theme="midnight"] .app-shell--editorial { --bg-canvas: #101214; --bg-surface: #181b1d; --bg-surface-raised: #222629; }
 :root[data-theme="forest"] .app-shell--editorial { --bg-canvas: #101310; --bg-surface: #191d18; --bg-surface-raised: #222820; }
