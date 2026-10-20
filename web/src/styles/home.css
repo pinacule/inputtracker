@@ -106,8 +106,8 @@
 .home-week-day-value { color: var(--text-primary); font-size: clamp(0.6875rem, 1.1vw, 0.8125rem); line-height: 1; white-space: nowrap; }
 .home-week-day--quiet .home-week-day-value { color: var(--text-muted); }
 .home-week-bar-well { display: flex; align-items: flex-end; justify-content: center; position: relative; width: 12px; height: 98px; }
-.home-week-bar-stack { width: 100%; display: flex; flex-direction: column-reverse; overflow: hidden; transition: height var(--duration-slow) var(--ease-out); }
-.home-week-bar-seg { width: 100%; display: block; min-height: 0; }
+.home-week-bar-stack { width: 100%; display: flex; flex-direction: column-reverse; overflow: hidden; border-radius: var(--chart-svg-radius, 0) var(--chart-svg-radius, 0) var(--chart-svg-inner-radius, 0) var(--chart-svg-inner-radius, 0); transition: height var(--duration-slow) var(--ease-out); }
+.home-week-bar-seg { width: 100%; display: block; min-height: 0; background-image: var(--chart-fill-image); box-shadow: var(--chart-fill-shadow); }
 .home-week-bar-Baseline { height: 1px; width: 4px; background: var(--text-muted); }
 .home-week-norm-marker { position: absolute; left: -8px; right: -8px; height: 1px; background: var(--text-secondary); pointer-events: none; box-shadow: 0 1px 0 var(--bg-canvas); }
 .home-week-day-footer { display: flex; flex-direction: column; align-items: center; gap: 2px; }

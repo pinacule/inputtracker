@@ -1,5 +1,5 @@
 /**
- * InputTracker Design System — Tokens (v2.1 Dark Themes Only)
+ * InputTracker Design System — Colour and skin tokens
  *
  * Aesthetic: Calm nocturnal reading room & personal archive.
  * 5 named dark themes (Espresso / Warm Study, Midnight Ink, Pine & Moss,
@@ -9,7 +9,8 @@
  */
 
 :root,
-:root[data-theme="espresso"] {
+:root[data-theme="espresso"],
+.theme-preview {
   color-scheme: dark;
 
   /* --- Typography --- */
@@ -19,6 +20,63 @@
     "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
     "Liberation Mono", monospace;
+  --font-body: var(--font-sans);
+  --font-display: var(--font-serif);
+  --font-numbers: var(--font-serif);
+  --display-case: none;
+  --display-tracking: var(--tracking-tight);
+  --display-weight: 600;
+  --display-stretch: normal;
+  --display-color: var(--text-primary);
+  --label-case: none;
+  --label-tracking: normal;
+  --font-smoothing: antialiased;
+
+  /* Skin geometry. Defaults preserve the original five palettes. */
+  --border-width: 1px;
+  --border-style: solid;
+  --card-border: var(--border-subtle);
+  --card-shadow: var(--shadow-sm);
+  --card-shadow-raised: var(--shadow-md);
+  --card-title-bg: transparent;
+  --card-title-color: var(--display-color);
+  --card-title-padding: 0px;
+  --card-title-border: 0px;
+  --card-title-shadow: none;
+  --control-shadow: var(--shadow-xs);
+  --input-shadow: none;
+  --nav-shadow: none;
+  --nav-item-shadow: none;
+  --nav-active-bg: var(--accent-primary-subtle);
+  --nav-active-color: var(--accent-primary);
+  --focus-width: 2px;
+  --focus-style: solid;
+  --focus-offset: 2px;
+  --icon-stroke: 1.8;
+  --icon-cap: round;
+  --icon-join: round;
+  --chart-radius: 9999px;
+  --chart-svg-radius: 3px;
+  --chart-svg-inner-radius: 1px;
+  --chart-cell-radius: 2.5px;
+  --chart-fill-image: none;
+  --chart-fill-shadow: none;
+  --chart-linecap: round;
+  --wallpaper: none;
+  --wallpaper-size: auto;
+  --wallpaper-position: center top;
+  --wallpaper-repeat: repeat;
+  --header-art: none;
+  --texture-overlay: none;
+  --texture-size: 180px 180px;
+  --texture-opacity: 0;
+  --content-frame: none;
+  --content-frame-radius: 0px;
+  --scrollbar-thumb: var(--border-strong);
+  --scrollbar-track: var(--bg-canvas);
+  --scrollbar-radius: var(--radius-full);
+  --cover-sheen: inset 3px 0 6px rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 
   /* Type scale */
   --text-xs: 0.75rem;      /* 12px */
@@ -241,7 +299,8 @@
 }
 
 /* --- Theme 2: Midnight Ink (Nocturnal Slate-Navy & Sky Blue) --- */
-:root[data-theme="midnight"] {
+:root[data-theme="midnight"],
+.theme-preview[data-theme="midnight"] {
   color-scheme: dark;
 
   --bg-canvas: #0b1017;
@@ -278,7 +337,8 @@
 }
 
 /* --- Theme 3: Pine & Moss (Deep Botanical Evergreen & Sage) --- */
-:root[data-theme="forest"] {
+:root[data-theme="forest"],
+.theme-preview[data-theme="forest"] {
   color-scheme: dark;
 
   --bg-canvas: #0c130f;
@@ -315,7 +375,8 @@
 }
 
 /* --- Theme 4: Obsidian Archive (Neutral Carbon Ink & Library Gold) --- */
-:root[data-theme="obsidian"] {
+:root[data-theme="obsidian"],
+.theme-preview[data-theme="obsidian"] {
   color-scheme: dark;
 
   --bg-canvas: #0e0e11;
@@ -352,7 +413,8 @@
 }
 
 /* --- Theme 5: Velvet Nocturne (Dark Aubergine & Soft Rosewood) --- */
-:root[data-theme="plum"] {
+:root[data-theme="plum"],
+.theme-preview[data-theme="plum"] {
   color-scheme: dark;
 
   --bg-canvas: #130e16;

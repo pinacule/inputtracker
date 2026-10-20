@@ -1,0 +1,80 @@
+/* Static procedural grain and a diffuse particle halo. */
+:root[data-theme="signal"],
+.theme-preview[data-theme="signal"] {
+  color-scheme: dark;
+  --font-serif: "Courier Prime", "American Typewriter", "Courier New", "Liberation Mono", serif;
+  --font-sans: "IBM Plex Mono", "DejaVu Sans Mono", "Courier New", ui-monospace, monospace;
+  --font-body: var(--font-sans);
+  --font-display: var(--font-serif);
+  --font-numbers: var(--font-mono);
+  --display-case: uppercase;
+  --display-tracking: 0.12em;
+  --display-weight: 400;
+  --display-color: #a4f5c1;
+  --label-case: uppercase;
+  --label-tracking: 0.06em;
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 18px;
+  --radius-full: 4px;
+  --bg-canvas: #0c100e;
+  --bg-surface: #111814;
+  --bg-surface-raised: #19221c;
+  --bg-subtle: #202c24;
+  --bg-muted: #2d3b31;
+  --bg-overlay: rgba(3, 7, 4, 0.86);
+  --text-primary: #e6f2e9;
+  --text-secondary: #b8cbbc;
+  --text-muted: #a0b5a6;
+  --text-on-accent: #0c100e;
+  --accent-primary: #a4f5c1;
+  --accent-primary-hover: #c8ffda;
+  --accent-primary-subtle: #193426;
+  --accent-primary-border: #446b51;
+  --border-subtle: #25342b;
+  --border-default: #41594a;
+  --border-strong: #668772;
+  --card-border: transparent;
+  --content-frame: inset 0 0 0 1px #668772;
+  --content-frame-radius: 18px;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: 0 12px 32px #00000055;
+  --shadow-lg: 0 20px 48px #00000088;
+  --shadow-cover: none;
+  --cover-sheen: none;
+  --focus-ring: #a4f5c1;
+  --focus-width: 1px;
+  --focus-offset: 4px;
+  --icon-stroke: 1.3;
+  --chart-radius: 2px;
+  --chart-svg-radius: 1px;
+  --chart-svg-inner-radius: 0px;
+  --chart-cell-radius: 1px;
+  --chart-fill-image: linear-gradient(0deg, #00000044, transparent);
+  --heat-1: #1c3425;
+  --heat-2: #294c35;
+  --heat-3: #3e704d;
+  --heat-4: #629e72;
+  --heat-border-1: #334d3d;
+  --heat-border-2: #496950;
+  --heat-border-3: #658a6d;
+  --heat-border-4: #92bf9d;
+  --wallpaper: radial-gradient(ellipse at 85% 10%, #a4f5c114, transparent 55%), radial-gradient(ellipse at 15% 80%, #a4f5c10d, transparent 45%);
+  --wallpaper-size: 100% 100%;
+  --wallpaper-repeat: no-repeat;
+  --texture-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Cpath fill='%23ffffff' filter='url(%23grain)' d='M0 0h180v180H0z'/%3E%3C/svg%3E");
+  --texture-opacity: 0.1;
+}
+
+:root[data-theme="signal"] :is(.page-eyebrow, .ui-stat-label),
+.theme-preview[data-theme="signal"] .theme-preview-label {
+  width: fit-content;
+  padding: 3px 9px;
+  background: linear-gradient(currentColor, currentColor) left top / 4px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) left top / 1px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) right bottom / 4px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) right bottom / 1px 4px no-repeat;
+}

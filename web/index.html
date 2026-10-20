@@ -13,22 +13,7 @@
     <meta name="theme-color" content="#14120f" />
     <title>InputTracker</title>
     <script>
-      (function () {
-        try {
-          var valid = {
-            espresso: "#14120f",
-            midnight: "#0b1017",
-            forest: "#0c130f",
-            obsidian: "#0e0e11",
-            plum: "#130e16",
-          };
-          var raw = localStorage.getItem("inputtracker.theme");
-          var theme = raw && valid[raw] ? raw : "espresso";
-          document.documentElement.setAttribute("data-theme", theme);
-          var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute("content", valid[theme]);
-        } catch (e) {}
-      })();
+      /* inputtracker-theme-bootstrap */
     </script>
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />

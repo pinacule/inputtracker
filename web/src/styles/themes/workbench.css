@@ -1,0 +1,83 @@
+/* Hand-drawn circuit tile: nested tracks, pads and a central chip. */
+:root[data-theme="workbench"],
+.theme-preview[data-theme="workbench"] {
+  color-scheme: dark;
+  --font-mono: "Terminus", "Fixedsys", "IBM Plex Mono", "DejaVu Sans Mono",
+    "Lucida Console", "Courier New", ui-monospace, monospace;
+  --font-sans: var(--font-mono);
+  --font-serif: var(--font-mono);
+  --font-body: var(--font-mono);
+  --font-display: var(--font-mono);
+  --font-numbers: var(--font-mono);
+  --font-smoothing: auto;
+  --display-weight: 700;
+  --display-tracking: 0em;
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-full: 0px;
+  --bg-canvas: #293b49;
+  --bg-surface: #263540;
+  --bg-surface-raised: #30424f;
+  --bg-subtle: #394d5b;
+  --bg-muted: #455e6e;
+  --bg-overlay: rgba(10, 18, 24, 0.85);
+  --text-primary: #f4f8fc;
+  --text-secondary: #d2dfe9;
+  --text-muted: #b9cad6;
+  --text-on-accent: #13212c;
+  --accent-primary: #a8d5ff;
+  --accent-primary-hover: #cde7ff;
+  --accent-primary-subtle: #19374e;
+  --accent-primary-border: #718998;
+  --border-subtle: #718998;
+  --border-default: #718998;
+  --border-strong: #c0d5e2;
+  --card-title-bg: #b6ccd9;
+  --card-title-color: #13212c;
+  --card-title-padding: 6px;
+  --card-title-border: 1px;
+  --card-title-shadow: inset 1px 1px 0 #e7f3fa, inset -1px -1px 0 #192a36;
+  --shadow-xs: inset 1px 1px 0 #a0b9ca, inset -1px -1px 0 #0b1821;
+  --shadow-sm: inset 1px 1px 0 #c0d5e2, inset -1px -1px 0 #0b1821, 2px 2px 0 #15232e;
+  --shadow-md: inset 1px 1px 0 #c0d5e2, inset -1px -1px 0 #0b1821, 4px 4px 0 #15232e;
+  --shadow-lg: inset 1px 1px 0 #c0d5e2, inset -1px -1px 0 #0b1821, 6px 6px 0 #15232e;
+  --shadow-cover: 2px 2px 0 #15232e;
+  --cover-sheen: inset 1px 1px 0 #c0d5e2, inset -1px -1px 0 #0b1821;
+  --input-shadow: inset 1px 1px 0 #0b1821, inset -1px -1px 0 #a0b9ca;
+  --nav-shadow: var(--shadow-sm);
+  --nav-item-shadow: var(--shadow-xs);
+  --nav-active-bg: #b6ccd9;
+  --nav-active-color: #13212c;
+  --focus-ring: #ffffff;
+  --focus-width: 1px;
+  --focus-style: dotted;
+  --icon-stroke: 2;
+  --icon-cap: square;
+  --icon-join: miter;
+  --chart-radius: 0px;
+  --chart-svg-radius: 0px;
+  --chart-svg-inner-radius: 0px;
+  --chart-cell-radius: 0px;
+  --chart-linecap: square;
+  --chart-fill-image: repeating-linear-gradient(90deg, transparent 0 6px, #13212c 6px 8px);
+  --chart-fill-shadow: inset 0 1px 0 #ffffff66, inset 0 -1px 0 #00000088;
+  --scrollbar-thumb: #b6ccd9;
+  --heat-1: #394d5b;
+  --heat-2: #455e6e;
+  --heat-3: #587c94;
+  --heat-4: #84b3d2;
+  --heat-border-1: #718998;
+  --heat-border-2: #8ca4b5;
+  --heat-border-3: #a5c0d2;
+  --heat-border-4: #c0d5e2;
+  --wallpaper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg fill='none' stroke='%238aa6b5' stroke-opacity='.32' stroke-width='1'%3E%3Cpath d='M3 3h90v90H3zM8 8h26v15H19v22H8V8m80 0H61v12h16v23h11V8M8 88h25V73H20V57H8v31m80 0H62V74h15V56h11v32M28 30h40v36H28zM24 26h48v44H24zM34 3v9h12v10m9-19v9H49v10M34 93V81h12V74m9 19V81h-6V74M3 48h19m52 0h19M38 35h20v26H38zM31 39h7m-7 6h7m-7 6h7m-7 6h7m20-18h7m-7 6h7m-7 6h7m-7 6h7M12 12h17v7H15v23m69-30H65v4h16v25M12 84h17v-7H16V60m68 24H66v-6h15V59'/%3E%3Ccircle cx='22' cy='48' r='2'/%3E%3Ccircle cx='74' cy='48' r='2'/%3E%3Ccircle cx='46' cy='22' r='2'/%3E%3Ccircle cx='49' cy='74' r='2'/%3E%3C/g%3E%3C/svg%3E");
+  --wallpaper-size: 96px 96px;
+}
+
+:root[data-theme="workbench"] :is(.ui-card-subtitle, .ui-sheet-subtitle),
+:root[data-theme="workbench"] .home-section-header :is(.home-section-count, .home-section-link) {
+  color: var(--card-title-color);
+}

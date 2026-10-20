@@ -26,8 +26,8 @@ month card beside the day panel and category chip filtering).
 
 InputTracker is both a daily media log and a **long-term personal archive** of everything watched, read, and listened to. Design A v2.2 refines the reading-room aesthetic around six core principles:
 
-1. **Dark Themes Only (`web/src/lib/theme.ts`, `web/src/styles/tokens.css`):**
-   - Light and system modes are removed. The app offers 5 named dark themes (**Warm Study** `espresso`, **Midnight Ink** `midnight`, **Pine & Moss** `forest`, **Obsidian Archive** `obsidian`, and **Velvet Nocturne** `plum`), picked via live swatch cards in **Settings › Appearance** and applied before first paint from `localStorage` (`inputtracker.theme`) with zero flash.
+1. **Named app skins (`web/src/lib/theme.ts`, `web/src/styles/tokens.css`):**
+   - The five original dark palettes remain, alongside Hermes, Workbench, CWM (monochrome light), and Signal. Settings › Appearance has live miniature skin previews. Choices persist in `localStorage` (`inputtracker.theme`); Vite embeds the registry's bootstrap in the head before first paint. Unset/invalid preferences still use `espresso`.
    - All 10 category colour families (`anime`, `series`, `film`, `book`, `audiobook`, `youtube`, `podcast`, `music`, `shortform`, `other`) remain distinct and WCAG AA compliant (>= 4.5:1) on every theme.
     - One glance answers: what did I do **Today** and in the **Last 7 days**, how does it compare with my norm, and how does **This month** look. In-progress works live in Library's **In Progress** filter, not a Home shelf.
    - Selected day panel header is a single clean line (`Today`, `Yesterday`, or `Saturday 17 October`) with no duplicated numeric date eyebrow.
@@ -82,7 +82,7 @@ Routes are hash-based and parsed by `parseAppRoute(hash)`:
 - **`#/search` (Global Search):**
   - Query input (`/` shortcut), source/media-type selectors, multi-select `<CategoryChips />`, highlighted hits with `<QuickRatingPill />` and context menus, and full title history.
 - **`#/settings` (Settings & Sync):**
-  - **Appearance:** 5 dark theme swatch cards (`espresso`, `midnight`, `forest`, `obsidian`, `plum`).
+  - **Appearance:** Nine skin preview tiles, with native keyboard-selectable radios.
   - **Import Achriom Library:** Upload `.zip`/`.csv` → **1. Preview (Dry Run)** → **2. Import Achriom Archive**, rendering `AchriomImportResult`.
   - **Hidden Works:** Lists hidden works (`GET /api/library/hidden`) with one-click **Unhide**.
    - **Sources & Sync, Native/Takeout Import & Export, Metadata Providers & Database Diagnostics.**
@@ -113,6 +113,24 @@ Routes are hash-based and parsed by `parseAppRoute(hash)`:
   hero padding/gaps tighten. The reading body is full width, with wrapping chips, score labels,
   metrics and long copy. At 640px and above the existing side-by-side cover/body layout is retained.
   This is a CSS design target; automated build/helper tests do not replace browser screenshot checks.
+
+---
+
+## Themes
+
+`theme.ts` owns IDs, labels, validation, persistence and category colours. Each new skin lives in `web/src/styles/themes/<id>.css`, imported by `index.css`. Preview scopes (`.theme-preview[data-theme]`) reset to the default tokens then use the same overrides as `:root[data-theme]`; there is no second preview design.
+
+- **Original palettes:** espresso (walnut/terracotta, default), midnight (navy/sky), forest (pine/sage), obsidian (carbon/gold), plum (aubergine/rose). Existing saved choices and reading-room geometry remain supported.
+- **Hermes:** engraved ink navy, tall condensed uppercase stacks, tracked navigation, sharp rectangles and one electric-blue action block. Fine conic rays behind page headers; numerical data is mono. AA blue links are distinct from the darker electric block's white labels.
+- **Workbench:** tiled original SVG circuit tracks, bitmap-style mono stacks, square controls, light/dark inset bevels, card title bars and taskbar-like navigation. Segmented progress fills evoke desktop meters.
+- **CWM:** white/black terminal panes, zero radius, hard black edges and dense original dithered lozenges. Key/value labels and ten ANSI category fills; bright ANSI hues use black text instead of failing contrast on white. Status controls and fallback covers stay monochrome.
+- **Signal:** near-black procedural particle grain, mint widely tracked typewriter headings, bracket-corner mono labels and one thin rounded content frame. Opaque quiet cards protect text from the texture.
+
+Skin tokens (in addition to existing colour/spacing/type tokens):
+- Type: `--font-body`, `--font-display`, `--font-numbers`, `--font-mono`; `--display-case`, `--display-tracking`, `--display-weight`, `--display-stretch`, `--display-color`, `--label-case`, `--label-tracking`, `--font-smoothing`. Legacy `--font-serif`/`--font-sans` aliases also change so existing pages inherit the skin. No fonts are downloaded.
+- Geometry: `--radius-xs/sm/md/lg/xl/full`, `--border-width/style`; `--card-border/shadow/shadow-raised`, `--card-title-bg/color/padding/border/shadow`, `--control-shadow`, `--input-shadow`, `--nav-shadow/item-shadow/active-bg/active-color`, `--cover-sheen`.
+- Canvas: `--wallpaper`, `--wallpaper-size/position/repeat`, `--header-art`, `--texture-overlay/size/opacity`, `--content-frame/radius`. All artwork is local CSS or inline SVG; textures are static and never intercept input.
+- Data/accessibility: `--chart-radius/svg-radius/svg-inner-radius/cell-radius/fill-image/fill-shadow/linecap`, `--icon-stroke/cap/join`, `--focus-width/style/offset`, `--scrollbar-thumb/track/radius`. Numeric data uses tabular figures; reduced-motion disables motion globally. Theme changes do not alter the spacing scale or shell widths.
 
 ---
 
