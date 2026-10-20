@@ -53,14 +53,14 @@ export function CategoryChips({
 
   // Always show categories that have data; in Library also ensure YouTube and Music
   // chips remain reachable even when "All" excludes them.
-  const categoriesToShow =
+  const categoriesToShow = (
     presentSet.size > 0
       ? CATEGORIES.filter(
           (c) =>
             presentSet.has(c) ||
             (scope === "library" && (c === "youtube" || c === "music"))
         )
-      : CATEGORIES;
+      : CATEGORIES).filter((c) => scope !== "library" || c !== "shortform");
 
   const applyChange = (next: Category[]) => {
     if (syncUrl && typeof window !== "undefined") {

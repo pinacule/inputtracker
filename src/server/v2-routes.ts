@@ -32,6 +32,7 @@ import {
 } from "./overrides.ts";
 import { getMonthReview, getSeries, getYearReviewV2 } from "./review.ts";
 import { getSettings } from "./settings.ts";
+import { getTop } from "./top.ts";
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const YEAR_RE = /^\d{4}$/;
@@ -69,6 +70,21 @@ function validateQueryParams(
 export function registerV2Routes(app: Hono, deps: AppDeps): void {
   const { db, config } = deps;
   const tz = config.timezone;
+
+  app.get("/api/top", (c) => {
+    const err = validateQueryParams(c.req.url, ["kind", "from", "to", "by", "limit"]);
+    if (err) return c.json({ error: err }, 400);
+    const kind = c.req.query("kind");
+    const by = c.req.query("by") ?? "plays";
+    const from = c.req.query("from");
+    const to = c.req.query("to");
+    const limitRaw = c.req.query("limit") ?? "10";
+    if (kind !== "songs" && kind !== "artists" && kind !== "channels") return c.json({ error: "kind must be songs, artists or channels" }, 400);
+    if (by !== "plays" && by !== "time") return c.json({ error: "by must be plays or time" }, 400);
+    if ((from !== undefined && !isValidDateStr(from)) || (to !== undefined && !isValidDateStr(to)) || (from && to && from > to)) return c.json({ error: "invalid date range (expected YYYY-MM-DD, from <= to)" }, 400);
+    if (!/^\d+$/.test(limitRaw) || Number(limitRaw) < 1 || Number(limitRaw) > 200) return c.json({ error: "limit must be an integer 1-200" }, 400);
+    return c.json(getTop(db, { kind, by, from, to, limit: Number(limitRaw), tz }));
+  });
 
   // POST /api/archive
   app.post("/api/archive", async (c) => {
@@ -181,7 +197,7 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
       if (!isValidLibrarySort(sortRaw)) {
         return c.json(
           {
-            error: `Invalid sort: '${sortRaw}' (expected recent, time, title, category or creator)`,
+             error: `Invalid sort: '${sortRaw}' (expected plays, recent, time, title, category or creator)`,
           },
           400
         );

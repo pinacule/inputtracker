@@ -19,6 +19,7 @@ export const CATEGORIES = [
   "youtube",
   "podcast",
   "music",
+  "shortform",
   "other",
 ] as const;
 
@@ -59,6 +60,7 @@ export function categoryOf(event: {
   external_ids?: unknown;
   raw?: unknown;
 }): Category {
+  if (event.media_type === "shortform") return "shortform";
   const raw = asObject(event.raw);
   if (raw !== null && isCategory(raw["category"])) {
     return raw["category"];

@@ -45,7 +45,8 @@ import {
   parseJsonObject,
   type ConsumptionEvent,
 } from "./aggregate.ts";
-import { saveAnnotation } from "./annotations.ts";
+import { getWorkAnnotations, saveAnnotation } from "./annotations.ts";
+import { resolveWorkKey } from "../core/work-identity.ts";
 import { getArchiveEntry, saveArchiveEntry } from "./archive.ts";
 import {
   cleanMusicArtist,
@@ -160,7 +161,7 @@ function readAllLatestAnnotations(db: Database): AnnotationRecord[] {
   const rows = db
     .query<AnnotationRecord, []>(
       `SELECT id, source, title, rating, rating_tenths, note, created_at
-       FROM annotations_latest
+        FROM annotations_latest WHERE work_key IS NULL
        ORDER BY id DESC;`
     )
     .all();
@@ -237,7 +238,9 @@ export function buildAllLibraryWorks(
   opts: BuildLibraryWorksOptions = {}
 ): InternalLibraryWork[] {
   // Short YouTube video-days (below [youtube] min_watch_minutes) are left out, as in every read.
-  const rawEvents = filterShortYoutubeEvents(getLatestConsumptionEvents(db), tz, db);
+  // Time-only short-form never creates an archived work.
+  const rawEvents = filterShortYoutubeEvents(getLatestConsumptionEvents(db), tz, db)
+    .filter((e) => e.source_kind !== "shortform_day" && categoryOf(e) !== "shortform");
   const events = dedupeConsumption(rawEvents, tz);
   if (events.length === 0) {
     return [];
@@ -260,6 +263,7 @@ export function buildAllLibraryWorks(
   }
 
   const annotations = readAllLatestAnnotations(db);
+  const workAnnotations = getWorkAnnotations(db);
   const annotationsByNormTitle = new Map<string, AnnotationRecord[]>();
   for (const ann of annotations) {
     const nt = normalizeForSearch(ann.title);
@@ -272,7 +276,7 @@ export function buildAllLibraryWorks(
     list.push(ann);
   }
 
-  const components = groupEventsIntoWorkComponents(events);
+  const components = groupEventsIntoWorkComponents(events, db);
   const youtubeEnrichmentMap = readYoutubeEnrichmentByVideoId(db);
   const allWorks: InternalLibraryWork[] = [];
 
@@ -687,10 +691,11 @@ export function buildAllLibraryWorks(
       }
     }
 
-    const rawRating = bestAnnotation ? bestAnnotation.rating : (override?.rating ?? null);
+    const boundAnnotation = workAnnotations.get(key);
+    const rawRating = boundAnnotation ? boundAnnotation.rating : bestAnnotation ? bestAnnotation.rating : (override?.rating ?? null);
     // No ratings for music tracks (spec section 15).
     const rating = effectiveCategory === "music" ? null : rawRating;
-    const note = bestAnnotation ? bestAnnotation.note : (override?.note ?? null);
+    const note = boundAnnotation ? boundAnnotation.note : bestAnnotation ? bestAnnotation.note : (override?.note ?? null);
 
     // History items (newest first).
     const history = [...workEvents]
@@ -916,6 +921,7 @@ export function buildAllLibraryWorks(
 export type LibrarySort = LibrarySortV2;
 
 export const VALID_LIBRARY_SORTS: ReadonlySet<LibrarySortV2> = new Set([
+  "plays",
   "recent",
   "time",
   "title",
@@ -1005,7 +1011,9 @@ export function getLibrary(
   const sort = opts.sort ?? "recent";
   const works = filtered.map((item) => item.work);
 
-  if (sort === "time") {
+  if (sort === "plays") {
+    works.sort((a, b) => b.units - a.units || b.total_minutes - a.total_minutes || a.title.localeCompare(b.title) || a.key.localeCompare(b.key));
+  } else if (sort === "time") {
     works.sort(
       (a, b) =>
         b.total_minutes - a.total_minutes ||
@@ -1053,6 +1061,7 @@ export function getLibraryWorkDetail(
   tz: string = "Europe/Bratislava",
   config?: Config
 ): LibraryWorkDetail | null {
+  key = resolveWorkKey(db, key);
   if (key.startsWith("youtube:video:")) {
     return getYoutubeVideoWorkDetail(db, key, tz);
   }
@@ -1104,6 +1113,7 @@ export async function editLibraryWork(
   }
 
   const parsed = parseWorkEdit(input);
+  key = resolveWorkKey(db, key);
   const tz = opts.tz ?? "Europe/Bratislava";
   const nowIso = opts.nowIso ?? new Date().toISOString();
 
@@ -1179,53 +1189,54 @@ export async function editLibraryWork(
     }
   }
 
-  saveWorkOverride(db, key, parsed, current, metaWork, nowIso);
+  db.transaction(() => {
+    saveWorkOverride(db, key, parsed, current, metaWork, nowIso);
 
-  // Sync rating / note into the append-only annotations table so every read
-  // path (library, reviews, search, title-history, progress, /api/annotations)
-  // returns the exact same rating and note.
-  if (
-    target &&
-    (parsed.hasRating ||
-      parsed.hasNote ||
-      (parsed.hasTitle &&
-        (target.detail.rating !== null || target.detail.note !== null)))
-  ) {
-    const nextRating = parsed.hasRating
-      ? parsed.ratingTenths === null
-        ? null
-        : parsed.ratingTenths / 10
-      : target.detail.rating;
-    const nextNote = parsed.hasNote ? parsed.note : target.detail.note;
-    const primarySource = target.work.sources[0] ?? "manual";
+    // Sync rating / note into the append-only annotations table so every read
+    // path (library, reviews, search, title-history, progress, /api/annotations)
+    // returns the exact same rating and note.
+    if (
+      target &&
+      (parsed.hasRating || parsed.hasNote || parsed.hasMeta ||
+        (parsed.hasTitle &&
+          (target.detail.rating !== null || target.detail.note !== null)))
+    ) {
+      const nextRating = parsed.hasRating
+        ? parsed.ratingTenths === null
+          ? null
+          : parsed.ratingTenths / 10
+        : target.detail.rating;
+      const nextNote = parsed.hasNote ? parsed.note : target.detail.note;
+      const primarySource = target.work.sources[0] ?? "manual";
 
-    const titlesToSync = new Set<string>([target.work.title]);
-    if (parsed.hasTitle && parsed.title !== null) {
-      titlesToSync.add(parsed.title);
-    }
-    for (const ev of target.events) {
-      const wTitle = eventWorkTitleForGrouping(ev, categoryOf(ev));
-      if (wTitle.trim() !== "") {
-        titlesToSync.add(wTitle.trim());
+      const titlesToSync = new Set<string>([target.work.title]);
+      if (parsed.hasTitle && parsed.title !== null) {
+        titlesToSync.add(parsed.title);
+      }
+      for (const ev of target.events) {
+        const wTitle = eventWorkTitleForGrouping(ev, categoryOf(ev));
+        if (wTitle.trim() !== "") {
+          titlesToSync.add(wTitle.trim());
+        }
+      }
+
+      for (const t of titlesToSync) {
+        if (t && t.trim() !== "") {
+          saveAnnotation(
+            db,
+            {
+              source: primarySource,
+              work_key: key,
+              title: t.trim(),
+              rating: nextRating,
+              note: nextNote,
+            },
+            nowIso
+          );
+        }
       }
     }
-
-    for (const t of titlesToSync) {
-      if (t && t.trim() !== "") {
-        saveAnnotation(
-          db,
-          {
-            source: primarySource,
-            title: t.trim(),
-            rating: nextRating,
-            note: nextNote,
-          },
-          nowIso
-        );
-      }
-    }
-  }
-
+  })();
   if (!target) {
     // A single YouTube video (checked above).
     return getYoutubeVideoWorkDetail(db, key, tz)!;
@@ -1261,11 +1272,21 @@ interface SingleEntryRefreshOutcome {
   minutesAfter: number;
 }
 
-/** Incomplete provider responses must not erase already known seasons/runtimes. */
-function mergeRefreshedSeasons(previous: SeasonInfo[], fresh: SeasonInfo[]): SeasonInfo[] {
-  const byNumber = new Map(previous.map((season) => [season.number, season]));
+/**
+ * The provider's season list decides which seasons exist (a corrected chain may drop one, e.g. a
+ * spin-off that was wrongly counted as a season); known values only fill gaps in it. An empty
+ * provider list (incomplete response) keeps the previous seasons.
+ */
+function mergeRefreshedSeasons(
+  previous: SeasonInfo[],
+  fresh: SeasonInfo[],
+  watchedNumbers: ReadonlySet<number> = new Set()
+): SeasonInfo[] {
+  if (fresh.length === 0) return previous;
+  const prevByNumber = new Map(previous.map((season) => [season.number, season]));
+  const byNumber = new Map<number, SeasonInfo>();
   for (const season of fresh) {
-    const prev = byNumber.get(season.number);
+    const prev = prevByNumber.get(season.number);
     byNumber.set(season.number, prev ? {
       ...season,
       title: season.title ?? prev.title,
@@ -1278,18 +1299,26 @@ function mergeRefreshedSeasons(previous: SeasonInfo[], fresh: SeasonInfo[]): Sea
         ? season.total_minutes : prev.total_minutes,
     } : season);
   }
+  // A season the user watched never disappears because a provider response left it out.
+  for (const season of previous) {
+    if (!byNumber.has(season.number) && watchedNumbers.has(season.number)) {
+      byNumber.set(season.number, season);
+    }
+  }
   return [...byNumber.values()].sort((a, b) => a.number - b.number);
 }
 
 function mergeRefreshedWork(
   previous: WorkDetails | ManualWork | null,
-  fresh: WorkDetails
+  fresh: WorkDetails,
+  watchedSeasons: ReadonlySet<number> = new Set()
 ): WorkDetails {
   if (!previous) return fresh;
   const linked = previous.provider !== "manual" ? previous : null;
   return {
     ...fresh,
-    title: previous.title,
+    // A newly linked hand-made entry takes the provider's title; a linked one keeps its own.
+    title: linked ? previous.title : fresh.title,
     category: previous.category,
     year: fresh.year ?? previous.year,
     cover_url: fresh.cover_url ?? linked?.cover_url ?? null,
@@ -1297,7 +1326,7 @@ function mergeRefreshedWork(
     description: fresh.description ?? linked?.description ?? null,
     creators: fresh.creators.length > 0 ? fresh.creators : previous.creators,
     genres: fresh.genres.length > 0 ? fresh.genres : linked?.genres ?? [],
-    seasons: mergeRefreshedSeasons(previous.seasons, fresh.seasons),
+    seasons: mergeRefreshedSeasons(previous.seasons, fresh.seasons, watchedSeasons),
     // A stored page count describes the user's edition; absent provider data cannot erase it.
     pages: previous.pages !== null && previous.pages > 0 ? previous.pages : fresh.pages,
     runtime_minutes: fresh.runtime_minutes !== null && fresh.runtime_minutes > 0
@@ -1435,7 +1464,12 @@ async function refreshSingleArchiveEntry(
     };
   }
 
-  const nextWork = mergeRefreshedWork(getArchiveEntry(db, entryId).work, freshWork);
+  const storedEntry = getArchiveEntry(db, entryId);
+  const nextWork = mergeRefreshedWork(
+    storedEntry.work,
+    freshWork,
+    new Set((storedEntry.consumed.seasons ?? []).map((season) => season.number))
+  );
 
   const nextConsumed: ArchiveConsumed = { ...existingConsumed };
   // A provider adding/removing seasons says nothing about what the user watched.
@@ -1493,6 +1527,7 @@ export async function refreshLibraryWorkMetadata(
   }
 
   const tz = opts.tz ?? opts.config.timezone ?? "Europe/Bratislava";
+  key = resolveWorkKey(db, key);
   const nowIso = opts.nowIso ?? new Date().toISOString();
   const dryRun = Boolean(opts.dryRun);
 
@@ -1626,7 +1661,7 @@ export async function refreshLibraryWorkMetadata(
     includeHidden: true,
     config: opts.config,
   });
-  let updated = updatedWorks.find((item) => item.work.key === key);
+  let updated = updatedWorks.find((item) => item.work.key === resolveWorkKey(db, key));
   if (!updated && entryIds.size > 0) {
     updated = updatedWorks.find((item) =>
       item.detail.history.some((h) => h.entry_id !== null && entryIds.has(h.entry_id))

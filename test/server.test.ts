@@ -746,7 +746,7 @@ describe("HTTP API", () => {
       expect(body.kind).toBe("youtube-takeout");
       expect(body.records).toBe(12);
       expect(body.seen).toBe(8);
-      expect(body.inserted).toBe(7);
+      expect(body.inserted).toBe(8);
       expect(body.skipped).toEqual({
         ads: 1,
         no_video: 1,

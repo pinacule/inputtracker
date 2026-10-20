@@ -1,16 +1,14 @@
 /**
- * Ratings (1–10) and free-text notes on titles (F3).
- *
- * A title is the same group the Search page uses: `source` +
- * `getSeriesOrTitle(event)` (one book, one show, one movie, one YouTube video).
- * Like `events` and `goals`, `annotations` is append-only: every save is a new
- * row, and readers use the `annotations_latest` view (newest row per
- * `(source, title)`).
+ * Ratings (0–10) and free-text notes, bound to a durable work where possible.
+ * Every save appends a revision. Legacy source/title rows remain readable;
+ * work reads use annotations_latest and resolve immutable identity aliases.
  */
 
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import type { AnnotationRow } from "../core/schema.ts";
+import type { AnnotationRow, EventRow } from "../core/schema.ts";
+import { getWorkKeyAliases, resolveWorkKey, resolveWorkKeyIn } from "../core/work-identity.ts";
+import { getWorkOverrides, groupEventsIntoWorkComponents } from "./overrides.ts";
 import {
   MAX_RATING,
   MIN_RATING,
@@ -62,6 +60,7 @@ export interface EmptyAnnotation {
 }
 
 export interface SaveAnnotationInput {
+  work_key?: string;
   source?: unknown;
   title?: unknown;
   rating?: unknown;
@@ -172,6 +171,7 @@ export function annotationRecordHash(norm: {
   rev_id: string;
   rating: number | null;
   note: string | null;
+  work_key?: string | null;
 }): string {
   const hashObj = {
     source: norm.source,
@@ -179,6 +179,7 @@ export function annotationRecordHash(norm: {
     rev_id: norm.rev_id,
     rating: norm.rating,
     note: norm.note,
+    ...(norm.work_key ? { work_key: norm.work_key } : {}),
   };
   return createHash("sha256").update(JSON.stringify(hashObj)).digest("hex");
 }
@@ -196,21 +197,62 @@ function rowToAnnotation(row: AnnotationRow): Annotation {
   };
 }
 
+/** Resolve legacy source/title requests without making titles the stored identity. */
+export function findAnnotationWorkKey(db: Database, source: string, title: string): string | null {
+  return annotationWorkKeys(db, [{ source, title }]).get(annotationMapKey(source, title)) ?? null;
+}
+
+function annotationWorkKeys(db: Database, keys: readonly AnnotationKey[], history?: readonly (AnnotationRow & { work_key: string | null })[]): Map<string, string> {
+  const overrides = getWorkOverrides(db);
+  const components = groupEventsIntoWorkComponents(
+    db.query<EventRow, []>("SELECT * FROM events_latest;").all(), db
+  );
+  const result = new Map<string, string>();
+  for (const { source, title } of keys) {
+    const matches = components.filter((comp) =>
+      comp.events.some((event) => event.source === source) &&
+      [...comp.eventTitles, comp.sourceCanonicalTitle, overrides.get(comp.key)?.title ?? ""]
+        .some((candidate) => candidate.trim().toLowerCase() === title.trim().toLowerCase())
+    );
+    if (matches.length === 1) result.set(annotationMapKey(source, title), matches[0]!.key);
+  }
+  // The latest view intentionally collapses a work's old titles. Historical
+  // bookmarks and legacy POSTs must still resolve those titles after a rename.
+  const aliases = getWorkKeyAliases(db);
+  const formerTitles = history?.filter((row): row is AnnotationRow & { work_key: string } => row.work_key !== null) ?? db.query<{ source: string; title: string; work_key: string }, []>(
+    "SELECT source, title, work_key FROM annotations WHERE work_key IS NOT NULL ORDER BY id ASC;"
+  ).all();
+  for (const { source, title } of keys) {
+    const mapKey = annotationMapKey(source, title);
+    if (result.has(mapKey)) continue;
+    const matches = new Set(formerTitles.filter((row) => row.source === source &&
+      row.title.toLowerCase() === title.trim().toLowerCase())
+      .map((row) => resolveWorkKeyIn(aliases, row.work_key)));
+    if (matches.size === 1) result.set(mapKey, [...matches][0]!);
+  }
+  return result;
+}
+
+export function getWorkAnnotations(db: Database): Map<string, Annotation> {
+  const aliases = getWorkKeyAliases(db);
+  const result = new Map<string, Annotation>();
+  const rows = db.query<AnnotationRow & { work_key: string }, []>(
+    "SELECT * FROM annotations_latest WHERE work_key IS NOT NULL ORDER BY id ASC;"
+  ).all();
+  for (const row of rows) result.set(resolveWorkKeyIn(aliases, row.work_key), rowToAnnotation(row));
+  return result;
+}
+
+export function getWorkAnnotation(db: Database, workKey: string): Annotation | null {
+  return getWorkAnnotations(db).get(resolveWorkKey(db, workKey)) ?? null;
+}
+
 function getLatestAnnotation(
   db: Database,
   source: string,
   title: string
 ): Annotation | null {
-  const row = db
-    .query<AnnotationRow, [string, string, string]>(
-      `SELECT id, record_hash, source, title, rev_id, rating, rating_tenths, note, created_at
-       FROM annotations_latest
-       WHERE (source = ? AND title = ?) OR lower(title) = lower(?)
-       ORDER BY id DESC
-       LIMIT 1;`
-    )
-    .get(source, title, title);
-  return row === null ? null : rowToAnnotation(row);
+  return getAnnotationsFor(db, [{ source, title }]).get(annotationMapKey(source, title)) ?? null;
 }
 
 /**
@@ -229,6 +271,13 @@ export function saveAnnotation(
   }
 
   const key = parseAnnotationKey(input.source, input.title);
+  if (input.work_key !== undefined && (typeof input.work_key !== "string" ||
+      !input.work_key.trim() || input.work_key.length > 500 || /[\x00-\x1f\x7f]/.test(input.work_key))) {
+    throw new AnnotationValidationError("Invalid work_key");
+  }
+  const workKey = input.work_key
+    ? resolveWorkKey(db, input.work_key)
+    : findAnnotationWorkKey(db, key.source, key.title);
   const rating = parseRating(input.rating);
   const ratingTenths = rating === null ? null : Math.round(rating * 10);
   const legacyRating = tenthsToLegacyRating(ratingTenths);
@@ -239,6 +288,7 @@ export function saveAnnotation(
   const recordHash = annotationRecordHash({
     source: key.source,
     title: key.title,
+    work_key: workKey,
     rev_id: revId,
     rating,
     note,
@@ -253,8 +303,9 @@ export function saveAnnotation(
       rating,
       rating_tenths,
       note,
-      created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+      created_at,
+      work_key
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     [
       recordHash,
       key.source,
@@ -264,10 +315,11 @@ export function saveAnnotation(
       ratingTenths,
       note,
       createdAt,
+      workKey,
     ]
   );
 
-  const annotation = getLatestAnnotation(db, key.source, key.title);
+  const annotation = workKey ? getWorkAnnotation(db, workKey) : getLatestAnnotation(db, key.source, key.title);
   if (annotation === null) {
     throw new Error("Failed to read back the saved annotation");
   }
@@ -306,21 +358,22 @@ export function getAnnotationsFor(
     return result;
   }
 
-  const uniqueTitles = Array.from(new Set(keys.map((k) => k.title.toLowerCase())));
-  const placeholders = uniqueTitles.map(() => "?").join(", ");
-
   const rows = db
-    .query<AnnotationRow, string[]>(
-      `SELECT id, record_hash, source, title, rev_id, rating, rating_tenths, note, created_at
-       FROM annotations_latest
-       WHERE lower(title) IN (${placeholders})
-       ORDER BY id ASC;`
+    .query<AnnotationRow & { work_key: string | null }, []>(
+      `SELECT * FROM annotations ORDER BY id ASC;`
     )
-    .all(...uniqueTitles);
+    .all();
+  const workKeys = annotationWorkKeys(db, keys, rows);
+  const aliases = getWorkKeyAliases(db);
+  const byWork = new Map<string, Annotation>();
 
   const byLowerTitle = new Map<string, Annotation>();
   for (const row of rows) {
     const ann = rowToAnnotation(row);
+    if (row.work_key) {
+      byWork.set(resolveWorkKeyIn(aliases, row.work_key), ann);
+      continue;
+    }
     byLowerTitle.set(row.title.toLowerCase(), ann);
     result.set(annotationMapKey(row.source, row.title), ann);
   }
@@ -331,6 +384,9 @@ export function getAnnotationsFor(
     if (byTitle !== undefined) {
       result.set(mapKey, byTitle);
     }
+    const workKey = workKeys.get(mapKey);
+    const bound = workKey ? byWork.get(workKey) : null;
+    if (bound) result.set(mapKey, bound);
   }
   return result;
 }

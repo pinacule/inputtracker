@@ -10,6 +10,7 @@ export interface PunchCardChartProps {
   /** Or flat cell list from `GET /api/heatmap/hours`. */
   cells?: readonly HeatmapHourCell[] | null;
   unplacedCount?: number;
+  unplacedMinutes?: number;
   title?: string;
   class?: string;
 }
@@ -25,6 +26,7 @@ export function PunchCardChart({
   hourWeekday,
   cells,
   unplacedCount = 0,
+  unplacedMinutes = 0,
   title = "Hour × Weekday Rhythm",
   class: className,
 }: PunchCardChartProps) {
@@ -96,7 +98,9 @@ export function PunchCardChart({
               {unplacedCount} offline-synced{" "}
               {unplacedCount === 1 ? "session" : "sessions"} without time of day
             </span>
-          ) : null}
+           ) : unplacedMinutes > 0 ? (
+             <span class="ui-chart-hint">{formatMinutes(unplacedMinutes)} of daily time without time of day</span>
+           ) : null}
         </div>
       </div>
 

@@ -69,7 +69,8 @@ by `started_at`; for each view, `gap` = `next.started_at − this.started_at`:
 
 - **YouTube videos (`media_type = "video"`):**
   - If `gap < [youtube] min_watch_minutes` (default 5 min = 300 s), the view was watched less than
-    the threshold and is **not stored** (counted as `gap_skipped`; `gap == 300 s` is kept).
+    the threshold and is **not stored as a video** (counted as `gap_skipped`; `gap == 300 s` is kept).
+    Its positive gap becomes estimated **daily short-form time**, described below.
   - Every other video view is stored with `duration_seconds = min(gap, video length)` and marked
     estimated (`raw.estimated = "gap"`, `raw.gap_seconds = gap`).
   - While the video length is unknown, `min(gap, 3 h)` (`10800 s`) is used.
@@ -77,6 +78,34 @@ by `started_at`; for each view, `gap` = `next.started_at − this.started_at`:
 - **YouTube Music (`header = "YouTube Music"`, `media_type = "music"`):**
   - Exempt from the 5-minute minimum watch rule.
   - Stored with `duration_seconds = min(gap, track length, or 4 min when length is unknown)` (`240 s`).
+
+### Daily short-form estimates
+
+Positive gaps from threshold-dropped video views are unioned and split at local
+midnight in the configured timezone, including DST boundaries. Each local day
+produces one `source=youtube`, `source_kind=shortform_day`, `media_type=shortform`
+record with `source_id=takeout:<YYYY-MM-DD>` and the summed seconds. `raw` holds
+`date`, time `intervals`, and `estimated="gap"` — no video IDs, titles or URLs.
+Takeout does not reliably identify Shorts; **these are gap-based estimates**, not
+proof that every dropped view was a Short. Music views remain exempt.
+
+Overlapping and partial imports union previously stored intervals on affected
+days, preserving earlier observations without counting an interval twice. Daily
+records count in `stored`, `inserted`, and `estimated_hours`, but not in `music`
+or the number of candidate `views`. Unchanged re-imports insert nothing.
+
+ActivityWatch `youtube.com/shorts/<id>` foreground intervals instead produce
+measured `aw:<YYYY-MM-DD>` daily time. Shorts bypass both per-play and five-minute
+video thresholds, including when muted; incognito observations are ignored.
+Refreshed sync/backfill windows replace that bucket's covered intervals while
+preserving other windows and buckets. Overlapping bucket intervals count once.
+Corrections append new revisions, including corrections back to an older total.
+
+On every display read, a measured ActivityWatch daily record suppresses the
+same-day Takeout estimate, even if the measured correction is zero. Both remain
+in the append-only archive. Phone app totals are separate device time. Daily
+short-form contributes time but zero items/works; it never appears in Library,
+song/artist/channel rankings, or hourly grids (daily time has no known hour).
 
 ## 5. Video/track length enrichment & re-saving revisions
 
@@ -110,6 +139,8 @@ and re-saves affected Takeout views.
 - `playlists/Favorite Songs-videos.csv` (`Video ID,Playlist Video Creation Timestamp`): stored in
   the append-only `youtube_favorites` table (`youtube_favorites_latest` view) and exposed as
   `favorite?: boolean` on `LibraryWork`.
+  This is retained import data only; there is no favourites UI. Consumption
+  rankings are independent of favourites.
 - `subscriptions/subscriptions.csv` (`Channel Id,Channel Url,Channel Title`): stored in the
   append-only `youtube_subscriptions` table (`youtube_subscriptions_latest` view) and exposed as
   `subscribed?: boolean` on `YoutubeChannel`.

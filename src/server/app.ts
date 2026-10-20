@@ -67,10 +67,12 @@ import {
   type SaveAnnotationInput,
 } from "./annotations.ts";
 import { getTitleHistory, search } from "./search.ts";
-import { getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
+import { backfillCovers, getCover, isValidCoverId, prefetchCovers } from "./covers.ts";
+import { enrichYoutubeVideos } from "../sources/youtube/enrich.ts";
+import { handleEventBatch } from "./ingest-events.ts";
 import { getSimklPoster, isValidSimklPoster } from "./posters.ts";
 import { getYoutubeThumb, isValidYoutubeVideoId } from "./thumbs.ts";
-import { handleYoutubePlays } from "./ingest.ts";
+import { handleShortform, handleYoutubePlays } from "./ingest.ts";
 import { registerAchriomRoutes } from "./achriom-routes.ts";
 import { registerLookupRoutes } from "./lookup-routes.ts";
 import {
@@ -106,6 +108,7 @@ export interface AppDeps {
   sinkFor?: (db: Database) => Sink;
   /** Wall clock for the ingest 5-minute-future check; defaults to `Date.now()`. */
   nowMs?: () => number;
+  afterEventIngest?: () => Promise<void>;
 }
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -1091,6 +1094,35 @@ export function createApp(deps: AppDeps): Hono {
     }
   });
 
+  let ingestEnrichment: Promise<void> | null = null;
+  let ingestEnrichmentPending = false;
+  const afterEventIngest = async (): Promise<void> => {
+    ingestEnrichmentPending = true;
+    if (ingestEnrichment) return ingestEnrichment;
+    ingestEnrichment = (async () => {
+      do {
+        ingestEnrichmentPending = false;
+        try {
+          if (deps.afterEventIngest) await deps.afterEventIngest();
+          else {
+            await enrichYoutubeVideos(db, { config, fetch: deps.fetchImage, includeMusic: true });
+            if (config.covers?.external !== false) {
+              await backfillCovers(db, { config, db, fetch: deps.fetchImage, onlyCategories: ["music"] });
+            }
+          }
+        } catch {
+          // Cached failures are retried by subsequent ingest; never affect ack.
+        }
+      } while (ingestEnrichmentPending);
+    })();
+    try { await ingestEnrichment; } finally { ingestEnrichment = null; }
+  };
+  app.post("/api/ingest/events", async (c) => {
+    const error = validateQueryParams(c.req.url, []);
+    if (error) return c.json({ error: "query parameters are not accepted" }, 400);
+    return handleEventBatch(c, { db, config, nowMs: deps.nowMs, afterIngest: afterEventIngest });
+  });
+
   // POST /api/ingest/youtube-plays — token-protected ingest from the phone.
   // The handler covers disabled/disabled-token, auth and validation; only the
   // query-parameter check (the first check per the contract) lives here.
@@ -1100,6 +1132,12 @@ export function createApp(deps: AppDeps): Hono {
       return c.json({ error: err }, 400);
     }
     return handleYoutubePlays(c, { db, config, nowMs: deps.nowMs });
+  });
+
+  app.post("/api/ingest/shortform", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) return c.json({ error: err }, 400);
+    return handleShortform(c, { db, config, nowMs: deps.nowMs });
   });
 
   // GET /api/sync/status — latest run per source (read-only)

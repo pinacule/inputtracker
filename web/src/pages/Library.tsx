@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { MostPlayed } from "../ui/MostPlayed";
 import {
   deleteArchiveEntry,
   getLibrary,
@@ -96,6 +97,7 @@ const STATUS_TABS: ReadonlyArray<TabOption<WorkStatus | "all">> = [
 ];
 
 const YOUTUBE_SORT_TABS: ReadonlyArray<TabOption<YoutubeVideoSort>> = [
+  { value: "plays", label: "Most played" },
   { value: "recent", label: "Recent" },
   { value: "time", label: "Watch time" },
   { value: "topic", label: "Category / Topic" },
@@ -112,6 +114,7 @@ function buildSortOptions(
 ): ReadonlyArray<{ value: LibrarySort; label: string }> {
   if (singleCategory === "music") {
     return [
+      { value: "plays", label: "Most played" },
       { value: "recent", label: "Recent" },
       { value: "time", label: "Watch / listen time" },
       { value: "creator", label: "Artist" },
@@ -155,7 +158,7 @@ function YoutubeLibrarySection({
   const [selectedChannel, setSelectedChannel] = useState<string | null>(
     initialChannel ?? null
   );
-  const [ytSort, setYtSort] = useState<YoutubeVideoSort>("recent");
+  const [ytSort, setYtSort] = useState<YoutubeVideoSort>("plays");
   const [groupBy, setGroupBy] = useState<YoutubeVideoGroupBy>("none");
   const [searchInput, setSearchInput] = useState(initialQuery);
   const [query, setQuery] = useState(initialQuery);
@@ -777,7 +780,7 @@ export function Library({
   initialCategory,
   initialCategories,
   initialStatus,
-  initialSort = "recent",
+  initialSort,
   initialQuery = "",
   initialChannel,
   initialTopic,
@@ -799,10 +802,10 @@ export function Library({
   const [statusFilter, setStatusFilter] = useState<WorkStatus | "all">(
     initialStatus ?? "all"
   );
-  const [sort, setSort] = useState<LibrarySort>(initialSort);
+  const [sort, setSort] = useState<LibrarySort>(initialSort ?? ((initialCategories?.[0] ?? initialCategory) === "music" ? "plays" : "recent"));
   const [searchInput, setSearchInput] = useState(initialQuery);
   const [query, setQuery] = useState(initialQuery);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "list">((initialCategories?.[0] ?? initialCategory) === "music" ? "list" : "grid");
 
   const [libraryData, setLibraryData] = useState<LibraryResult | null>(null);
   const [archiveEntries, setArchiveEntries] = useState<ArchiveEntrySummary[]>(
@@ -956,6 +959,12 @@ export function Library({
     selectedCategories.length === 1 ? selectedCategories[0] : undefined;
   const isYoutubeView = singleCategory === "youtube";
   const isMusicView = singleCategory === "music";
+  const rankMax = Math.max(1, ...filteredWorks.map((w) => sort === "plays" ? w.units : w.total_minutes));
+  useEffect(() => {
+    if (initialSort) setSort(initialSort);
+    else setSort(isMusicView ? "plays" : "recent");
+    if (isMusicView) setViewMode("list");
+  }, [isMusicView, initialSort]);
   const sortOptions = useMemo(
     () => buildSortOptions(singleCategory),
     [singleCategory]
@@ -983,12 +992,13 @@ export function Library({
   // --- MAIN LIBRARY SHELF VIEW (`#/library`) ---
   return (
     <section class="page-container library-page" aria-label="Library">
+      {(isMusicView || isYoutubeView) && <MostPlayed initialRange="all" categories={[isMusicView ? "music" : "youtube"]} />}
       <header class="page-header">
         <div class="page-header-titles">
           <h1>Library</h1>
           <p class="page-subtitle">
             {isYoutubeView
-              ? "YouTube videos watched — sort by recent, watch time, or topic, and group by topic or channel."
+              ? "YouTube videos watched — sort by plays, watch time, recent, or topic, and group by topic or channel."
               : isMusicView
                 ? "Music tracks played — sort by recent, listen time, or artist."
                 : "Books, audiobooks, films, series, anime, and podcasts across every source."}
@@ -1311,7 +1321,7 @@ export function Library({
           ) : (
             <Card padding="none">
               <ul class="library-works-list">
-                {filteredWorks.map((work) => {
+                {filteredWorks.map((work, rank) => {
                   const catQuery =
                     selectedCategories.length > 0
                       ? `&cat=${selectedCategories.join(",")}`
@@ -1360,8 +1370,9 @@ export function Library({
                             class="library-work-list-title"
                             title={work.title}
                           >
-                            {work.title}
+                            {isMusicView && (sort === "plays" || sort === "time") ? `${rank + 1}. ` : ""}{work.title}
                           </span>
+                          {isMusicView && (sort === "plays" || sort === "time") && <div class="yt-bar-track" aria-hidden="true"><div class="yt-bar-fill" style={{ backgroundColor: "var(--cat-music-solid)", width: `${100 * (sort === "plays" ? work.units : work.total_minutes) / rankMax}%` }} /></div>}
                           <span class="library-work-list-sub">
                             <Badge size="sm" category={work.category}>
                               {categoryLabel(work.category)}

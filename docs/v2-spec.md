@@ -346,3 +346,49 @@ actions grouped (edit, add seasons, refresh metadata, delete entry), rating with
 
 A complete redesign of the home page (`#/calendar`) from scratch by a designer who has not seen the
 previous one. The previous version is archived in git tag `archive/home-v2.1`.
+
+## 19. Most-consumed songs, artists and channels (W13)
+
+`GET /api/top?kind=songs|artists|channels&from=YYYY-MM-DD&to=YYYY-MM-DD&by=plays|time&limit=10`
+returns `TopResult` (`src/core/contract.ts`): `kind`, `by`, nullable `from`/`to`,
+and `entries` with `key`, `title`, nullable `creator`, `plays`, `total_minutes`.
+`kind` is required; `by` defaults to `plays`; `limit` defaults to 10, integer
+1–200. Date bounds are inclusive local dates; omitted bounds are unbounded.
+Invalid dates, reversed bounds and unknown query parameters return 400.
+
+`aggregateTop` is pure over deduped, override-aware Library works/events;
+`getTop` reads `events_latest` via the shared Library builder. Songs group by
+stable work key; artists and YouTube channels group by normalized creator name.
+Music artist names are cleaned (for example `Synthetic Artist - Topic`).
+Creator rankings omit missing creators. Plays count deduped event records
+(ActivityWatch can already merge video plays per day); time sums nonnegative
+recorded duration. Planned, hidden and short-form records do not count.
+Ranged rankings exclude unknown-date events; all-time includes them. Ties use
+the other metric, title, then key. Work edits apply without rewriting history.
+
+Insights offers compact top-five bars with this month/year/all-time and plays/time
+controls. Review uses the chosen historical month/year. Music and YouTube
+Library default to most-played sorting (`sort=plays`); music uses compact list
+rows, not a cover-heavy grid. No favourites UI is added.
+
+## 20. Short-form time only (W13)
+
+`shortform` is the tenth category, labelled **Short-form**, with colours for all
+five dark themes. `media_type=shortform`, `source_kind=shortform_day` stores daily
+time, never individual short videos or Library works. ActivityWatch uses
+`source=youtube`, `source_id=aw:<date>`; gap-dropped Takeout uses
+`source=youtube`, `source_id=takeout:<date>` with `raw.estimated="gap"`;
+phone totals use `source=phone`, `source_id=phone:<app>:<date>`.
+
+All timestamps remain UTC; day anchors are local midnight converted to UTC.
+ActivityWatch/Takeout intervals are unioned and split at local midnight. Latest
+daily revisions win and repeating the latest snapshot inserts nothing. Measured
+ActivityWatch suppresses same-day Takeout estimates on read; phone time is
+separate. See `docs/youtube-takeout.md` for interval/window semantics and
+`docs/ingest-api.md` for the phone request and validation contract.
+
+Calendar/day panel shows one **Short-form · 47 min** line. Daily/week/month bars,
+heatmaps, Insights trend, Reviews, active days and totals include its time;
+item/units/works counts stay zero. Hour grids omit daily totals and report
+unplaced time instead. Library, archive-work creation/category edits, rankings
+and "On This Day" item lists exclude it.

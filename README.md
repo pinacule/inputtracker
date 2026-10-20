@@ -47,7 +47,10 @@ Every key, its default and what it means:
 | `youtube.thumb_base_url` | `https://i.ytimg.com/vi` | Base URL for YouTube video thumbnails. |
 | `youtube.min_watch_minutes` | `5` | Minimum watched minutes per video on one local day to count (0 disables). |
 | `youtube.enrich_per_sync` | `50` | Maximum videos enriched (channel + category via GET oEmbed/watch page) per sync run (0 disables). |
-| `ingest.token` | empty | Shared bearer token for `POST /api/ingest/youtube-plays` (phone); empty disables ingest, a non-empty value must be at least 32 characters. Never logged. |
+| `ingest.token` | empty | Shared bearer token for phone and PC ingest endpoints; empty disables ingest, a non-empty value must be at least 32 characters. Never logged. |
+| `activitywatch.mode` | `pull` | `push` disables server-side ActivityWatch pull. |
+| `push.server_url` | empty | InputTracker server base URL on the tailnet; prefer HTTPS. |
+| `push.token` | empty | Secret matching the server's `ingest.token`, never logged. |
 | `activitywatch.url` | `http://127.0.0.1:5600` | ActivityWatch server URL. |
 | `activitywatch.timeout_s` | `20` | Per-request timeout, in seconds. |
 | `activitywatch.device` | `pc` | Device label for YouTube plays. |
@@ -138,6 +141,7 @@ Flags:
 | Flag | Effect |
 |---|---|
 | (none) | the full run described above |
+| `--role pc\|server\|local` | PC: push timer only, no web build; server: normal units without ActivityWatch pull; local (default): original deployment |
 | `--no-start` | render the units and reload systemd, but do not enable or start anything |
 | `--no-build` | skip `bun install` and the web build |
 | `--dry-run` | print what would happen and touch nothing |
@@ -145,7 +149,8 @@ Flags:
 Re-running the script is also the update step: it rebuilds the web app and
 restarts the server.
 
-Units and timers it installs:
+Units and timers the default local role installs (PC installs only push units;
+server omits the ActivityWatch pull timer):
 
 | Unit | What it does | Schedule |
 |---|---|---|
@@ -154,6 +159,8 @@ Units and timers it installs:
 | `inputtracker-sync@audiobookshelf.timer` | Audiobookshelf sync | hourly, persistent, up to 120 s jitter |
 | `inputtracker-sync@simkl.timer` | Simkl sync | hourly at :30, persistent, up to 120 s jitter |
 | `inputtracker-sync@activitywatch.timer` | ActivityWatch sync (YouTube) | every 10 minutes (`*:0/10`), persistent, up to 30 s jitter |
+| `inputtracker-push@.service` (PC role) | oneshot `it push %i` | launched by its timer |
+| `inputtracker-push@activitywatch.timer` (PC role) | ActivityWatch push to the VM | every 10 minutes, persistent, up to 30 s jitter |
 | `inputtracker-backup.service` | oneshot `it backup` | launched by its timer |
 | `inputtracker-backup.timer` | database snapshot + JSON export | daily at 03:30, persistent |
 
@@ -171,11 +178,18 @@ open session: `loginctl enable-linger $USER` (the installer prints this hint).
 
 ## CLI
 
+For the PC/cloud split use `scripts/install.sh --role pc` on the PC and
+`scripts/install.sh --role server` on the VM. Keep ActivityWatch on localhost;
+set server `activitywatch.mode = "push"` and PC `push.server_url` / `push.token`.
+The `inputtracker-push@activitywatch.timer` runs every 10 minutes. Exact steps,
+verification and rollback: [MIGRATION.md](MIGRATION.md).
+
 Run commands with `bun run it <command>`.
 
 | Command | Options | Example |
 |---|---|---|
 | `sync <source>` | source is `audiobookshelf`, `simkl`, or `activitywatch` | `bun run it sync activitywatch` |
+| `push activitywatch` | none | `bun run it push activitywatch` |
 | `auth simkl` | `[--status]` | `bun run it auth simkl` |
 | `add` | `--type <t> --title <title> --start <local> [--end <local>] [--duration-min <n>] [--parent <title>] [--season <n>] [--episode <n>] [--progress <0..1>] [--device <name>]` | `bun run it add --type audiobook --title "The Synthetic Tale" --start "2026-10-17 21:30" --duration-min 45` |
 | `export` | `--format json\|csv --out <file>` | `bun run it export --format json --out archive.json` |
@@ -196,6 +210,12 @@ Details:
   and inserts new plays. It only ever issues GET requests.
 - `auth simkl` connects Simkl via device flow (prints a link + code);
   `--status` shows whether it is connected, without network.
+- `push activitywatch` reads local ActivityWatch via GET and pushes bounded
+  batches to `POST /api/ingest/events` using the server's `ingest.token`.
+  Cursors and notification state live in `activitywatch-push-state.json` beside
+  `storage.db_path`, without opening the PC archive. Unacknowledged batches
+  retry next run. Enrichment and music cover lookup run only on the server.
+  `sync activitywatch` skips pull when `activitywatch.mode = "push"`.
 - `add` records a consumed item by hand. `--type`, `--title` and `--start` are
   required. `--duration-min` (minutes) wins over `--end`; without either the
   duration is left empty. `--progress` is a fraction between 0 and 1;
@@ -283,8 +303,9 @@ halves) and a free-text note of up to 5000 characters. A title here is the
 same group the Search page uses: `source` + title (or series name), so a note
 on a show covers all of its episodes.
 
-Both are stored as rows of the append-only `annotations` table keyed by
-`source` + `title`: every save is a new revision (a retried save with the same
+Both are stored as rows of the append-only `annotations` table bound to a work
+key when identifiable (legacy `source` + `title` rows remain readable): every
+save is a new revision (a retried save with the same
 `rev_id` inserts nothing), reads use the `annotations_latest` view, so the
 latest revision wins. Clearing the rating or the note is also just a new row
 (with `NULL`s); nothing is ever updated in place.
@@ -293,6 +314,9 @@ In the app, the rating editor is on the Search and Progress pages. Under the
 hood it is `GET /api/annotations?source=<s>&title=<t>` and
 `POST /api/annotations`, and every revision is included in the JSON export
 (v2), so `it export` and `it import` round-trip them like events and goals.
+Work aliases and override revisions also round-trip in optional v2 fields.
+Links, refreshes and archive renames append old→new aliases so ratings, notes,
+category, hidden state, topics and old work URLs follow the current identity.
 
 ## Metadata lookup
 

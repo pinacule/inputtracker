@@ -42,6 +42,8 @@ import {
 } from "../server/annotations.ts";
 import { tenthsToLegacyRating } from "../server/ratings.ts";
 import { toUtcIso } from "../core/time.ts";
+import { parseWorkEdit, workOverrideRecordHash } from "../server/overrides.ts";
+import type { WorkOverrideRow } from "../core/schema.ts";
 
 /** `events` source used for the ingest run recorded by an import. */
 export const NATIVE_IMPORT_SOURCE = "native-import";
@@ -63,6 +65,8 @@ export interface ImportNativeResult {
   goals: ImportTableResult;
   /** Annotation counts (zeros for v1/CSV). */
   annotations: ImportTableResult;
+  work_overrides: ImportTableResult;
+  work_key_aliases: ImportTableResult;
   /** Id of the `ingest_runs` row written for this import. */
   runId: number;
 
@@ -175,6 +179,7 @@ interface ValidatedGoalRow {
 }
 
 interface ValidatedAnnotationRow {
+  work_key: string | null;
   record_hash: string;
   source: string;
   title: string;
@@ -285,6 +290,7 @@ function validateAnnotationRow(
   }
 
   const createdAt = importCreatedAt(record.created_at, `Annotation at index ${index}`);
+  const workKey = record.work_key == null ? null : importWorkKey(record.work_key);
 
   const hash = annotationRecordHash({
     source: key.source,
@@ -292,6 +298,7 @@ function validateAnnotationRow(
     rev_id: revId,
     rating,
     note,
+    work_key: workKey,
   });
 
   return {
@@ -303,6 +310,7 @@ function validateAnnotationRow(
     rating_tenths: ratingTenths,
     note,
     created_at: createdAt,
+    work_key: workKey,
   };
 }
 
@@ -313,6 +321,23 @@ export interface ParsedNativeJson {
   events: NewEvent[];
   goals: ValidatedGoalRow[];
   annotations: ValidatedAnnotationRow[];
+  work_overrides: Omit<WorkOverrideRow, "id">[];
+  work_key_aliases: Array<{ old_key: string; new_key: string; created_at: string }>;
+}
+
+function importWorkKey(value: unknown): string {
+  if (typeof value !== "string" || !value.trim() || value.length > 500 || /[\x00-\x1f\x7f]/.test(value)) {
+    throw new Error("Invalid imported work key");
+  }
+  return value;
+}
+
+function optionalRows(envelope: Record<string, unknown>, field: string): Record<string, unknown>[] {
+  const rows = envelope[field] ?? [];
+  if (!Array.isArray(rows) || rows.some((row) => !row || typeof row !== "object" || Array.isArray(row))) {
+    throw new Error(`Invalid export: field '${field}' must be an array of objects`);
+  }
+  return rows as Record<string, unknown>[];
 }
 
 /** Parse a `inputtracker-export` JSON document (v1 or v2). */
@@ -387,7 +412,32 @@ export function parseNativeJson(text: string): ParsedNativeJson {
     });
   }
 
-  return { events, goals, annotations };
+  const work_key_aliases = optionalRows(envelope, "work_key_aliases").map((row) => ({
+    old_key: importWorkKey(row.old_key), new_key: importWorkKey(row.new_key),
+    created_at: importCreatedAt(row.created_at, "Work alias"),
+  }));
+  const work_overrides = optionalRows(envelope, "work_overrides").map((row) => {
+    const edit = parseWorkEdit({ title: row.title, category: row.category, status: row.status,
+      rating: row.rating_tenths == null ? null : typeof row.rating_tenths === "number" && Number.isInteger(row.rating_tenths)
+        ? row.rating_tenths / 10 : Number.NaN,
+      note: row.note, hidden: row.hidden === 1,
+      meta: row.meta_provider == null ? null : { provider: row.meta_provider, provider_id: row.meta_id }, topic: row.topic });
+    if (row.hidden !== 0 && row.hidden !== 1) throw new Error("Invalid imported hidden flag");
+    if (typeof row.rev_id !== "string" || !UUID_RE.test(row.rev_id)) throw new Error("Invalid imported override rev_id");
+    const metaJson = row.meta_json ?? null;
+    if (metaJson !== null) {
+      if (typeof metaJson !== "string") throw new Error("Invalid imported override metadata");
+      const parsedMeta: unknown = JSON.parse(metaJson);
+      if (!parsedMeta || typeof parsedMeta !== "object" || Array.isArray(parsedMeta)) throw new Error("Invalid imported override metadata");
+    }
+    const norm = { work_key: importWorkKey(row.work_key), rev_id: row.rev_id,
+      title: edit.title, category: edit.category, status: edit.status, rating_tenths: edit.ratingTenths,
+      note: edit.note, hidden: edit.hidden ? 1 : 0, meta_provider: edit.meta?.provider ?? null,
+      meta_id: edit.meta?.provider_id ?? null, topic: edit.topic };
+    return { ...norm, record_hash: workOverrideRecordHash(norm), meta_json: metaJson as string | null,
+      created_at: importCreatedAt(row.created_at, "Work override") };
+  });
+  return { events, goals, annotations, work_overrides, work_key_aliases };
 }
 
 // --- CSV (RFC 4180) --------------------------------------------------------
@@ -543,21 +593,41 @@ export function importNative(
   let events: NewEvent[];
   let goalRows: ValidatedGoalRow[] = [];
   let annotationRows: ValidatedAnnotationRow[] = [];
+  let overrideRows: ParsedNativeJson["work_overrides"] = [];
+  let aliasRows: ParsedNativeJson["work_key_aliases"] = [];
 
   if (format === "json") {
     const result = parseNativeJson(text);
     events = result.events;
     goalRows = result.goals;
     annotationRows = result.annotations;
+    overrideRows = result.work_overrides;
+    aliasRows = result.work_key_aliases;
   } else {
     events = parseNativeCsv(text);
   }
 
   const runId = startRun(db, opts.source ?? NATIVE_IMPORT_SOURCE);
   try {
-    // Use a single transaction for atomicity across all three tables.
+    // Keep events, annotations, overrides and identity edges atomic.
     const txResult = db.transaction(() => {
       const evtResult = insertEvents(db, runId, events);
+      let aliasesInserted = 0;
+      for (const row of aliasRows) {
+        const existing = db.query<{ new_key: string }, [string]>("SELECT new_key FROM work_key_aliases WHERE old_key = ?;").get(row.old_key);
+        if (existing && existing.new_key !== row.new_key) throw new Error("Conflicting imported work alias");
+        aliasesInserted += db.run("INSERT OR IGNORE INTO work_key_aliases(old_key, new_key, created_at) VALUES (?, ?, ?);",
+          [row.old_key, row.new_key, row.created_at]).changes;
+      }
+      let overridesInserted = 0;
+      const overrideStmt = db.prepare(`INSERT OR IGNORE INTO work_overrides
+        (record_hash, work_key, rev_id, title, category, status, rating_tenths, note, hidden,
+         meta_provider, meta_id, meta_json, topic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`);
+      for (const row of overrideRows) {
+        overridesInserted += overrideStmt.run(row.record_hash, row.work_key, row.rev_id, row.title,
+          row.category, row.status, row.rating_tenths, row.note, row.hidden, row.meta_provider,
+          row.meta_id, row.meta_json, row.topic, row.created_at).changes;
+      }
 
       let goalsInserted = 0;
       if (goalRows.length > 0) {
@@ -580,13 +650,13 @@ export function importNative(
       if (annotationRows.length > 0) {
         const annStmt = db.prepare(
           `INSERT OR IGNORE INTO annotations (
-            record_hash, source, title, rev_id, rating, rating_tenths, note, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`
+            record_hash, source, title, rev_id, rating, rating_tenths, note, created_at, work_key
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`
         );
         for (const a of annotationRows) {
           const res = annStmt.run(
             a.record_hash, a.source, a.title, a.rev_id, a.rating, a.rating_tenths, a.note,
-            a.created_at
+            a.created_at, a.work_key
           );
           annotationsInserted += res.changes;
         }
@@ -596,11 +666,13 @@ export function importNative(
         events: evtResult,
         goalsInserted,
         annotationsInserted,
+        aliasesInserted,
+        overridesInserted,
       };
     })();
 
-    const totalSeen = txResult.events.seen + goalRows.length + annotationRows.length;
-    const totalInserted = txResult.events.inserted + txResult.goalsInserted + txResult.annotationsInserted;
+    const totalSeen = txResult.events.seen + goalRows.length + annotationRows.length + aliasRows.length + overrideRows.length;
+    const totalInserted = txResult.events.inserted + txResult.goalsInserted + txResult.annotationsInserted + txResult.aliasesInserted + txResult.overridesInserted;
     finishRun(db, runId, {
       status: "ok",
       rowsSeen: totalSeen,
@@ -611,6 +683,8 @@ export function importNative(
       events: { seen: txResult.events.seen, inserted: txResult.events.inserted },
       goals: { seen: goalRows.length, inserted: txResult.goalsInserted },
       annotations: { seen: annotationRows.length, inserted: txResult.annotationsInserted },
+      work_overrides: { seen: overrideRows.length, inserted: txResult.overridesInserted },
+      work_key_aliases: { seen: aliasRows.length, inserted: txResult.aliasesInserted },
       runId,
       // Legacy aliases
       seen: txResult.events.seen,

@@ -41,7 +41,7 @@ describe("describeImport", () => {
 });
 
 describe("MEDIA_TYPE_OPTIONS", () => {
-  test("matches the server's allowed media types", () => {
+  test("offers item media types, not daily short-form time", () => {
     expect(MEDIA_TYPE_OPTIONS.map((option) => option.value).sort()).toEqual(
       [
         "audiobook",

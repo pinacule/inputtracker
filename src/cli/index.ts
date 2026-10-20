@@ -23,7 +23,8 @@ import { openDb } from "../core/db.ts";
 import { runDoctor, type DoctorDeps } from "./doctor.ts";
 import { runVerifyCopy } from "./verify-copy.ts";
 import type { MediaType } from "../core/events.ts";
-import { LocalDbSink, type Sink } from "../core/sink.ts";
+import { HttpSink, LocalDbSink, type Sink } from "../core/sink.ts";
+import { loadPushState, savePushState, lockPushState, pushStatePath } from "../sources/activitywatch/push-state.ts";
 import {
   buildChannels,
   buildNotifier,
@@ -118,6 +119,7 @@ export function usage(): string {
     "",
     "Commands:",
     "  sync audiobookshelf|simkl|activitywatch  fetch new source activity into the DB",
+    "  push activitywatch                     push PC activity to the configured server",
     "    sync activitywatch --since <date>      backfill older YouTube plays from ActivityWatch",
     "    youtube enrich [--takeout] [--limit <n>] enrich stored YouTube videos with channel, category, and length",
     "    covers backfill [--limit <n>] [--retry-missing]  backfill missing covers by title (Open Library / iTunes)",
@@ -226,7 +228,8 @@ interface SyncContext {
 
 async function runSync(
   args: string[],
-  ctx: SyncContext
+  ctx: SyncContext,
+  push = false
 ): Promise<number> {
   const { deps, out, err } = ctx;
   const [source, ...syncArgs] = args;
@@ -286,6 +289,15 @@ async function runSync(
       return EXIT_FAILURE;
     }
 
+    if (!push && config.activitywatch?.mode === "push") {
+      out("ActivityWatch uses PC push; local pull skipped.");
+      return EXIT_OK;
+    }
+    if (push && (!config.push?.server_url || !config.push.token)) {
+      err("Set push.server_url and push.token before pushing ActivityWatch.");
+      return EXIT_USAGE;
+    }
+
     if (sinceVal !== undefined) {
       const tz = config.timezone ?? "Europe/Bratislava";
       if (!DATE_ONLY_RE.test(sinceVal)) {
@@ -317,10 +329,17 @@ async function runSync(
       }
     }
 
+    let openedDb: Database | undefined;
     let db: Database;
+    let unlock: (() => void) | undefined;
+    const statePath = push ? pushStatePath(config) : undefined;
     try {
-      db = doOpenDb(config.storage.db_path);
+      if (statePath) unlock = lockPushState(statePath);
+      db = openedDb = doOpenDb(push ? ":memory:" : config.storage.db_path);
+      if (statePath) loadPushState(db, statePath);
     } catch (caught) {
+      openedDb?.close();
+      unlock?.();
       err(redactMessage(errorText(caught), config));
       return EXIT_FAILURE;
     }
@@ -333,7 +352,7 @@ async function runSync(
     }
 
     try {
-      const sink = sinkFor(db);
+      const sink = push ? new HttpSink(config.push!, deps.fetch as typeof fetch | undefined) : sinkFor(db);
       const makeClient =
         deps.createActivityWatchClient ??
         ((cfg, opts) => createActivityWatchClient(cfg, opts));
@@ -369,6 +388,7 @@ async function runSync(
           out,
           fetch: deps.fetch,
           sleep: deps.sleep,
+          enrich: !push,
         });
         out(
           `activitywatch: ${result.seen} seen, ${result.inserted} new (${result.buckets} ${result.buckets === 1 ? "bucket" : "buckets"})`
@@ -398,9 +418,15 @@ async function runSync(
       return EXIT_FAILURE;
     } finally {
       try {
-        db.close();
+        if (statePath) savePushState(db, statePath);
       } catch {
-        // ignore close errors
+        if (push) {
+          err("Could not save ActivityWatch push state; confirmed batches will be retried.");
+          return EXIT_FAILURE;
+        }
+      } finally {
+        db.close();
+        unlock?.();
       }
     }
   }
@@ -1789,6 +1815,13 @@ export async function runCli(
 
   if (command === "sync") {
     return await runSync(rest, { deps, out, err });
+  }
+  if (command === "push") {
+    if (rest.length !== 1 || rest[0] !== ACTIVITYWATCH_SOURCE) {
+      err("Usage: it push activitywatch");
+      return EXIT_USAGE;
+    }
+    return await runSync(rest, { deps, out, err }, true);
   }
 
   if (command === "auth") {

@@ -14,6 +14,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { isShortform } from "./shortform.ts";
 import { CATEGORIES, categoryOf, type Category } from "../core/category.ts";
 import type {
   CategoryTotal,
@@ -204,6 +205,7 @@ export function getSeries(
 }
 
 interface IndexedWorkData {
+  timeOnly: DedupedEvent[];
   allWorks: InternalLibraryWork[];
   workByEventId: Map<number, InternalLibraryWork>;
   firstLocalDateByWorkKey: Map<string, string>;
@@ -244,6 +246,8 @@ function indexLibraryWorks(
   }
 
   return {
+    timeOnly: getDisplayConsumptionEvents(db, undefined, tz).filter((e) =>
+      isShortform(e) && matchesCategoryFilter("shortform", filter)),
     allWorks,
     workByEventId,
     firstLocalDateByWorkKey,
@@ -355,6 +359,18 @@ function computeMonthReviewFromIndexed(
   }
 
   const categories: CategoryTotal[] = [];
+  const shortDays = indexed.timeOnly.filter((e) => formatLocalParts(e.started_at, tz).date.startsWith(prefix));
+  const shortSeconds = shortDays.reduce((sum, e) => sum + (e.duration_seconds ?? 0), 0);
+  totalSeconds += shortSeconds;
+  for (const ev of shortDays) {
+    const date = formatLocalParts(ev.started_at, tz).date;
+    const minutes = (ev.duration_seconds ?? 0) / 60;
+    if (minutes > 0) {
+      dayEvents.push(ev);
+      dayPointsMap.get(date)!.shortform = (dayPointsMap.get(date)!.shortform ?? 0) + minutes;
+    }
+  }
+  if (shortSeconds > 0) categories.push({ category: "shortform", total_minutes: shortSeconds / 60, works: 0, units: 0 });
   for (const cat of CATEGORIES) {
     const entry = catAcc.get(cat);
     if (entry && entry.units > 0) {
@@ -423,7 +439,8 @@ function computeMonthReviewFromIndexed(
     indexed.allWorks,
     prevMonth,
     tz
-  );
+  ) + indexed.timeOnly.filter((e) => formatLocalParts(e.started_at, tz).date.startsWith(`${prevMonth}-`))
+    .reduce((sum, e) => sum + (e.duration_seconds ?? 0) / 60, 0);
 
   return {
     month,
@@ -529,6 +546,10 @@ export function getYearReviewV2(
   const totalMinutes = monthsSumMinutes + undatedMinutes;
 
   const categories: CategoryTotal[] = [];
+  const shortDays = indexed.timeOnly.filter((e) => formatLocalParts(e.started_at, tz).date.startsWith(yearPrefix));
+  const shortMinutes = shortDays.reduce((sum, e) => sum + (e.duration_seconds ?? 0) / 60, 0);
+  dayEventsInYear.push(...shortDays.filter((e) => (e.duration_seconds ?? 0) > 0));
+  if (shortMinutes > 0) categories.push({ category: "shortform", total_minutes: shortMinutes, works: 0, units: 0 });
   for (const cat of CATEGORIES) {
     const entry = catAcc.get(cat);
     if (entry && entry.units > 0) {

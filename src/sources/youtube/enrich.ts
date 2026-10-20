@@ -538,7 +538,7 @@ export function findVideosToEnrich(
   limit: number,
   tz: string = "Europe/Bratislava",
   minWatchMinutes?: number,
-  opts: { takeout?: boolean } = {}
+  opts: { takeout?: boolean; includeMusic?: boolean } = {}
 ): string[] {
   if (limit <= 0) {
     return [];
@@ -569,7 +569,7 @@ export function findVideosToEnrich(
       if (ev.media_type !== "video" && ev.media_type !== "music") {
         continue;
       }
-    } else if (ev.media_type !== "video") {
+    } else if (ev.media_type !== "video" && !(opts.includeMusic && ev.media_type === "music")) {
       continue;
     }
 
@@ -629,6 +629,8 @@ export interface EnrichYoutubeVideosOptions {
   limit?: number;
   delayMs?: number;
   takeout?: boolean;
+  /** Cloud push also enriches measured music plays before cover lookup. */
+  includeMusic?: boolean;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   nowMs?: () => number;
@@ -688,6 +690,7 @@ export async function enrichYoutubeVideos(
     const nowIso = new Date(nowMsFn()).toISOString();
     videoIds = findVideosToEnrich(db, nowIso, limit, tz, minWatchMinutes, {
       takeout: opts.takeout,
+      includeMusic: opts.includeMusic,
     });
     existingMap = getYoutubeVideoEnrichmentMap(db);
   } catch {

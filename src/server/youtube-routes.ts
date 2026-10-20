@@ -994,9 +994,10 @@ export function getYoutubeOverview(
   };
 }
 
-export type YoutubeVideosSort = "recent" | "time" | "topic";
+export type YoutubeVideosSort = "recent" | "plays" | "time" | "topic";
 
 export const VALID_YOUTUBE_VIDEO_SORTS: ReadonlySet<YoutubeVideosSort> = new Set([
+  "plays",
   "recent",
   "time",
   "topic",
@@ -1071,7 +1072,9 @@ export function getYoutubeVideos(
     }
   }
 
-  if (sort === "time") {
+  if (sort === "plays") {
+    filtered.sort((a, b) => b.plays - a.plays || b.watched_minutes - a.watched_minutes || a.title.localeCompare(b.title) || a.key.localeCompare(b.key));
+  } else if (sort === "time") {
     filtered.sort(
       (a, b) =>
         b.watched_minutes - a.watched_minutes ||
@@ -1182,7 +1185,7 @@ export function registerYoutubeRoutes(app: Hono, deps: AppDeps): void {
       if (!isValidYoutubeVideosSort(sortRaw)) {
         return c.json(
           {
-            error: `Invalid sort: '${sortRaw}' (expected recent, time or topic)`,
+             error: `Invalid sort: '${sortRaw}' (expected plays, recent, time or topic)`,
           },
           400
         );

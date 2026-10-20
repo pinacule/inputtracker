@@ -405,9 +405,26 @@ export interface AchriomImportResult {
 
 /**
  * GET /api/library sort values (v2.2 adds "category" and "creator"):
- * recent | time | title | category | creator. GET /api/youtube/videos adds sort=recent|time|topic.
+ * plays | recent | time | title | category | creator. YouTube videos also support topic.
  */
-export type LibrarySortV2 = "recent" | "time" | "title" | "category" | "creator";
+export type LibrarySortV2 = "recent" | "plays" | "time" | "title" | "category" | "creator";
+
+export type TopKind = "songs" | "artists" | "channels";
+export type TopBy = "plays" | "time";
+export interface TopEntry {
+  key: string;
+  title: string;
+  creator: string | null;
+  plays: number;
+  total_minutes: number;
+}
+export interface TopResult {
+  kind: TopKind;
+  by: TopBy;
+  from: string | null;
+  to: string | null;
+  entries: TopEntry[];
+}
 
 /**
  * POST /api/library/work/refresh-metadata?key=  → LibraryWorkDetail.

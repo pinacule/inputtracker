@@ -280,7 +280,7 @@ export function EditWorkSheet({
                 )
               }
             >
-              {CATEGORIES.map((cat) => (
+              {CATEGORIES.filter((cat) => cat !== "shortform").map((cat) => (
                 <option key={cat} value={cat}>
                   {CATEGORY_META[cat].pluralLabel}
                 </option>

@@ -32,6 +32,7 @@ import {
   parseCategoryFilter,
 } from "./overrides.ts";
 import { filterShortYoutubeEvents } from "./youtube-filter.ts";
+import { isShortform } from "./shortform.ts";
 
 export const CONSUMPTION_KINDS = new Set([
   "listening_session",
@@ -39,6 +40,7 @@ export const CONSUMPTION_KINDS = new Set([
   "history_item",
   "aw_play",
   "phone_play",
+  "shortform_day",
   "archive",
 ]);
 
@@ -535,7 +537,7 @@ export function aggregateCalendar(
       local_time: local.localTime,
       duration_seconds: durationSeconds,
       cover_url: coverUrlFor(event),
-      time_uncertain: isTimeUncertain(event),
+      time_uncertain: isShortform(event) || isTimeUncertain(event),
     };
     if ("also_from" in event && (event as DedupedEvent).also_from) {
       item.also_from = (event as DedupedEvent).also_from;
@@ -552,7 +554,7 @@ export function aggregateCalendar(
       );
       return {
         date: day.date,
-        count: day.items.length,
+        count: day.items.filter((e) => !isShortform(e)).length,
         minutes: day.totalSeconds / 60,
         items: day.items,
       };
@@ -590,7 +592,7 @@ export function aggregateHeatmapDays(
       day = { date: local.date, count: 0, totalSeconds: 0 };
       daysMap.set(local.date, day);
     }
-    day.count += 1;
+    day.count += isShortform(event) ? 0 : 1;
     day.totalSeconds += event.duration_seconds ?? 0;
   }
 
@@ -630,8 +632,8 @@ export function aggregateHeatmapHours(
     if (yearPrefix !== null && !local.date.startsWith(yearPrefix)) {
       continue;
     }
-    if (isTimeUncertain(event)) {
-      unplacedCount += 1;
+    if (isShortform(event) || isTimeUncertain(event)) {
+      unplacedCount += isShortform(event) ? 0 : 1;
       unplacedSeconds += event.duration_seconds ?? 0;
       continue;
     }
@@ -782,7 +784,8 @@ export function aggregateStats(
       continue;
     }
 
-    totalItems += 1;
+    const itemCount = isShortform(event) ? 0 : 1;
+    totalItems += itemCount;
     const dur = event.duration_seconds ?? 0;
     totalSeconds += dur;
 
@@ -791,7 +794,7 @@ export function aggregateStats(
       bySourceData[event.source] = { count: 0, totalSeconds: 0 };
     }
     const src = bySourceData[event.source]!;
-    src.count += 1;
+    src.count += itemCount;
     src.totalSeconds += dur;
 
     // by_media_type
@@ -799,7 +802,7 @@ export function aggregateStats(
       byMediaTypeData[event.media_type] = { count: 0, totalSeconds: 0 };
     }
     const mt = byMediaTypeData[event.media_type]!;
-    mt.count += 1;
+    mt.count += itemCount;
     mt.totalSeconds += dur;
 
     // by_week (day precision only)
@@ -819,9 +822,9 @@ export function aggregateStats(
       weekEntry.bySourceSeconds[event.source] =
         (weekEntry.bySourceSeconds[event.source] ?? 0) + dur;
       weekEntry.bySourceCount[event.source] =
-        (weekEntry.bySourceCount[event.source] ?? 0) + 1;
+        (weekEntry.bySourceCount[event.source] ?? 0) + itemCount;
       weekEntry.totalSeconds += dur;
-      weekEntry.count += 1;
+      weekEntry.count += itemCount;
     }
 
     // by_month (day and month precision only)
@@ -841,12 +844,13 @@ export function aggregateStats(
       monthEntry.bySourceSeconds[event.source] =
         (monthEntry.bySourceSeconds[event.source] ?? 0) + dur;
       monthEntry.bySourceCount[event.source] =
-        (monthEntry.bySourceCount[event.source] ?? 0) + 1;
+        (monthEntry.bySourceCount[event.source] ?? 0) + itemCount;
       monthEntry.totalSeconds += dur;
-      monthEntry.count += 1;
+      monthEntry.count += itemCount;
     }
 
     // top_items
+    if (isShortform(event)) continue;
     const effectiveTitle = getSeriesOrTitle(event);
     const itemKey = `${event.source}:::${effectiveTitle}`;
     let itemEntry = topItemsMap.get(itemKey);
@@ -1047,7 +1051,9 @@ export function getDisplayConsumptionEvents(
     db
   );
   const deduped = dedupeConsumption(events, tz);
-  return applyWorkOverridesToEvents(db, deduped);
+  // Time-only rows have no work key or editable library identity.
+  const timeOnly = deduped.filter(isShortform);
+  return [...applyWorkOverridesToEvents(db, deduped.filter((e) => !isShortform(e))), ...timeOnly];
 }
 
 export function getCalendar(

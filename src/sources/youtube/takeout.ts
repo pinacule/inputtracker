@@ -35,6 +35,7 @@ import type {
   YoutubeVideoRow,
 } from "../../core/schema.ts";
 import { localParts, toUtcIso } from "../../core/time.ts";
+import { intervalDayRecords, readIntervals, type TimeInterval } from "../../core/shortform.ts";
 import { parseCsvRows } from "../../io/csv.ts";
 import { isZipBytes, readZip } from "../../io/zip.ts";
 
@@ -774,6 +775,7 @@ export function looksLikeTakeout(text: string): boolean {
 // --- Gap rule & duration calculation -----------------------------------------
 
 export interface ApplyTakeoutGapRuleOptions {
+  tz?: string;
   minWatchMinutes?: number;
   /** Known video/track lengths in seconds keyed by `video_id`. */
   videoLengths?: ReadonlyMap<string, number>;
@@ -781,6 +783,7 @@ export interface ApplyTakeoutGapRuleOptions {
 
 export interface ApplyTakeoutGapRuleResult {
   kept: NewEvent[];
+  shortform: NewEvent[];
   gapSkipped: number;
   musicCount: number;
 }
@@ -815,7 +818,7 @@ export function applyTakeoutGapRule(
   opts: ApplyTakeoutGapRuleOptions = {}
 ): ApplyTakeoutGapRuleResult {
   if (views.length === 0) {
-    return { kept: [], gapSkipped: 0, musicCount: 0 };
+    return { kept: [], shortform: [], gapSkipped: 0, musicCount: 0 };
   }
 
   const minWatchMinutes =
@@ -840,6 +843,7 @@ export function applyTakeoutGapRule(
   }
 
   const kept: NewEvent[] = [];
+  const shortIntervals: TimeInterval[] = [];
   let gapSkipped = 0;
   let musicCount = 0;
 
@@ -879,6 +883,7 @@ export function applyTakeoutGapRule(
     } else {
       if (gapSeconds !== null && gapSeconds < minWatchSeconds) {
         gapSkipped += 1;
+        shortIntervals.push([Date.parse(ev.started_at), Date.parse(ev.started_at) + gapSeconds * 1000]);
         continue;
       }
       if (gapSeconds === null) {
@@ -905,7 +910,7 @@ export function applyTakeoutGapRule(
     });
   }
 
-  return { kept, gapSkipped, musicCount };
+  return { kept, shortform: intervalDayRecords(shortIntervals, "takeout", opts.tz ?? "Europe/Bratislava"), gapSkipped, musicCount };
 }
 
 /** Read known positive `length_seconds` per `video_id` from `youtube_videos_latest`. */
@@ -1672,6 +1677,7 @@ export function importYoutubeTakeout(
     const videoLengths = readKnownYoutubeVideoLengths(db);
 
     const gapResult = applyTakeoutGapRule(rawViews, {
+      tz,
       minWatchMinutes,
       videoLengths,
     });
@@ -1732,6 +1738,17 @@ export function importYoutubeTakeout(
       }
       totalDurationSeconds += finalEvent.duration_seconds ?? 0;
     }
+
+    // Merge interval unions rather than replacing a whole day with a partial export.
+    // Keep estimates in the archive even when measured time currently hides them on read.
+    const shortIntervals = gapResult.shortform.flatMap((e) => readIntervals(e.raw));
+    const storedShortform = db.query<{ raw: string | null }, [string]>(
+      "SELECT raw FROM events_latest WHERE source = 'youtube' AND source_kind = 'shortform_day' AND source_id = ?"
+    );
+    for (const day of gapResult.shortform) shortIntervals.push(...readIntervals(storedShortform.get(day.source_id)?.raw));
+    const shortDays = intervalDayRecords(shortIntervals, "takeout", tz);
+    eventsToStore.push(...shortDays);
+    totalDurationSeconds += shortDays.reduce((sum, e) => sum + (e.duration_seconds ?? 0), 0);
 
     let inserted = 0;
     if (!dryRun && eventsToStore.length > 0) {

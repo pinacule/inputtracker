@@ -447,11 +447,11 @@ export function filterAndEnrichCalendarDays(
       const baseCat = resolveItemCategory(rawItem);
       const baseTitle = resolveHomeItemWorkTitle(rawItem);
       const lookupKey = `${baseCat}:${baseTitle.toLowerCase()}`;
-      const matchedWork =
+      const matchedWork = baseCat === "shortform" ? undefined :
         libraryLookup?.get(lookupKey) ??
         libraryLookup?.get(`title:${baseTitle.toLowerCase()}`);
 
-      const override = matchedWork
+      const override = baseCat === "shortform" ? undefined : matchedWork
         ? getWorkOverride(matchedWork.key)
         : getWorkOverride(lookupKey);
 
@@ -503,7 +503,7 @@ export function filterAndEnrichCalendarDays(
 
     result.push({
       date: day.date,
-      count: keptItems.length,
+      count: keptItems.filter((item) => resolveItemCategory(item) !== "shortform").length,
       minutes: computedMinutes,
       items: keptItems,
     });
@@ -548,9 +548,9 @@ export function computeCategorySegmentsFromItems(
     const prev = byCat.get(cat);
     if (prev) {
       prev.seconds += sec;
-      prev.count += 1;
+      prev.count += cat === "shortform" ? 0 : 1;
     } else {
-      byCat.set(cat, { seconds: sec, count: 1 });
+      byCat.set(cat, { seconds: sec, count: cat === "shortform" ? 0 : 1 });
     }
   }
 
@@ -1004,13 +1004,13 @@ export function buildMonthModels(params: {
       const prev = catTotals.get(cat);
       if (prev) {
         prev.seconds += sec;
-        prev.units += 1;
-        prev.works.add(workTitle);
+        prev.units += cat === "shortform" ? 0 : 1;
+        if (cat !== "shortform") prev.works.add(workTitle);
       } else {
         catTotals.set(cat, {
           seconds: sec,
-          units: 1,
-          works: new Set([workTitle]),
+          units: cat === "shortform" ? 0 : 1,
+          works: new Set(cat === "shortform" ? [] : [workTitle]),
         });
       }
     }
@@ -1245,6 +1245,7 @@ export interface HomeMusicDayGroup {
 }
 
 export interface HomeDayDetailModel {
+  readonly shortformMinutes: number;
   readonly date: string;
   readonly heading: string;
   readonly totalMinutes: number;
@@ -1402,6 +1403,7 @@ export function buildHomeDayDetailModel(params: {
       works: [],
       youtube: null,
       music: null,
+      shortformMinutes: 0,
     };
   }
 
@@ -1428,6 +1430,7 @@ export function buildHomeDayDetailModel(params: {
 
   const musicItems: CalendarItem[] = [];
   let musicTotalSeconds = 0;
+  let shortformSeconds = 0;
 
   for (const item of items) {
     const cat = resolveItemCategory(item);
@@ -1438,6 +1441,7 @@ export function buildHomeDayDetailModel(params: {
         ? item.duration_seconds
         : 0;
 
+    if (cat === "shortform") { shortformSeconds += sec; continue; }
     if (cat === "youtube") {
       ytItems.push(item);
       ytTotalSeconds += sec;
@@ -1790,11 +1794,12 @@ export function buildHomeDayDetailModel(params: {
     heading,
     totalMinutes,
     totalCount,
-    isEmpty: works.length === 0 && youtube === null && music === null,
+    isEmpty: works.length === 0 && youtube === null && music === null && shortformSeconds === 0,
     segments,
     works,
     youtube,
     music,
+    shortformMinutes: shortformSeconds / 60,
   };
 }
 

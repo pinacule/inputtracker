@@ -49,13 +49,19 @@ import {
   parseNote,
   parseRating,
   saveAnnotation,
+  getWorkAnnotation,
+  getAnnotationsFor,
+  annotationMapKey,
 } from "./annotations.ts";
 import {
   type CategoryFilterInput,
   matchesCategoryFilter,
   parseCategoryFilter,
+  groupEventsIntoWorkComponents,
+  getWorkOverrides,
 } from "./overrides.ts";
 import { normalizeForSearch } from "./search.ts";
+import { aliasWorkKey } from "../core/work-identity.ts";
 
 export const ARCHIVE_SOURCE = "manual";
 export const ARCHIVE_SOURCE_KIND = "archive";
@@ -205,6 +211,9 @@ function validateWork(raw: unknown): WorkDetails | ManualWork {
     );
   }
   const category = raw.category;
+  if (category === "shortform") {
+    throw new ArchiveValidationError("Short-form is daily time, not an archive work; use /api/ingest/shortform");
+  }
 
   if (typeof raw.title !== "string" || raw.title.trim() === "") {
     throw new ArchiveValidationError("Field 'work.title' is required");
@@ -1210,55 +1219,91 @@ export function saveArchiveEntry(
     eventsToInsert.push(ensureUniqueHash(db, tombstoneEvent));
   }
 
-  let inserted = 0;
-  if (eventsToInsert.length > 0) {
-    const runId = startRun(db, ARCHIVE_SOURCE, ARCHIVE_SOURCE_KIND);
-    try {
-      const res = insertEvents(db, runId, eventsToInsert);
-      inserted = res.inserted;
-      finishRun(db, runId, {
-        status: "ok",
-        rowsSeen: res.seen,
-        rowsInserted: res.inserted,
-      });
-    } catch (err) {
-      finishRun(db, runId, {
-        status: "failed",
-        rowsSeen: 0,
-        rowsInserted: 0,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      throw err;
-    }
-  }
+  // Capture the whole pre-edit component, not just this entry's units: a work
+  // can contain several archive entries and source plays.
+  const beforeComponents = groupEventsIntoWorkComponents(
+    db.query<EventRow, []>("SELECT * FROM events_latest;").all(), db
+  );
+  const beforeWork = beforeComponents.find((comp) => comp.events.some((event) =>
+    event.source === ARCHIVE_SOURCE && event.source_kind === ARCHIVE_SOURCE_KIND &&
+    event.source_id.startsWith(`archive:${entryId}:`)
+  ));
+  const beforeOverride = beforeWork ? getWorkOverrides(db).get(beforeWork.key) : null;
+  const beforeAnnotation = beforeWork
+    ? getWorkAnnotation(db, beforeWork.key) ??
+      getAnnotationsFor(db, [{ source: ARCHIVE_SOURCE, title: beforeWork.sourceCanonicalTitle }])
+        .get(annotationMapKey(ARCHIVE_SOURCE, beforeWork.sourceCanonicalTitle)) ??
+      (beforeOverride ? { rating: beforeOverride.rating, note: beforeOverride.note } : null)
+    : null;
 
-  // Save rating / note via the existing append-only annotations table when provided and changed.
-  if (rating !== undefined || note !== undefined) {
-    const current = getAnnotation(db, ARCHIVE_SOURCE, work.title);
-    const nextRating = rating !== undefined ? rating : current.rating;
-    const nextNote = note !== undefined ? note : current.note;
-    if (current.rating !== nextRating || current.note !== nextNote) {
-      saveAnnotation(
-        db,
-        {
-          source: ARCHIVE_SOURCE,
-          title: work.title,
-          rating: nextRating,
-          note: nextNote,
-        },
-        nowIso
-      );
+  const saveTx = db.transaction(() => {
+    let inserted = 0;
+    if (eventsToInsert.length > 0) {
+      const runId = startRun(db, ARCHIVE_SOURCE, ARCHIVE_SOURCE_KIND);
+      try {
+        const res = insertEvents(db, runId, eventsToInsert);
+        inserted = res.inserted;
+        finishRun(db, runId, {
+          status: "ok",
+          rowsSeen: res.seen,
+          rowsInserted: res.inserted,
+        });
+      } catch (err) {
+        finishRun(db, runId, {
+          status: "failed",
+          rowsSeen: 0,
+          rowsInserted: 0,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
     }
-  }
 
-  return {
-    entry_id: entryId,
-    inserted,
-    units: builtUnits.length,
-    total_minutes: totalMinutes,
-    estimated,
-    ...(keptLink ? { kept_link: true as const } : {}),
-  };
+    const afterComponents = groupEventsIntoWorkComponents(
+      db.query<EventRow, []>("SELECT * FROM events_latest;").all(), db
+    );
+    const afterWork = afterComponents.find((comp) => comp.events.some((event) =>
+      event.source === ARCHIVE_SOURCE && event.source_kind === ARCHIVE_SOURCE_KIND &&
+      event.source_id.startsWith(`archive:${entryId}:`)
+    ));
+    const workKey = afterWork
+      ? beforeWork ? aliasWorkKey(db, beforeWork.key, afterWork.key, nowIso) : afterWork.key
+      : null;
+    // Bind old title-only data before the old title disappears. No history is rewritten.
+    if (workKey && beforeAnnotation && !getWorkAnnotation(db, workKey)) {
+      saveAnnotation(db, { source: ARCHIVE_SOURCE, title: beforeWork?.sourceCanonicalTitle ?? work.title, work_key: workKey,
+        rating: beforeAnnotation.rating, note: beforeAnnotation.note }, nowIso);
+    }
+    // Save rating / note via the existing append-only annotations table when provided and changed.
+    if (rating !== undefined || note !== undefined) {
+      const current = (workKey ? getWorkAnnotation(db, workKey) : null) ?? getAnnotation(db, ARCHIVE_SOURCE, work.title);
+      const nextRating = rating !== undefined ? rating : current.rating;
+      const nextNote = note !== undefined ? note : current.note;
+      if (current.rating !== nextRating || current.note !== nextNote) {
+        saveAnnotation(
+          db,
+          {
+            source: ARCHIVE_SOURCE,
+            ...(workKey ? { work_key: workKey } : {}),
+            title: work.title,
+            rating: nextRating,
+            note: nextNote,
+          },
+          nowIso
+        );
+      }
+    }
+
+    return {
+      entry_id: entryId,
+      inserted,
+      units: builtUnits.length,
+      total_minutes: totalMinutes,
+      estimated,
+      ...(keptLink ? { kept_link: true as const } : {}),
+    };
+  });
+  return saveTx();
 }
 
 /** Read the authoritative active entry for editing; list summaries are deliberately lossy. */
@@ -1275,7 +1320,15 @@ export function getArchiveEntry(db: Database, entryIdRaw: string): ArchiveReques
   const raw = parseJsonObject(row.raw);
   const work = validateWork(raw?.["work"]);
   const status = validateArchiveStatus(raw?.["status"]);
-  const annotation = getAnnotation(db, ARCHIVE_SOURCE, work.title);
+  // Ratings are bound to the work since the work-identity change; fall back to the title.
+  const component = groupEventsIntoWorkComponents(
+    db.query<EventRow, []>("SELECT * FROM events_latest;").all(), db
+  ).find((comp) => comp.events.some((event) =>
+    event.source === ARCHIVE_SOURCE && event.source_kind === ARCHIVE_SOURCE_KIND &&
+    event.source_id.startsWith(`archive:${entryId}:`)
+  ));
+  const annotation = (component ? getWorkAnnotation(db, component.key) : null) ??
+    getAnnotation(db, ARCHIVE_SOURCE, work.title);
   return {
     entry_id: entryId,
     work,

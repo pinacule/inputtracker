@@ -140,6 +140,7 @@ const VALID_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 const VALID_SORTS: ReadonlySet<string> = new Set([
+  "plays",
   "recent",
   "time",
   "title",

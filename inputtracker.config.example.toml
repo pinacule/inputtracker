@@ -58,11 +58,17 @@ ntfy_url = ""
 # token = ""
 
 # [activitywatch]
+# mode = "pull" # VM and pushing PC: "push" (disables local pull)
 # ActivityWatch runs locally on the PC with aw-watcher-web in Chrome/Firefox.
 # url = "http://127.0.0.1:5600"
 # timeout_s = 20
 # device = "pc"
 # include_music = false
+
+# [push]
+# PC only; server uses the matching [ingest] token. Never expose ActivityWatch.
+# server_url = "https://<vm-name>.<your-tailnet>.ts.net"
+# token = ""
 
 # [covers]
 # Fallback cover lookup when an audiobook is no longer present on Audiobookshelf.
@@ -84,5 +90,4 @@ ntfy_url = ""
 # tmdb_url = "https://api.themoviedb.org/3"
 # tmdb_image_url = "https://image.tmdb.org/t/p"
 # tmdb_api_key = "YOUR_TMDB_API_KEY"
-
 

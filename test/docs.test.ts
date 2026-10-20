@@ -24,6 +24,7 @@ function readDoc(name: string): string {
 const README = readDoc("README.md");
 const DATA_FORMAT = readDoc("DATA_FORMAT.md");
 const MIGRATION = readDoc("MIGRATION.md");
+const INGEST_API = readDoc("docs/ingest-api.md");
 const INSTALL_SH = readDoc(join("scripts", "install.sh"));
 
 /** Column names of a table, from `PRAGMA table_info`. */
@@ -103,6 +104,7 @@ describe("README.md matches the code", () => {
     const commands = cliCommands();
     expect(commands).toEqual([
       "sync",
+      "push",
       "auth",
       "add",
       "export",
@@ -123,7 +125,7 @@ describe("README.md matches the code", () => {
 
   test("mentions every scripts/install.sh flag", () => {
     const flags = installFlags().sort();
-    expect(flags).toEqual(["--dry-run", "--no-build", "--no-start"]);
+    expect(flags).toEqual(["--dry-run", "--no-build", "--no-start", "--role"]);
     for (const flag of flags) {
       expect(README, `README.md must mention ${flag}`).toContain(flag);
     }
@@ -236,5 +238,18 @@ describe("MIGRATION.md documents the move checks", () => {
     // The old doc used a non-existent `--now` flag and a wrong unit glob.
     expect(MIGRATION).not.toContain("backup --now");
     expect(MIGRATION).not.toContain("inputtracker-sync-*");
+  });
+  test("documents PC/server roles, private ActivityWatch, state and lossless rollback", () => {
+    for (const text of ["--role pc", "--role server", "it push activitywatch", "ingest status",
+      'mode = "push"', "server_url", "activitywatch-push-state.json", "cold backup",
+      "127.0.0.1:5600", "PRAGMA integrity_check", "work_identity_aliases", "final VM snapshot"]) {
+      expect(MIGRATION).toContain(text);
+    }
+  });
+  test("ingest contract includes allowlist, bounded atomic writes and acknowledgement rules", () => {
+    for (const text of ["POST /api/ingest/events", "Bearer", "fixed-size hashed buffers", "aw_play",
+      "shortform_day", "0–200", "1 MiB", "400", "401", "413", "503", "500", "accepted",
+      "ingest_runs", "INSERT OR IGNORE", "events_latest", "server after acknowledgement", "30-second"])
+      expect(INGEST_API).toContain(text);
   });
 });

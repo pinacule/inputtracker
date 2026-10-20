@@ -253,6 +253,26 @@ describe("archive metadata preservation (W15)", () => {
     expect(calls).toEqual([{ meta: { provider: "tvmaze", provider_id: "990199" } }, {}]);
   });
 
+  test("refresh drops an unwatched season the provider no longer lists (wrongly chained spin-off)", async () => {
+    const original = request();
+    original.consumed = { seasons: [{ number: 1 }, { number: 2 }] };
+    original.status = "finished";
+    saveArchiveEntry(db, original, TZ, { nowIso: NOW });
+    const before = getArchiveEntry(db, ENTRY).work.seasons.map((s) => s.number);
+    expect(before.length).toBeGreaterThanOrEqual(3);
+    const fetchMock = (async (input: unknown) => {
+      const url = String(input);
+      if (url.endsWith("/shows/990151")) return json({ id: 990151, name: "Synthetic Show", runtime: 42 });
+      if (url.endsWith("/seasons")) return json([{ id: 1, number: 1, episodeOrder: 9 }, { id: 2, number: 2, episodeOrder: 9 }]);
+      if (url.endsWith("/episodes")) return json([]);
+      throw new Error("Unexpected external request");
+    }) as typeof fetch;
+    await refreshLibraryWorkMetadata(db, KEY, { config, fetch: fetchMock });
+    const entry = getArchiveEntry(db, ENTRY);
+    expect(entry.work.seasons.map((s) => s.number)).toEqual([1, 2]);
+    expect(entry.consumed).toEqual(original.consumed);
+  });
+
   test("refresh retains known cover/IDs/missing seasons and never changes user consumption", async () => {
     const original = request();
     original.consumed = { seasons: [{ number: 1 }, { number: 2 }, { number: 3 }] };
