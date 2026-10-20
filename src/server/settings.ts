@@ -206,7 +206,7 @@ export function getSettings(deps: GetSettingsDeps): SettingsView {
     buildStatus(
       "activitywatch",
       awEnabled,
-      extractHost(config.activitywatch?.url),
+      config.activitywatch?.mode === "push" ? null : extractHost(config.activitywatch?.url),
       false
     ),
     buildStatus("youtube", ytEnabled, null, false, ytRun),

@@ -36,9 +36,30 @@ Next to the database (in the same directory) the app keeps files that are **not*
 part of the data format and are not in any export or backup:
 `secrets/simkl-token.json` holds the Simkl OAuth tokens (the `secrets` directory
 is mode 0700, the file mode 0600) and is a secret — never commit or share it.
-`it export` writes the `events`, `goals` and `annotations` rows only, and
+`it export` writes events, goals, annotations, work overrides and work aliases, and
 `it backup` copies the database itself (`VACUUM INTO`) plus the JSON export, so
 neither includes the token file.
+
+## Persistent work identity (migration 14)
+
+`work_key_aliases` contains immutable `(old_key UNIQUE, new_key, created_at)`
+edges. SQL triggers reject UPDATE, DELETE, self-links and cycles. Readers
+resolve chains to the current work key; newest override/annotation revisions
+across all aliases win, including explicit null clears. Linking/refreshing or
+editing an archive entry records the transition without rewriting history.
+Old work URLs and edits resolve through the same chain.
+
+`annotations.work_key` is nullable. Bound rows group by work key; legacy null
+rows still group by source/title and remain readable. On identifiable saves
+and identity transitions, annotations bind to the work using new rows. Titles
+are retained as labels/legacy API lookup names, not the durable identity.
+
+Native v2 JSON adds optional `work_overrides` (all revisions, stored columns)
+and `work_key_aliases` (old/new keys and UTC creation time) arrays. Older v1/v2
+files remain accepted; hashes are recomputed for overrides and annotations,
+and alias imports reject conflicts/cycles atomically. Re-imports insert zero.
+SQLite backups preserve the entire database and are preferred for deployment
+migrations; CSV remains events-only.
 
 ## Table `events`
 

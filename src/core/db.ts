@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { workIdentityMigration } from "./work-identity-migration.ts";
 
 export interface Migration {
   version: number;
@@ -500,6 +501,7 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  workIdentityMigration,
 ];
 
 export function migrate(db: Database): void {

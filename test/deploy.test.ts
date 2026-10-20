@@ -554,6 +554,10 @@ describe("systemd-analyze verification", () => {
         "systemctl --user daemon-reload",
         "bun install --frozen-lockfile",
         "bun run build:web",
+        "systemctl --user cat inputtracker-push@activitywatch.timer",
+        "systemctl --user disable --now inputtracker-push@activitywatch.timer",
+        "systemctl --user cat inputtracker-push@activitywatch.service",
+        "systemctl --user stop inputtracker-push@activitywatch.service",
         "systemctl --user enable --now inputtracker.service inputtracker-sync@audiobookshelf.timer inputtracker-sync@simkl.timer inputtracker-sync@activitywatch.timer inputtracker-backup.timer inputtracker-weekly.timer",
         "systemctl --user restart inputtracker.service",
       ]);
@@ -569,4 +573,61 @@ describe("systemd-analyze verification", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+});
+
+describe("split deployment roles", () => {
+  test("push unit/timer are portable and run every ten minutes", () => {
+    const service = readDeploy("inputtracker-push@.service");
+    expect(directive(service, "Type")).toBe("oneshot");
+    expect(directive(service, "ExecStart")).toBe("@BUN@ run src/cli/index.ts push %i");
+    expect(directive(service, "PassEnvironment")).toBe("INPUTTRACKER_CONFIG");
+    expect(service).not.toMatch(/\/home\//);
+    expect(service).not.toContain("token");
+    const timer = readDeploy("inputtracker-push@activitywatch.timer");
+    expect(directive(timer, "OnCalendar")).toBe("*:0/10");
+    expect(directive(timer, "Persistent")).toBe("true");
+    expect(directive(timer, "Unit")).toBe("inputtracker-push@activitywatch.service");
+  });
+  for (const role of ["pc", "server"] as const) {
+    test(`${role} renders/enables only compatible units and disables previous-role writers`, async () => {
+      const root = mkdtempSync(join(import.meta.dir, ".w14-deploy-"));
+      try {
+        const home = join(root, "home"); const bin = join(root, "bin");
+        mkdirSync(home); mkdirSync(bin);
+        const logPath = join(root, "calls.log");
+        for (const name of ["bun", "systemctl"]) {
+          const shim = join(bin, name);
+          writeFileSync(shim, `#!/bin/sh\nprintf '${name} %s\\n' "$*" >> "\${CALLS_LOG}"\n`);
+          chmodSync(shim, 0o755);
+        }
+        const result = await runInstall(["--role", role], cleanEnv({ HOME: home, XDG_CONFIG_HOME: home,
+          CALLS_LOG: logPath, PATH: `${bin}:${process.env.PATH ?? ""}` }));
+        expect(result.code).toBe(0);
+        const files = readdirSync(join(home, "systemd", "user"));
+        const calls = readFileSync(logPath, "utf8").split("\n");
+        const enabled = calls.find((call) => call.startsWith("systemctl --user enable --now"))!;
+        if (role === "pc") {
+          expect(files.sort()).toEqual(["inputtracker-push@.service", "inputtracker-push@activitywatch.timer"]);
+          expect(enabled).toBe("systemctl --user enable --now inputtracker-push@activitywatch.timer");
+          expect(calls.some((call) => call.startsWith("bun "))).toBe(false);
+          expect(calls).toContain("systemctl --user disable --now inputtracker.service");
+          expect(calls).toContain("systemctl --user disable --now inputtracker-sync@activitywatch.timer");
+          for (const name of ["audiobookshelf", "simkl", "activitywatch"]) {
+            expect(calls).toContain(`systemctl --user stop inputtracker-sync@${name}.service`);
+          }
+          expect(calls).toContain("systemctl --user stop inputtracker-backup.service");
+          expect(calls).toContain("systemctl --user stop inputtracker-weekly.service");
+        } else {
+          expect(files).toContain("inputtracker.service");
+          expect(files).not.toContain("inputtracker-sync@activitywatch.timer");
+          expect(enabled).not.toContain("activitywatch");
+          expect(calls).toContain("systemctl --user disable --now inputtracker-sync@activitywatch.timer");
+          expect(calls).toContain("systemctl --user disable --now inputtracker-push@activitywatch.timer");
+          expect(calls).toContain("systemctl --user stop inputtracker-sync@activitywatch.service");
+          expect(calls).toContain("systemctl --user stop inputtracker-push@activitywatch.service");
+          expect(calls).toContain("systemctl --user restart inputtracker.service");
+        }
+      } finally { rmSync(root, { recursive: true, force: true }); }
+    });
+  }
 });
