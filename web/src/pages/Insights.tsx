@@ -797,11 +797,6 @@ export function Insights({
       </div>
 
       {/* Chart 1: Stacked Minutes by Category Over Time */}
-      <MostPlayed categories={selectedCategories} />
-      <Card padding="md" title="Short-form time" subtitle="Daily time only — no archived videos">
-        <Stat label="Short-form" value={formatMinutes(points.reduce((sum, p) => sum + (p.minutes_by_category.shortform ?? 0), 0))} category="shortform"
-          sparkline={<Sparkline values={points.map((p) => p.minutes_by_category.shortform ?? 0)} category="shortform" label="Short-form time trend" />} />
-      </Card>
       <Card
         padding="md"
         title={`Minutes by Category (${resolvedRange.label})`}
@@ -985,6 +980,14 @@ export function Insights({
           </div>
         )}
       </Card>
+      {/* Ranked music/YouTube lists beside the small short-form total. */}
+      <div class="insights-media-row">
+        <MostPlayed categories={selectedCategories} />
+        <Card padding="md" title="Short-form time" subtitle="Daily time only — no archived videos">
+          <Stat label="Short-form" value={formatMinutes(points.reduce((sum, p) => sum + (p.minutes_by_category.shortform ?? 0), 0))} category="shortform"
+            sparkline={<Sparkline values={points.map((p) => p.minutes_by_category.shortform ?? 0)} category="shortform" label="Short-form time trend" />} />
+        </Card>
+      </div>
 
       {/* Chart 4: 52-Week Streak & Activity Heatmap Calendar */}
       <Card

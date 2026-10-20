@@ -2109,3 +2109,17 @@
   max-height: 180px;
   overflow-y: auto;
 }
+
+/* Most played (wide) beside the short-form total (narrow), under the YouTube section. */
+.insights-media-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .insights-media-row {
+    grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  }
+}
