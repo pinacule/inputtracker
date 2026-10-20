@@ -1,5 +1,6 @@
 import preact from "@preact/preset-vite";
 import { defineConfig } from "vite";
+import { themeBootstrapScript } from "./src/lib/theme.ts";
 
 /**
  * Vite config for the InputTracker web app.
@@ -12,7 +13,19 @@ import { defineConfig } from "vite";
  */
 export default defineConfig({
   root: "web",
-  plugins: [preact()],
+  plugins: [
+    preact(),
+    {
+      name: "inputtracker-theme-bootstrap",
+      transformIndexHtml: {
+        order: "pre",
+        handler: (html) => html.replace(
+          "/* inputtracker-theme-bootstrap */",
+          themeBootstrapScript()
+        ),
+      },
+    },
+  ],
   build: {
     outDir: "dist",
     emptyOutDir: true,

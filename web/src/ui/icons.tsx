@@ -26,7 +26,7 @@ function Svg({
       stroke-width="1.8"
       stroke-linecap="round"
       stroke-linejoin="round"
-      class={className}
+      class={["ui-icon", className].filter(Boolean).join(" ")}
       aria-hidden="true"
     >
       {children}

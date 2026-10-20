@@ -1,0 +1,90 @@
+/* Original engraved radial geometry; no external artwork or fonts. */
+:root[data-theme="hermes"],
+.theme-preview[data-theme="hermes"] {
+  color-scheme: dark;
+  --font-serif: "Oswald", "Bebas Neue", "Roboto Condensed", "Arial Narrow", Impact,
+    "DejaVu Sans Condensed", "DejaVu Sans", sans-serif;
+  --font-sans: "Roboto Condensed", "Arial Narrow", "DejaVu Sans", sans-serif;
+  --font-display: var(--font-serif);
+  --font-body: var(--font-sans);
+  --font-numbers: var(--font-mono);
+  --display-case: uppercase;
+  --display-tracking: 0.035em;
+  --display-weight: 500;
+  --display-stretch: condensed;
+  --label-case: uppercase;
+  --label-tracking: 0.08em;
+  --radius-xs: 0px;
+  --radius-sm: 1px;
+  --radius-md: 1px;
+  --radius-lg: 1px;
+  --radius-xl: 1px;
+  --radius-full: 1px;
+  --bg-canvas: #0b0e20;
+  --bg-surface: #11162b;
+  --bg-surface-raised: #191f36;
+  --bg-subtle: #202740;
+  --bg-muted: #2b3451;
+  --bg-overlay: rgba(3, 5, 16, 0.85);
+  --text-primary: #f0f2ff;
+  --text-secondary: #bcc5df;
+  --text-muted: #a0accb;
+  --text-on-accent: #ffffff;
+  /* Electric block separated from the AA text/link accent. */
+  --accent-primary: #8baaff;
+  --accent-primary-hover: #b4c8ff;
+  --accent-block: #264cde;
+  --accent-block-hover: #3158ef;
+  --accent-primary-subtle: #152144;
+  --accent-primary-border: #405c9a;
+  --border-subtle: #2f3956;
+  --border-default: #45516f;
+  --border-strong: #6a7a9f;
+  --focus-ring: #aac4ff;
+  --focus-width: 1px;
+  --focus-offset: 4px;
+  --icon-stroke: 1.25;
+  --icon-cap: square;
+  --icon-join: miter;
+  --chart-radius: 0px;
+  --chart-svg-radius: 0px;
+  --chart-svg-inner-radius: 0px;
+  --chart-cell-radius: 0px;
+  --chart-linecap: butt;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: 0 8px 0 #050817;
+  --shadow-lg: 0 12px 0 #050817;
+  --shadow-cover: none;
+  --cover-sheen: inset 0 0 0 1px #45516f;
+  --nav-active-bg: #264cde;
+  --nav-active-color: #ffffff;
+  --heat-1: #152144;
+  --heat-2: #1f3262;
+  --heat-3: #2b468a;
+  --heat-4: #4266b9;
+  --heat-border-1: #33476e;
+  --heat-border-2: #455f91;
+  --heat-border-3: #5b7cb4;
+  --heat-border-4: #90ace1;
+  --wallpaper: repeating-linear-gradient(90deg, transparent 0 119px, #b8c9ff06 119px 120px);
+  --wallpaper-size: 120px 120px;
+  --header-art: repeating-conic-gradient(from 9deg at 78% 55%, #bfceff25 0deg 0.2deg, transparent 0.2deg 7.5deg);
+}
+
+/* Synthesize the tall condensed silhouette even on machines with only a
+   regular sans fallback, without changing the heading's layout box. */
+:root[data-theme="hermes"] :is(h1, h2, h3, h4),
+.theme-preview[data-theme="hermes"] .theme-preview-heading {
+  transform: scale(0.84, 1.15);
+  transform-origin: left center;
+}
+
+:root[data-theme="hermes"] :is(.ui-btn--primary, .ui-icon-btn--primary) {
+  background-color: var(--accent-block);
+  border-color: var(--accent-block);
+}
+:root[data-theme="hermes"] :is(.ui-btn--primary, .ui-icon-btn--primary):hover:not(:disabled) {
+  background-color: var(--accent-block-hover);
+  border-color: var(--accent-block-hover);
+}

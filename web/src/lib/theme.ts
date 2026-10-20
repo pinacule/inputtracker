@@ -1,8 +1,7 @@
 /**
- * Dark-only theme registry and persistence helpers for InputTracker v2.1.
- *
- * Light and system modes are removed. Offers 5 named dark themes (including
- * the original warm dark "espresso"), stored in `localStorage` under
+ * Theme registry and persistence helpers. The original five dark palettes
+ * remain compatible; four app skins include the monochrome light CWM skin.
+ * Choices are stored in `localStorage` under
  * `inputtracker.theme` and applied as `data-theme="<id>"` on
  * `document.documentElement` before first paint.
  *
@@ -10,17 +9,22 @@
  * under Bun with no DOM.
  */
 
-import type { Category } from "../../../src/core/category";
+import type { Category } from "../../../src/core/category.ts";
 
-export type DarkThemeId =
+export type ThemeId =
   | "espresso"
   | "midnight"
   | "forest"
   | "obsidian"
-  | "plum";
+  | "plum"
+  | "hermes"
+  | "workbench"
+  | "cwm"
+  | "signal";
 
-/** Alias kept for callers referencing ThemeMode. */
-export type ThemeMode = DarkThemeId;
+/** Compatibility aliases for existing callers (CWM is a light skin). */
+export type DarkThemeId = ThemeId;
+export type ThemeMode = ThemeId;
 
 export const DEFAULT_THEME: DarkThemeId = "espresso";
 
@@ -44,13 +48,15 @@ export interface CategoryThemeColors {
   readonly solid: string;
 }
 
-export interface DarkThemeDefinition {
-  readonly id: DarkThemeId;
+export interface ThemeDefinition {
+  readonly id: ThemeId;
   readonly label: string;
   readonly description: string;
   readonly swatches: ThemeSwatches;
   readonly categories: Readonly<Record<Category, CategoryThemeColors>>;
 }
+
+export type DarkThemeDefinition = ThemeDefinition;
 
 const SHARED_DARK_CATEGORIES: Readonly<Record<Category, CategoryThemeColors>> = {
   anime: {
@@ -110,7 +116,22 @@ const SHARED_DARK_CATEGORIES: Readonly<Record<Category, CategoryThemeColors>> = 
   shortform: { fg: "#b1d3ff", bg: "#192638", border: "#354f70", solid: "#6194cf" },
 };
 
-export const DARK_THEMES: ReadonlyArray<DarkThemeDefinition> = [
+// ANSI's bright fills use black labels on white rather than unreadable bright
+// text on a light pane. All values come from the classic 16-colour palette.
+const ANSI_CATEGORIES: Readonly<Record<Category, CategoryThemeColors>> = {
+  anime: { fg: "#0000aa", bg: "#ffffff", border: "#000000", solid: "#0000aa" },
+  series: { fg: "#000000", bg: "#ffffff", border: "#000000", solid: "#00aaaa" },
+  film: { fg: "#000000", bg: "#ffffff", border: "#000000", solid: "#ffff55" },
+  book: { fg: "#000000", bg: "#ffffff", border: "#000000", solid: "#00aa00" },
+  audiobook: { fg: "#aa00aa", bg: "#ffffff", border: "#000000", solid: "#aa00aa" },
+  youtube: { fg: "#aa0000", bg: "#ffffff", border: "#000000", solid: "#aa0000" },
+  podcast: { fg: "#aa5500", bg: "#ffffff", border: "#000000", solid: "#aa5500" },
+  music: { fg: "#000000", bg: "#ffffff", border: "#000000", solid: "#ff55ff" },
+  shortform: { fg: "#5555ff", bg: "#ffffff", border: "#000000", solid: "#5555ff" },
+  other: { fg: "#555555", bg: "#ffffff", border: "#000000", solid: "#555555" },
+};
+
+export const THEMES: ReadonlyArray<ThemeDefinition> = [
   {
     id: "espresso",
     label: "Warm Study",
@@ -191,33 +212,77 @@ export const DARK_THEMES: ReadonlyArray<DarkThemeDefinition> = [
     },
     categories: SHARED_DARK_CATEGORIES,
   },
+  {
+    id: "hermes",
+    label: "Hermes",
+    description: "Ink navy, etched rays & electric-blue geometry",
+    swatches: {
+      canvas: "#0b0e20", surface: "#11162b", surfaceRaised: "#191f36",
+      subtle: "#202740", textPrimary: "#f0f2ff", textSecondary: "#bcc5df",
+      accent: "#8baaff", border: "#45516f",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+  {
+    id: "workbench",
+    label: "Workbench",
+    description: "Circuit wallpaper, bitmap type & bevelled windows",
+    swatches: {
+      canvas: "#293b49", surface: "#263540", surfaceRaised: "#30424f",
+      subtle: "#394d5b", textPrimary: "#f4f8fc", textSecondary: "#d2dfe9",
+      accent: "#a8d5ff", border: "#718998",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+  {
+    id: "cwm",
+    label: "CWM",
+    description: "Monochrome terminal panes, dither & ANSI categories",
+    swatches: {
+      canvas: "#ffffff", surface: "#ffffff", surfaceRaised: "#ffffff",
+      subtle: "#ffffff", textPrimary: "#000000", textSecondary: "#000000",
+      accent: "#000000", border: "#000000",
+    },
+    categories: ANSI_CATEGORIES,
+  },
+  {
+    id: "signal",
+    label: "Signal",
+    description: "Particle grain, mint typewriter headings & quiet frames",
+    swatches: {
+      canvas: "#0c100e", surface: "#111814", surfaceRaised: "#19221c",
+      subtle: "#202c24", textPrimary: "#e6f2e9", textSecondary: "#b8cbbc",
+      accent: "#a4f5c1", border: "#41594a",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
 ];
 
-export const THEME_REGISTRY: Readonly<Record<DarkThemeId, DarkThemeDefinition>> =
-  {
-    espresso: DARK_THEMES[0]!,
-    midnight: DARK_THEMES[1]!,
-    forest: DARK_THEMES[2]!,
-    obsidian: DARK_THEMES[3]!,
-    plum: DARK_THEMES[4]!,
-  };
+/** Legacy export retained; use THEMES for new code. */
+export const DARK_THEMES = THEMES;
+
+export const THEME_REGISTRY = Object.fromEntries(
+  THEMES.map((theme) => [theme.id, theme])
+) as Readonly<Record<ThemeId, ThemeDefinition>>;
 
 export interface ThemeStorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 }
 
-export function isDarkThemeId(value: unknown): value is DarkThemeId {
-  return (
-    value === "espresso" ||
-    value === "midnight" ||
-    value === "forest" ||
-    value === "obsidian" ||
-    value === "plum"
-  );
+export function isThemeId(value: unknown): value is ThemeId {
+  return typeof value === "string" && Object.hasOwn(THEME_REGISTRY, value);
 }
 
-export const isThemeMode = isDarkThemeId;
+export const isDarkThemeId = isThemeId;
+export const isThemeMode = isThemeId;
+
+/** Vite embeds this synchronously in <head>, keeping first paint in sync with
+ * the registry without fetching a module or maintaining a second ID list. */
+export function themeBootstrapScript(): string {
+  const colors = Object.fromEntries(THEMES.map((t) => [t.id, t.swatches.canvas]));
+  return `(function(){try{var colors=${JSON.stringify(colors)};var theme=${JSON.stringify(DEFAULT_THEME)};try{var raw=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});if(Object.prototype.hasOwnProperty.call(colors,raw))theme=raw;}catch(e){}document.documentElement.setAttribute("data-theme",theme);var meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute("content",colors[theme]);}catch(e){}})();`;
+}
 
 function defaultStorage(): ThemeStorageLike | null {
   try {

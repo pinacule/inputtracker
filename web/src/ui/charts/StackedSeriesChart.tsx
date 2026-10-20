@@ -239,6 +239,7 @@ export function StackedSeriesChart({
                   return (
                     <rect
                       key={seg.category}
+                      class={isTopSegment ? "ui-chart-segment ui-chart-segment--top" : "ui-chart-segment"}
                       x={barX}
                       y={Math.max(padTop, segY)}
                       width={barW}

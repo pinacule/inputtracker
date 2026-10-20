@@ -22,7 +22,6 @@ import { describeImport } from "../lib/forms";
 import { sourceLabel } from "../lib/sources";
 import { formatMinutes } from "../lib/stats";
 import {
-  DARK_THEMES,
   readThemePreference,
   saveThemePreference,
   type DarkThemeId,
@@ -37,11 +36,11 @@ import {
   Badge,
   Button,
   Card,
-  CheckIcon,
   Cover,
   ImportExportIcon,
   Skeleton,
 } from "../ui";
+import { ThemePicker } from "../ui/ThemePicker";
 
 export interface SettingsProps {
   theme?: DarkThemeId;
@@ -307,98 +306,19 @@ export function Settings({
         <div class="page-header-titles">
           <h1>Settings</h1>
           <p class="page-subtitle">
-            Dark themes, YouTube filtering, Achriom & Takeout imports, hidden
+            App skins, YouTube filtering, Achriom & Takeout imports, hidden
             works, connected sources, and backups.
           </p>
         </div>
       </header>
 
-      {/* 1. Appearance (Dark Theme Swatch Cards) */}
+      {/* 1. Appearance */}
       <Card
         padding="md"
         title="Appearance"
-        subtitle="Five WCAG-AA dark themes applied before first paint"
+        subtitle="Nine local skins — fonts, wallpaper and frames. Applied before first paint."
       >
-        <div
-          class="theme-swatches-grid"
-          role="radiogroup"
-          aria-label="Dark colour theme"
-        >
-          {DARK_THEMES.map((t) => {
-            const isSelected = localTheme === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                class={
-                  isSelected
-                    ? "theme-swatch-card theme-swatch-card--active"
-                    : "theme-swatch-card"
-                }
-                onClick={() => handleThemeSelect(t.id)}
-              >
-                <div
-                  class="theme-swatch-preview"
-                  style={{
-                    backgroundColor: t.swatches.canvas,
-                    borderColor: t.swatches.border,
-                  }}
-                  aria-hidden="true"
-                >
-                  <div
-                    class="theme-swatch-surface"
-                    style={{
-                      backgroundColor: t.swatches.surface,
-                      borderColor: t.swatches.border,
-                    }}
-                  >
-                    <span
-                      class="theme-swatch-text"
-                      style={{ color: t.swatches.textPrimary }}
-                    >
-                      Aa
-                    </span>
-                    <span
-                      class="theme-swatch-pill"
-                      style={{
-                        backgroundColor: t.swatches.accent,
-                        color: t.swatches.canvas,
-                      }}
-                    />
-                  </div>
-                  <div class="theme-swatch-dots">
-                    <span
-                      style={{ backgroundColor: t.categories.anime.solid }}
-                    />
-                    <span
-                      style={{ backgroundColor: t.categories.series.solid }}
-                    />
-                    <span
-                      style={{ backgroundColor: t.categories.film.solid }}
-                    />
-                    <span
-                      style={{ backgroundColor: t.categories.book.solid }}
-                    />
-                  </div>
-                </div>
-
-                <div class="theme-swatch-info">
-                  <div class="theme-swatch-title-row">
-                    <strong>{t.label}</strong>
-                    {isSelected && (
-                      <span class="theme-swatch-check" aria-hidden="true">
-                        <CheckIcon size={14} />
-                      </span>
-                    )}
-                  </div>
-                  <span class="theme-swatch-desc">{t.description}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        <ThemePicker value={localTheme} onChange={handleThemeSelect} />
       </Card>
 
       {/* 2. Achriom Library Import (upload -> dry-run summary -> import) */}

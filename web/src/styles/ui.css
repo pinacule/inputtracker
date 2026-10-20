@@ -11,12 +11,16 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-weight: 500;
   line-height: 1.2;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
+  text-align: center;
   border-radius: var(--radius-md);
-  border: 1px solid transparent;
+  border: var(--border-width) var(--border-style) transparent;
   transition:
     background-color var(--duration-fast) var(--ease-standard),
     border-color var(--duration-fast) var(--ease-standard),
@@ -58,7 +62,7 @@
   background-color: var(--accent-primary);
   color: var(--text-on-accent);
   border-color: var(--accent-primary);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--control-shadow);
 }
 
 .ui-btn--primary:hover:not(:disabled) {
@@ -71,7 +75,7 @@
   background-color: var(--bg-surface);
   color: var(--text-primary);
   border-color: var(--border-default);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--control-shadow);
 }
 
 .ui-btn--secondary:hover:not(:disabled) {
@@ -119,7 +123,7 @@
   justify-content: center;
   flex-shrink: 0;
   border-radius: var(--radius-md);
-  border: 1px solid transparent;
+  border: var(--border-width) var(--border-style) transparent;
   color: var(--text-secondary);
   transition:
     background-color var(--duration-fast) var(--ease-standard),
@@ -195,9 +199,9 @@
 
 .ui-card {
   background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  border: var(--border-width) var(--border-style) var(--card-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -205,7 +209,7 @@
 
 .ui-card--elevated {
   background-color: var(--bg-surface-raised);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--card-shadow-raised);
 }
 
 .ui-card--subtle {
@@ -249,6 +253,11 @@
   justify-content: space-between;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
+  background-color: var(--card-title-bg);
+  padding: var(--card-title-padding);
+  border-bottom: var(--card-title-border) var(--border-style) var(--border-default);
+  box-shadow: var(--card-title-shadow);
+  min-width: 0;
 }
 
 .ui-card-titles {
@@ -259,15 +268,45 @@
 }
 
 .ui-card-title {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: var(--display-weight);
+  color: var(--card-title-color);
+  letter-spacing: var(--display-tracking);
+  text-transform: var(--display-case);
+  font-stretch: var(--display-stretch);
+  overflow-wrap: anywhere;
 }
 
 .ui-card-subtitle {
   font-size: var(--text-xs);
   color: var(--text-muted);
+}
+
+.ui-icon {
+  stroke-width: var(--icon-stroke);
+  stroke-linecap: var(--icon-cap);
+  stroke-linejoin: var(--icon-join);
+}
+
+/* Shared title-bar hooks also cover cards with hand-written header markup. */
+:root:is([data-theme="workbench"], [data-theme="cwm"]) :is(.home-section-header, .home-week-header, .home-day-header, .home-card > .home-section-title) {
+  background-color: var(--card-title-bg);
+  padding: var(--card-title-padding);
+  box-shadow: var(--card-title-shadow);
+  color: var(--card-title-color);
+}
+:root:is([data-theme="workbench"], [data-theme="cwm"]) :is(.home-section-header, .home-week-header, .home-day-header) :is(h2, h3, .home-section-title, .ui-icon-btn) {
+  color: var(--card-title-color);
+}
+:root:is([data-theme="workbench"], [data-theme="cwm"]) .home-card > .home-section-title {
+  color: var(--card-title-color);
+}
+:root:is([data-theme="workbench"], [data-theme="cwm"]) .home-day-header .home-day-total {
+  color: var(--card-title-color);
+}
+:root:is([data-theme="workbench"], [data-theme="cwm"]) :is(.ui-card-header, .ui-sheet-header, .home-week-header, .home-day-header) {
+  --focus-ring: var(--card-title-color);
 }
 
 /* ==========================================================================
@@ -431,12 +470,13 @@
 }
 
 .ui-stat-value {
-  font-family: var(--font-serif);
+  font-family: var(--font-numbers);
   font-size: clamp(1.5rem, 2.2vw, var(--text-2xl));
   font-weight: 600;
   line-height: 1.1;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .ui-stat-sparkline {
@@ -507,7 +547,7 @@
   width: 100%;
   height: 8px;
   background-color: var(--bg-muted);
-  border-radius: var(--radius-full);
+  border-radius: var(--chart-radius);
   overflow: hidden;
 }
 
@@ -521,7 +561,9 @@
 
 .ui-progress-fill {
   height: 100%;
-  border-radius: var(--radius-full);
+  border-radius: var(--chart-radius);
+  background-image: var(--chart-fill-image);
+  box-shadow: var(--chart-fill-shadow);
   background-color: var(--accent-primary);
   transition: width var(--duration-normal) var(--ease-out);
 }
@@ -578,9 +620,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow:
-    inset 3px 0 6px rgba(255, 255, 255, 0.16),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--cover-sheen);
   pointer-events: none;
 }
 
@@ -600,12 +640,12 @@
 /* Sizes (width; height follows aspect-ratio) */
 .ui-cover--xs {
   width: 26px;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
 }
 
 .ui-cover--sm {
   width: 40px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
 }
 
 .ui-cover--md {
@@ -734,7 +774,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-weight: 600;
   line-height: 1.2;
   border-radius: var(--radius-full);
@@ -865,10 +905,12 @@
 }
 
 .ui-empty-title {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size: var(--text-xl);
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: var(--display-weight);
+  color: var(--display-color);
+  text-transform: var(--display-case);
+  letter-spacing: var(--display-tracking);
 }
 
 .ui-empty-description {
@@ -990,6 +1032,8 @@
   padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  background-color: var(--card-title-bg);
+  box-shadow: var(--card-title-shadow);
 }
 
 .ui-sheet-titles {
@@ -1000,10 +1044,12 @@
 }
 
 .ui-sheet-title {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size: var(--text-xl);
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: var(--display-weight);
+  color: var(--card-title-color);
+  text-transform: var(--display-case);
+  letter-spacing: var(--display-tracking);
 }
 
 .ui-sheet-subtitle {
@@ -1104,7 +1150,7 @@
   font-weight: 500;
   color: var(--text-secondary);
   background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  border: var(--border-width) var(--border-style) var(--border-subtle);
   border-radius: var(--radius-full);
   white-space: nowrap;
   transition:
@@ -1278,16 +1324,16 @@
 }
 
 .ui-quick-rate-pill--overlay.ui-quick-rate-pill--rated {
-  background-color: rgba(15, 14, 12, 0.88);
-  color: #f6c982;
-  border-color: rgba(246, 201, 130, 0.38);
+  background-color: var(--cat-film-bg);
+  color: var(--cat-film-fg);
+  border-color: var(--cat-film-border);
   backdrop-filter: blur(4px);
 }
 
 .ui-quick-rate-pill--overlay.ui-quick-rate-pill--unrated {
-  background-color: rgba(15, 14, 12, 0.78);
+  background-color: var(--bg-surface);
   color: var(--text-secondary);
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: var(--border-default);
   opacity: 0;
 }
 
@@ -1323,7 +1369,7 @@
 }
 
 .ui-quick-rate-inline--overlay {
-  background-color: rgba(15, 14, 12, 0.95);
+  background-color: var(--bg-surface-raised);
   backdrop-filter: blur(6px);
 }
 
@@ -1352,7 +1398,7 @@
 }
 
 .ui-quick-rate-inline--overlay .ui-quick-rate-input {
-  color: #fffdf9;
+  color: var(--text-primary);
 }
 
 .ui-quick-rate-clear-btn {
@@ -1454,7 +1500,11 @@
 .ui-context-menu-item:focus-visible,
 .ui-context-menu-item--active {
   background-color: var(--bg-subtle);
-  outline: none;
+}
+
+.ui-context-menu-item:focus-visible {
+  outline: var(--focus-width) var(--focus-style) var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .ui-context-menu-item--danger {

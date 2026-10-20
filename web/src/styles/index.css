@@ -3,9 +3,14 @@
  */
 
 @import "./tokens.css";
+@import "./themes/hermes.css";
+@import "./themes/workbench.css";
+@import "./themes/cwm.css";
+@import "./themes/signal.css";
 @import "./base.css";
 @import "./ui.css";
 @import "./shell.css";
-@import "./charts.css";
 @import "./pages.css";
+@import "./charts.css";
 @import "./home.css";
+@import "./themes/previews.css";

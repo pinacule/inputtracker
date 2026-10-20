@@ -73,22 +73,25 @@ import {
   sortYoutubeVideos,
 } from "../web/src/lib/youtube.ts";
 
-describe("v2.1 dark-only themes & WCAG AA compliance (web/src/lib/theme.ts)", () => {
-  test("offers 5 named dark themes and rejects light/system modes", () => {
-    expect(DARK_THEMES.length).toBe(5);
+describe("themes & WCAG AA compliance (web/src/lib/theme.ts)", () => {
+  test("keeps five palettes, adds four skins and rejects unnamed modes", () => {
+    expect(DARK_THEMES.length).toBe(9);
     expect(DEFAULT_THEME).toBe("espresso");
     expect(isDarkThemeId("espresso")).toBe(true);
     expect(isDarkThemeId("midnight")).toBe(true);
     expect(isDarkThemeId("forest")).toBe(true);
     expect(isDarkThemeId("obsidian")).toBe(true);
     expect(isDarkThemeId("plum")).toBe(true);
+    for (const id of ["hermes", "workbench", "cwm", "signal"]) {
+      expect(isDarkThemeId(id)).toBe(true);
+    }
 
     expect(isDarkThemeId("light")).toBe(false);
     expect(isDarkThemeId("system")).toBe(false);
     expect(isDarkThemeId("dark")).toBe(false);
   });
 
-  test("every theme meets WCAG AA contrast (>= 4.5:1) for text and all 9 categories", () => {
+  test("every theme meets WCAG AA contrast (>= 4.5:1) for text and all 10 categories", () => {
     for (const theme of DARK_THEMES) {
       expect(THEME_REGISTRY[theme.id]).toBe(theme);
 

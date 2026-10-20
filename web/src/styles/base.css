@@ -9,12 +9,12 @@
 }
 
 html {
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 16px;
   line-height: var(--leading-normal);
   color: var(--text-primary);
   background-color: var(--bg-canvas);
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: var(--font-smoothing);
   -moz-osx-font-smoothing: grayscale;
   text-size-adjust: 100%;
   overflow-x: clip;
@@ -27,9 +27,26 @@ body {
   background-color: var(--bg-canvas);
   color: var(--text-primary);
   overflow-x: clip;
+  background-image: var(--wallpaper);
+  background-size: var(--wallpaper-size);
+  background-position: var(--wallpaper-position);
+  background-repeat: var(--wallpaper-repeat);
+}
+
+/* Wallpaper is on the canvas, not translucent cards. Texture never intercepts
+   input, affects document geometry, or covers dialogs/navigation. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: var(--texture-overlay);
+  background-size: var(--texture-size);
+  opacity: var(--texture-opacity);
+  pointer-events: none;
 }
 
 #app {
+  position: relative;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
@@ -43,11 +60,14 @@ h2,
 h3,
 h4,
 .heading-serif {
-  font-family: var(--font-serif);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-stretch: var(--display-stretch);
+  text-transform: var(--display-case);
   line-height: var(--leading-tight);
-  letter-spacing: var(--tracking-tight);
-  color: var(--text-primary);
+  letter-spacing: var(--display-tracking);
+  color: var(--display-color);
+  overflow-wrap: anywhere;
   margin: 0;
 }
 
@@ -104,12 +124,13 @@ button:disabled {
 
 /* --- Focus Ring (WCAG AA Accessible) --- */
 :focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline: var(--focus-width) var(--focus-style) var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 
 /* --- Tabular numbers for times, counts, durations --- */
 .tabular-nums {
+  font-family: var(--font-numbers);
   font-variant-numeric: tabular-nums;
 }
 
@@ -128,6 +149,9 @@ button:disabled {
 
 /* --- Page Structure Primitives --- */
 .page-container {
+  min-width: 0;
+  box-shadow: var(--content-frame);
+  border-radius: var(--content-frame-radius);
   width: 100%;
   max-width: var(--content-max-width);
   margin: 0 auto;
@@ -145,6 +169,8 @@ button:disabled {
 }
 
 .page-header {
+  background-image: var(--header-art);
+  background-size: 100% 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -155,13 +181,34 @@ button:disabled {
 }
 
 .page-header-titles {
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
 }
 
+:root[data-theme="cwm"] .page-header-titles { background-color: var(--bg-surface); }
+
+.home-topbar {
+  background-image: var(--header-art);
+  background-size: 100% 100%;
+}
+:root[data-theme="cwm"] .home-topbar h1 { background-color: var(--bg-surface); }
+
+/* Class-styled headings on existing pages still receive skin typography. */
+:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) :is(h1, h2, h3, h4) {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-stretch: var(--display-stretch);
+  text-transform: var(--display-case);
+  letter-spacing: var(--display-tracking);
+  overflow-wrap: anywhere;
+}
+:root[data-theme="signal"] :is(h1, h2, h3, h4) { color: var(--display-color); }
+
 .page-eyebrow {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
@@ -173,4 +220,43 @@ button:disabled {
   font-size: var(--text-sm);
   color: var(--text-secondary);
   max-width: 62ch;
+  overflow-wrap: anywhere;
+}
+
+/* Shared navigation skin hooks, kept separate from D1's shell layout. */
+:root:not([data-theme="espresso"]):not([data-theme="midnight"]):not([data-theme="forest"]):not([data-theme="obsidian"]):not([data-theme="plum"]) :is(.sidebar-nav-link, .sidebar-settings-link, .mobile-tab, .more-sheet-link-title) {
+  font-family: var(--font-body);
+  text-transform: var(--label-case);
+  letter-spacing: var(--label-tracking);
+}
+:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) :is(.sidebar-nav-link--active, .sidebar-settings-link--active, .mobile-tab--active) {
+  background-color: var(--nav-active-bg);
+  color: var(--nav-active-color);
+}
+:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) :is(.app-sidebar, .mobile-tabbar, .mobile-topbar) {
+  box-shadow: var(--nav-shadow);
+}
+:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) :is(.sidebar-nav-link, .mobile-tab) {
+  box-shadow: var(--nav-item-shadow);
+}
+:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) .sidebar-search-input:focus-visible {
+  outline: var(--focus-width) var(--focus-style) var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+* { scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 2px solid var(--scrollbar-track);
+  border-radius: var(--scrollbar-radius);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
