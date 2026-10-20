@@ -50,6 +50,19 @@ export interface SeasonInfo {
   provider_id: string | null;
 }
 
+export interface CommunityScore {
+  source: "AniList" | "TMDB" | "TVmaze" | "IMDb" | "Open Library" | "iTunes";
+  value_10: number;
+  votes: number | null;
+}
+
+export interface WorkRank {
+  /** Competition ranks: tied works share a rank (1, 1, 3). Zero-time works have no time rank. */
+  time: number | null;
+  time_share_percent: number;
+  rating: number | null;
+}
+
 /** Full details for one work, used by the "add to archive" form and stored as a snapshot. */
 export interface WorkDetails {
   provider: MetaProvider;
@@ -59,6 +72,10 @@ export interface WorkDetails {
   original_title: string | null;
   year: number | null;
   cover_url: string | null;
+  /** Local banner route; optional only for snapshots saved before W16. */
+  banner_url?: string | null;
+  /** Public score on a 0–10 scale; optional only for older snapshots. */
+  community_score?: CommunityScore | null;
   /** Authors, directors or studio: short display names. */
   creators: string[];
   genres: string[];
@@ -209,6 +226,15 @@ export interface LibraryResult {
 export interface LibraryWorkDetail extends LibraryWork {
   /** Stored snapshot for logging this work again; never reconstructed from display/progress fields. */
   work_snapshot?: WorkDetails | ManualWork | null;
+  description: string | null;
+  genres: string[];
+  creators: string[];
+  narrators: string[];
+  year: number | null;
+  banner_url: string | null;
+  community_score: CommunityScore | null;
+  /** Within this category, excluding hidden and planned works. */
+  rank: WorkRank | null;
   /** Seasons with watched counts, when the work has seasons. */
   seasons: Array<SeasonInfo & { watched_episodes: number }>;
   /** Newest first; archive units and real sessions mixed. */

@@ -66,6 +66,10 @@ This document records the root-cause investigation into inaccurate series runtim
 - **Missing `duration` on newer seasons in a chain:**
   - When a newly finished or releasing season in an AniList chain (or a season in TVmaze/Cinemeta) had `duration: null` or `0` while earlier seasons had `duration: 24`, `toSeasonInfo` set `episode_minutes: null, total_minutes: null`.
   - In `src/server/archive.ts` (`computeSeasonNaturalMinutes`) and `src/io/import-achriom.ts` (`computeSeasonMinutes`), a watched season with `total_minutes: null` and `episode_minutes: null` only checked `work.runtime_minutes` (which is `null` for series/anime) and never fell back to sibling seasons' `episode_minutes`, resulting in `0` minutes for that season.
+- **Narrative sequels counted as seasons of a different series (W16):**
+  - The reported Naruto page showed `2 of 3 seasons · 720 of 1013 episodes`; the extra 293 episodes belonged to Boruto. AniList's `SEQUEL` describes narrative chronology, not necessarily another season of the same series.
+  - The chain walker checked relation type, released status and `TV`/`TV_SHORT`/`ONA` format, but not series identity. Consequently a TV-format next-generation sequel became season 3. The backward walk could also pull that separate sequel into the older series, and search could collapse its hit into the older root.
+  - Regression fixtures use invented titles/IDs and the same relation shape; no real archive or provider requests were used for this fix.
 
 ### 1.4 Unreleased 0-episode seasons and special episodes (`src/server/metadata/tvmaze.ts`, `src/server/metadata/tmdb.ts`)
 - **Empty future seasons:**
@@ -98,6 +102,9 @@ This document records the root-cause investigation into inaccurate series runtim
    - In `searchAnilist`, non-season entries (`OVA`, `SPECIAL`, `MOVIE`, `MUSIC`) never become parent ancestors of `TV`/`TV_SHORT`/`ONA` series; instead, prequel/sequel OVAs collapse under their parent TV series.
    - In `getAnilistWork`, if the requested ID is an `OVA` or `SPECIAL` linked to a parent `TV`/`TV_SHORT`/`ONA` series, step onto the TV series first.
    - When walking `PREQUEL` and `SEQUEL` in `getAnilistWork`, if a season has no direct `TV`/`TV_SHORT`/`ONA` neighbour, bridge across a single intermediate released `MOVIE`/`OVA`/`SPECIAL` sequel/prequel node when it leads to a released `TV`/`TV_SHORT`/`ONA` season (without adding the movie/OVA itself as a numbered TV season).
+   - TV season neighbours must share a title root across their English, romaji or native aliases: NFKC normalization, case/punctuation folding and trailing season/part/cour/number cleanup, followed by equality or a word-boundary prefix. Check both the immediate neighbour and the original/root series in forward/backward traversal. Naruto → Naruto Shippuden shares a leading root; Boruto: Naruto Next Generations does not. Containing the older title later in a new title is insufficient.
+   - Apply the identity guard to TV-to-TV search ancestry and season/episode subtitles too; `SPIN_OFF` TV hits stay separate. Preserve existing OVA/Special-to-TV collapsing and film bridges, but require the TV endpoint reached through a bridge to share the starting series root.
+   - This is a conservative title heuristic, not a universal franchise ontology: unrelated titles can share a prefix, while genuinely renamed sequels may stay separate. Explicitly linking the intended series remains available; no per-title IDs are hard-coded.
 
 5. **Explicit `LibraryWork.progress` and `LibraryWork.creator` (`library.ts`, `youtube-routes.ts`, `review.ts`):**
    - Every series and seasonal anime work carries `progress: { seasons_watched, seasons_total, episodes_watched, episodes_total }`.
@@ -109,6 +116,8 @@ This document records the root-cause investigation into inaccurate series runtim
 6. **Append-only metadata refresh (`POST /api/library/work/refresh-metadata?key=`, CLI `archive refresh-metadata [--dry-run]`):**
    - Re-fetches linked metadata with `bypassCache: true`, updates `work_overrides` if `meta` is linked there, and re-saves any changed archive entries through `saveArchiveEntry` with the same `entry_id` (writing new append-only unit revisions in `events` and tombstoning removed units).
    - `--dry-run` performs the provider lookups and duration math without writing to the database or cover cache, printing each changed work as `<title>: <before> h → <after> h`.
+   - Refresh replaces the stale season snapshot with the corrected chain while retaining watched units that still exist. Optional community-score/banner fields survive archive validation. Compare objects structurally rather than by JSON key order so a repeated unchanged refresh reports `changed: false` and appends nothing.
+   - Existing Naruto entries need an explicit `archive refresh-metadata` (or the work-page action); the W16 implementation did not run this on real data.
 
 ---
 

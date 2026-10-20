@@ -20,6 +20,8 @@ import {
   cleanDescription,
   isValidProviderId,
   metaCoverUrl,
+  metaBannerUrl,
+  normalizeCommunityScore,
   parseRuntimeMinutes,
   parseYear,
   type ProviderContext,
@@ -412,6 +414,8 @@ function mapCinemetaWork(
       category: isSeries ? "series" : "film",
       title,
       original_title: null,
+      banner_url: meta.background ? metaBannerUrl("cinemeta", providerId) : null,
+      community_score: normalizeCommunityScore("IMDb", meta.imdbRating, 10),
       year: finalYear,
       cover_url: remoteCoverUrl ? metaCoverUrl("cinemeta", providerId) : null,
       creators,
@@ -425,6 +429,7 @@ function mapCinemetaWork(
       },
     },
     remoteCoverUrl,
+    remoteBannerUrl: meta.background ?? null,
   };
 }
 

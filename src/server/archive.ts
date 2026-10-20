@@ -13,6 +13,8 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { metaBannerUrl } from "./metadata/types.ts";
+import { readCommunityScore } from "./work-presentation.ts";
 import { categoryOf, isCategory, type Category } from "../core/category.ts";
 import type {
   ArchiveConsumed,
@@ -356,6 +358,11 @@ function validateWork(raw: unknown): WorkDetails | ManualWork {
     runtime_minutes: runtimeMinutes,
     pages,
     external_ids: externalIds,
+    // Preserve optional fields only when present, so legacy snapshots stay idempotent.
+    ...(raw.banner_url !== undefined ? {
+      banner_url: raw.banner_url === metaBannerUrl(provider as MetaProvider, providerId) ? raw.banner_url : null,
+    } : {}),
+    ...(raw.community_score !== undefined ? { community_score: readCommunityScore(raw.community_score) } : {}),
   };
 }
 

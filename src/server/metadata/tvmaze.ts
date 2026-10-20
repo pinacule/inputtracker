@@ -25,6 +25,8 @@ import {
   cleanDescription,
   isValidProviderId,
   metaCoverUrl,
+  metaBannerUrl,
+  normalizeCommunityScore,
   parseYear,
   type ProviderContext,
   type RankedCandidate,
@@ -33,6 +35,7 @@ import {
 } from "./types.ts";
 
 interface TvmazeShow {
+  rating?: { average?: number | null } | null;
   id?: number;
   name?: string | null;
   originalName?: string | null;
@@ -479,6 +482,18 @@ export async function getTvmazeWork(
     ? show.genres.filter((g): g is string => typeof g === "string" && g.trim() !== "")
     : [];
 
+  let remoteBannerUrl: string | null = null;
+  try {
+    const images = await fetchProviderJson<Array<{ type?: string; resolutions?: { original?: { url?: string } } }>>(
+      ctx, "tvmaze", `${base}/shows/${id}/images`
+    );
+    remoteBannerUrl = Array.isArray(images.data)
+      ? images.data.find((image) => image?.type === "background")?.resolutions?.original?.url ?? null
+      : null;
+  } catch {
+    // Backgrounds are optional and fetched only alongside cached work details.
+  }
+
   return {
     work: {
       provider: "tvmaze",
@@ -486,6 +501,8 @@ export async function getTvmazeWork(
       category: "series",
       title,
       original_title: originalTitle,
+      banner_url: remoteBannerUrl ? metaBannerUrl("tvmaze", providerId) : null,
+      community_score: normalizeCommunityScore("TVmaze", show.rating?.average, 10),
       year,
       cover_url: remoteCoverUrl ? metaCoverUrl("tvmaze", providerId) : null,
       creators: pickCreators(show),
@@ -497,6 +514,7 @@ export async function getTvmazeWork(
       external_ids: externalIds,
     },
     remoteCoverUrl,
+    remoteBannerUrl,
   };
 }
 

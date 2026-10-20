@@ -20,6 +20,7 @@ import {
   cleanDescription,
   isValidProviderId,
   metaCoverUrl,
+  normalizeCommunityScore,
   parseYear,
   type ProviderContext,
   type RankedCandidate,
@@ -437,6 +438,16 @@ export async function getOpenLibraryWork(
     externalIds.isbn = isbn;
   }
 
+  let communityScore = null;
+  try {
+    const ratings = await fetchProviderJson<{ summary?: { average?: number; count?: number } }>(
+      ctx, "openlibrary", `${base}/works/${id}/ratings.json`
+    );
+    communityScore = normalizeCommunityScore("Open Library", ratings.data?.summary?.average, 5, ratings.data?.summary?.count);
+  } catch {
+    // Ratings are optional; an unavailable score must not block book metadata.
+  }
+
   return {
     work: {
       provider: "openlibrary",
@@ -444,6 +455,8 @@ export async function getOpenLibraryWork(
       category,
       title,
       original_title: null,
+      banner_url: null,
+      community_score: communityScore,
       year,
       cover_url: remoteCoverUrl ? metaCoverUrl("openlibrary", id) : null,
       creators,

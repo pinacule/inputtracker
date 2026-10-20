@@ -277,6 +277,7 @@ export async function performWorkEdit(
     notifyListeners();
     try {
       await editWork(workKey, reverseEdit);
+      notifyListeners();
     } catch {
       // Ignore 404/network error on undo fallback.
     }

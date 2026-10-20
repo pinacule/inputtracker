@@ -22,6 +22,8 @@ import {
   cleanDescription,
   isValidProviderId,
   metaCoverUrl,
+  metaBannerUrl,
+  normalizeCommunityScore,
   parseYear,
   type ProviderContext,
   ProviderError,
@@ -97,6 +99,8 @@ query ($id: Int) {
     startDate { year }
     popularity
     genres
+    averageScore
+    bannerImage
     description(asHtml: false)
     title { english romaji native }
     coverImage { extraLarge large medium }
@@ -148,6 +152,8 @@ interface AniListMediaNode {
   seasonYear?: number | null;
   startDate?: { year?: number | null } | null;
   popularity?: number | null;
+  averageScore?: number | null;
+  bannerImage?: string | null;
   genres?: string[] | null;
   description?: string | null;
   title?: AniListTitle | null;
@@ -343,6 +349,18 @@ function isSeasonCandidate(node: AniListMediaNode | null | undefined): node is A
   return SEASON_FORMATS.has(format);
 }
 
+/** A narrative sequel is not necessarily another season of the same series. */
+function sharesSeriesRoot(a: AniListMediaNode, b: AniListMediaNode): boolean {
+  const titles = (node: AniListMediaNode): string[] =>
+    [node.title?.english, node.title?.romaji, node.title?.native]
+      .filter((t): t is string => typeof t === "string" && t.trim() !== "")
+      .map((t) => t.normalize("NFKC").toLowerCase()
+        .replace(/(?:\b(?:season|part|cour|s)\s*\d+|\b\d+(?:st|nd|rd|th)?\s*season|\s+\d+)\s*$/iu, "")
+        .replace(/[^\p{L}\p{N}]+/gu, " ").trim());
+  return titles(a).some((left) => left !== "" && titles(b).some((right) =>
+    right !== "" && (left === right || left.startsWith(`${right} `) || right.startsWith(`${left} `))));
+}
+
 function mergeNodeFields<T extends AniListMediaNode>(
   primary: T,
   fallback: AniListMediaNode
@@ -427,6 +445,11 @@ export async function searchAnilist(
       const targetId = target.id;
       const nodeIsSeason = isSeasonCandidate(node);
       const targetIsSeason = isSeasonCandidate(target);
+
+      if (nodeIsSeason && targetIsSeason &&
+          (rel === "SPIN_OFF" || !sharesSeriesRoot(node, target))) {
+        continue;
+      }
 
       if (CHILD_TO_PARENT_RELATIONS.has(rel)) {
         if (nodeIsSeason && !targetIsSeason) {
@@ -520,7 +543,7 @@ export async function searchAnilist(
         break;
       }
       const nextNode = knownNodes.get(nextId);
-      if (!nextNode || !isSeasonCandidate(nextNode) || isUnreleasedFutureNode(nextNode, currentYear)) {
+      if (!nextNode || !isSeasonCandidate(nextNode) || !sharesSeriesRoot(root, nextNode) || isUnreleasedFutureNode(nextNode, currentYear)) {
         break;
       }
       const hasEpisodes = typeof nextNode.episodes === "number" && nextNode.episodes > 0;
@@ -622,6 +645,7 @@ function findRelationTarget(
     const target = edge.node;
     if (
       isSeasonCandidate(target) &&
+      (!isSeasonCandidate(node) || sharesSeriesRoot(node, target)) &&
       !visited.has(target.id) &&
       (relationType === "PREQUEL" || !isUnreleasedFutureNode(target, currentYear))
     ) {
@@ -781,11 +805,14 @@ export async function getAnilistWork(
       if (!prequelStub) {
         break;
       }
+      if (!sharesSeriesRoot(startMedia, prequelStub)) break;
       visitedBack.add(prequelStub.id);
       backHops += 1;
 
       const fetchedPrequel = await fetchMediaById(prequelStub.id);
-      current = fetchedPrequel ? mergeNodeFields(fetchedPrequel, prequelStub) : prequelStub;
+      const previousNode = fetchedPrequel ? mergeNodeFields(fetchedPrequel, prequelStub) : prequelStub;
+      if (!sharesSeriesRoot(startMedia, previousNode)) break;
+      current = previousNode;
       nodeCache.set(current.id!, current);
     }
 
@@ -813,12 +840,13 @@ export async function getAnilistWork(
       if (!sequelStub) {
         break;
       }
+      if (!sharesSeriesRoot(rootMedia, sequelStub)) break;
       visitedForward.add(sequelStub.id);
       forwardHops += 1;
 
       const fetchedSequel = await fetchMediaById(sequelStub.id);
       const nextNode = fetchedSequel ? mergeNodeFields(fetchedSequel, sequelStub) : sequelStub;
-      if (isUnreleasedFutureNode(nextNode, currentYear)) {
+      if (!sharesSeriesRoot(rootMedia, nextNode) || isUnreleasedFutureNode(nextNode, currentYear)) {
         break;
       }
       nodeCache.set(nextNode.id!, nextNode);
@@ -844,6 +872,7 @@ export async function getAnilistWork(
     pickOriginalTitle(rootMedia.title, title) ?? pickOriginalTitle(initialMedia.title, title);
   const year = pickYear(rootMedia) ?? pickYear(initialMedia);
   const remoteCoverUrl = pickCoverUrl(initialMedia) ?? pickCoverUrl(rootMedia);
+  const remoteBannerUrl = initialMedia.bannerImage ?? rootMedia.bannerImage ?? null;
 
   const externalIds: Record<string, string> = {
     anilist: String(initialMedia.id ?? numericId),
@@ -877,6 +906,8 @@ export async function getAnilistWork(
       category: "anime",
       title,
       original_title: originalTitle,
+      banner_url: remoteBannerUrl ? metaBannerUrl("anilist", id) : null,
+      community_score: normalizeCommunityScore("AniList", initialMedia.averageScore ?? rootMedia.averageScore, 100),
       year,
       cover_url: remoteCoverUrl
         ? metaCoverUrl("anilist", String(initialMedia.id ?? numericId))
@@ -890,6 +921,7 @@ export async function getAnilistWork(
       external_ids: externalIds,
     },
     remoteCoverUrl,
+    remoteBannerUrl,
   };
 }
 

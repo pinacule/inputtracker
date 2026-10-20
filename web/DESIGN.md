@@ -63,7 +63,34 @@ Routes are hash-based and parsed by `parseAppRoute(hash)`:
   - **Appearance:** 5 dark theme swatch cards (`espresso`, `midnight`, `forest`, `obsidian`, `plum`).
   - **Import Achriom Library:** Upload `.zip`/`.csv` → **1. Preview (Dry Run)** → **2. Import Achriom Archive**, rendering `AchriomImportResult`.
   - **Hidden Works:** Lists hidden works (`GET /api/library/hidden`) with one-click **Unhide**.
-  - **Sources & Sync, Native/Takeout Import & Export, Metadata Providers & Database Diagnostics.**
+   - **Sources & Sync, Native/Takeout Import & Export, Metadata Providers & Database Diagnostics.**
+
+---
+
+## Richer work page (W16 — `WorkContext.tsx`, `work-presentation.ts`, `pages.css`)
+
+- **Quiet artwork, readable foreground:** the full-width hero has a decorative blurred/darkened
+  local banner at 22% opacity, falling back on image error to a blurred local cover, then the
+  category's theme gradient. Artwork is `aria-hidden` and never loads from a third-party URL.
+  The reading body is an opaque `--bg-surface`, so changing artwork cannot alter the five themes'
+  established text contrast. No new hard-coded theme colours.
+- **Context before metrics:** creator subtitle plus year/narrator credits, a three-line plain-text
+  description, wrapping quiet genre chips, paired community/personal score bars, then category rank.
+  Descriptions longer than 180 characters have a keyboard-accessible More/Less button with
+  `aria-expanded` / `aria-controls` and a 44px minimum target; shorter descriptions stay fully visible.
+  Expanded copy keeps a readable 70ch measure. Missing description, genres, score or rank omit their
+  block rather than displaying placeholders. ABS authors/narrators/genres use existing local data.
+- **Public score ≠ your rating:** source and one-decimal score sit next to `You 9.0` (or `Not rated`)
+  with `/ 10` and two restrained four-pixel bars. Vote counts are secondary. Scores do not change
+  personal annotations; in-place rating/editor saves, edits and successful undo reload server-computed ranks. Music
+  continues to hide personal-rating controls and the personal score/rating-rank line.
+- **Personal, category-local rank:** `Your #1 anime by time · 12% of your anime hours` and, when rated,
+  `Your #3 highest-rated anime`. Competition ties share a position (`1, 1, 3`); hidden/planned works
+  are excluded and zero-time works omit the time line. Positive shares below 1% display `<1%`.
+- **375px phone / 1440px desktop:** below 640px the cover/body stack, the cover narrows to 88px and
+  hero padding/gaps tighten. The reading body is full width, with wrapping chips, score labels,
+  metrics and long copy. At 640px and above the existing side-by-side cover/body layout is retained.
+  This is a CSS design target; automated build/helper tests do not replace browser screenshot checks.
 
 ---
 

@@ -11,6 +11,7 @@ import { isCategory, type Category } from "../core/category.ts";
 import { type Config, redactString } from "../core/config.ts";
 import {
   getMetaCover,
+  getMetaBanner,
   isMetaProvider,
   isValidProviderId,
   type Limiter,
@@ -55,6 +56,21 @@ function toMetadataDeps(deps: LookupRouteDeps): MetadataDeps {
 }
 
 export function registerLookupRoutes(app: Hono, deps: LookupRouteDeps): void {
+  app.get("/api/meta-banner/:provider/:id", async (c) => {
+    const err = validateQueryParams(c.req.url, []);
+    if (err) return c.json({ error: err }, 400);
+    const provider = c.req.param("provider");
+    const id = c.req.param("id");
+    if (!isMetaProvider(provider)) return c.json({ error: "Invalid metadata provider" }, 400);
+    if (!isValidProviderId(id)) return c.json({ error: "Invalid provider id" }, 400);
+    const image = await getMetaBanner(provider, id, toMetadataDeps(deps));
+    if (!image) return c.json({ error: "Banner not available" }, 404);
+    return new Response(image.bytes, { headers: {
+      "Content-Type": image.contentType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+    } });
+  });
+  app.all("/api/meta-banner/*", (c) => c.json({ error: "Invalid meta-banner path" }, 400));
   // GET /api/lookup/search?q=<1..200 chars>&category=<Category|any>
   app.get("/api/lookup/search", async (c) => {
     const err = validateQueryParams(c.req.url, ["q", "category"]);

@@ -390,6 +390,93 @@
 }
 
 /* Work Detail View (v2.2 Rebuilt WorkPage) */
+.work-hero-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.work-banner {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(120deg, var(--work-category-bg), var(--bg-surface) 75%);
+}
+
+.work-banner--anime { --work-category-bg: var(--cat-anime-bg); }
+.work-banner--series { --work-category-bg: var(--cat-series-bg); }
+.work-banner--film { --work-category-bg: var(--cat-film-bg); }
+.work-banner--book { --work-category-bg: var(--cat-book-bg); }
+.work-banner--audiobook { --work-category-bg: var(--cat-audiobook-bg); }
+.work-banner--youtube { --work-category-bg: var(--cat-youtube-bg); }
+.work-banner--podcast { --work-category-bg: var(--cat-podcast-bg); }
+.work-banner--music { --work-category-bg: var(--cat-music-bg); }
+.work-banner--shortform { --work-category-bg: var(--cat-shortform-bg); }
+.work-banner--other { --work-category-bg: var(--cat-other-bg); }
+
+.work-banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(12px);
+  transform: scale(1.06);
+  opacity: .22;
+}
+
+/* Fully opaque reading surfaces preserve the themes' AA text contrast regardless of artwork. */
+.work-hero-card .work-hero-body {
+  background: var(--bg-surface);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+}
+
+.work-context { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.work-context-credit, .work-description, .work-rank p { margin: 0; }
+.work-context-credit { color: var(--text-secondary); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.work-description {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.65;
+  max-width: 70ch;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.work-description--expanded { display: block; }
+.work-description-toggle {
+  border: 0;
+  background: none;
+  padding: 8px 0;
+  color: var(--accent-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  min-height: 44px;
+}
+.work-genres { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.work-genres li { font-size: var(--text-xs); color: var(--text-secondary); background: var(--bg-canvas); border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 3px 9px; overflow-wrap: anywhere; max-width: 100%; }
+.work-score { max-width: 340px; }
+.work-score-labels { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: var(--text-sm); color: var(--text-secondary); }
+.work-score-labels strong { color: var(--text-primary); }
+.work-score-scale, .work-score-votes { color: var(--text-secondary); font-size: var(--text-xs); }
+.work-score-bars { display: grid; gap: 4px; margin: 8px 0 4px; }
+.work-score-bars > div { height: 4px; background: var(--bg-canvas); border-radius: var(--radius-full); overflow: hidden; }
+.work-score-bars span { display: block; height: 100%; background: var(--text-secondary); border-radius: inherit; }
+.work-score-bars .work-score-mine { background: var(--accent-primary); }
+.work-rank { border-left: 2px solid var(--border-default); padding-left: var(--space-3); font-size: var(--text-xs); line-height: 1.7; color: var(--text-secondary); }
+
+@media (max-width: 639px) {
+  .work-hero-card.ui-card--pad-lg { padding: var(--space-3); }
+  .work-hero-card .work-hero-layout { gap: var(--space-3); }
+  .work-hero-card .ui-cover--xl { width: 88px; }
+  .work-hero-card .work-hero-body { width: 100%; padding: var(--space-3); box-sizing: border-box; }
+  .work-hero-card .work-metric-pill { max-width: 100%; box-sizing: border-box; }
+  .work-hero-card .work-metric-pill strong { overflow-wrap: anywhere; }
+}
+
 .library-work-hero-layout,
 .work-hero-layout {
   display: flex;
