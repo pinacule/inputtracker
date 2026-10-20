@@ -22,6 +22,11 @@ import {
   writeCachedMetaCover,
   writeSearchCache,
   writeWorkCache,
+  readBannerSource,
+  writeBannerSource,
+  readCachedMetaBanner,
+  writeCachedMetaBanner,
+  metaBannerCacheDir,
 } from "./cache.ts";
 import {
   defaultMetadataLimiter,
@@ -91,6 +96,7 @@ export {
   MAX_META_COVER_BYTES,
   META_PROVIDERS,
   metaCoverCacheDir,
+  metaBannerCacheDir,
   metaCoverUrl,
   METADATA_TIMEOUT_MS,
   metadataCacheDir,
@@ -332,7 +338,44 @@ export async function lookupWork(
     nowMs,
     categoryOverride
   );
+  writeBannerSource(deps.config, provider, id, fetched.remoteBannerUrl ?? null, nowMs);
   return fetched.work;
+}
+
+const inFlightBanners = new Map<string, Promise<RemoteImageResult | null>>();
+
+/** Local, permanently cached backgrounds; absence is cached and the UI uses its cover/gradient. */
+export async function getMetaBanner(provider: MetaProvider, id: string, deps: MetadataDeps): Promise<RemoteImageResult | null> {
+  if (!isMetaProvider(provider) || !isValidProviderId(id)) return null;
+  const cached = readCachedMetaBanner(deps.config, provider, id);
+  if (cached) return cached;
+  const key = `${metaBannerCacheDir(deps.config)}:${provider}:${id}`;
+  const existing = inFlightBanners.get(key);
+  if (existing) return existing;
+  const pending = (async () => {
+    const ctx = buildContext(deps);
+    if (!ctx.metaConfig.enabled) return null;
+    try {
+      let source = readBannerSource(deps.config, provider, id, ctx.now());
+      if (!source) {
+        // Older work caches lack the source URL; resolve once through the existing provider.
+        await lookupWork(provider, id, { ...deps, bypassCache: true });
+        source = readBannerSource(deps.config, provider, id, ctx.now());
+        if (!source) writeBannerSource(deps.config, provider, id, null, ctx.now());
+      }
+      if (!source?.url) return null;
+      const fetchedImage = await fetchRemoteCoverImage(ctx, source.url);
+      const image = fetchedImage?.contentType === "image/svg+xml" ? null : fetchedImage;
+      if (image) writeCachedMetaBanner(deps.config, provider, id, image);
+      else writeBannerSource(deps.config, provider, id, null, ctx.now());
+      return image;
+    } catch {
+      writeBannerSource(deps.config, provider, id, null, ctx.now());
+      return null;
+    }
+  })();
+  inFlightBanners.set(key, pending);
+  try { return await pending; } finally { inFlightBanners.delete(key); }
 }
 
 const inFlightCovers = new Map<string, Promise<RemoteImageResult | null>>();

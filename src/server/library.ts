@@ -15,6 +15,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { isDeepStrictEqual } from "node:util";
 import { CATEGORIES, categoryOf, type Category } from "../core/category.ts";
 import type { Config } from "../core/config.ts";
 import type {
@@ -89,6 +90,7 @@ import {
   resolveYoutubeLibraryWorkFields,
 } from "./youtube-routes.ts";
 import { getFavoriteVideoIds } from "../sources/youtube/takeout.ts";
+import { rankLibraryWorks, workPresentation } from "./work-presentation.ts";
 
 export interface InternalLibraryWork {
   work: LibraryWork;
@@ -430,6 +432,8 @@ export function buildAllLibraryWorks(
 
     const effectiveCategory: Category = override?.category ?? cat;
     const effectiveTitle: string = override?.title ?? canonicalTitle;
+    const presentation = workPresentation(workEvents, override ?? null, opts.config, effectiveCategory);
+    if (presentation.creators.length > 0) creators = presentation.creators;
 
     // Total minutes, units, first_at, last_at, sources.
     let totalSeconds = 0;
@@ -883,6 +887,9 @@ export function buildAllLibraryWorks(
 
     const detail: LibraryWorkDetail = {
       ...work,
+      ...presentation,
+      creators: presentation.creators.length > 0 ? presentation.creators : creators,
+      rank: null,
       seasons: detailSeasons,
       history,
       note,
@@ -897,6 +904,8 @@ export function buildAllLibraryWorks(
     });
   }
 
+  const ranks = rankLibraryWorks(allWorks.filter((item) => overrides.get(item.work.key)?.hidden !== true).map((item) => item.work));
+  for (const item of allWorks) item.detail.rank = ranks.get(item.work.key) ?? null;
   return allWorks;
 }
 
@@ -1412,8 +1421,8 @@ async function refreshSingleArchiveEntry(
   const minutesAfter = existingStatus === "planned" ? 0 : sim.totalMinutes;
 
   const workChanged =
-    JSON.stringify(workObj) !== JSON.stringify(nextWork) ||
-    JSON.stringify(existingConsumed) !== JSON.stringify(nextConsumed);
+    !isDeepStrictEqual(workObj, nextWork) ||
+    !isDeepStrictEqual(existingConsumed, nextConsumed);
   const minutesChanged = Math.abs(minutesBefore - minutesAfter) > 0.001;
   const changed = workChanged || minutesChanged;
 

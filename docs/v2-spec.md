@@ -35,7 +35,8 @@ Providers (all keyless except TMDB; GET requests only, except AniList's read-onl
 is a POST by protocol):
 - **Anime → AniList** (`https://graphql.anilist.co`). A franchise is several AniList entries; build
   `seasons` by following `SEQUEL` relations of TV/TV_SHORT/ONA format from the first season (follow
-  `PREQUEL` back first if the hit is a later season), in order, max 15 hops. Episode length from
+  `PREQUEL` back first if the hit is a later season), within the same normalized title root, in order,
+  max 15 hops. Narrative sequels with a new title root are separate works. Episode length from
   `duration`. External ids: `anilist`, `mal` (`idMal`).
 - **Series → TVmaze** (`https://api.tvmaze.com`): `/search/shows`, `/shows/:id/seasons`,
   `/shows/:id/episodes` (sum the real per-episode runtimes for `total_minutes`). External ids: `tvmaze`,
@@ -385,3 +386,42 @@ heatmaps, Insights trend, Reviews, active days and totals include its time;
 item/units/works counts stay zero. Hour grids omit daily totals and report
 unplaced time instead. Library, archive-work creation/category edits, rankings
 and "On This Day" item lists exclude it.
+
+## 21. Richer work detail (W16)
+
+`LibraryWorkDetail` adds `description: string | null`, `genres: string[]`, `creators: string[]`,
+`narrators: string[]`, `year: number | null`, `banner_url: string | null`,
+`community_score: CommunityScore | null` and `rank: WorkRank | null`.
+`WorkDetails` stores `banner_url` and `community_score` too; they are optional only for legacy
+snapshots, and new provider results explicitly return a value or `null`.
+
+- **Presentation is network-free:** explicit metadata linkage/snapshot wins, otherwise use the
+  newest archive snapshot by appended row ID. The existing 30-day disk work cache fills missing
+  legacy fields; explicit null scores/banners stay null. ABS `raw.mediaMetadata` supplies plain-text
+  description, authors, narrators, genres and published year when linked metadata is absent.
+  Hide unavailable blocks rather than inventing information. Old snapshots gain public scores
+  from cached metadata or the next explicit metadata refresh, never a network call per library read.
+- **CommunityScore:** `{ source, value_10, votes: number | null }`, with the public source labelled
+  AniList, TMDB, TVmaze, IMDb (Cinemeta), Open Library or iTunes. Normalize AniList `averageScore`
+  from 100, TMDB `vote_average` / TVmaze `rating.average` / Cinemeta `imdbRating` from 10, and
+  Open Library `/works/<id>/ratings.json` `summary.average` / iTunes `averageUserRating` from 5.
+  Round to one decimal; malformed, missing, out-of-range and zero-vote placeholder scores are null.
+  Optional ratings/images failures must not block otherwise usable metadata. Provider calls reuse
+  existing timeout, concurrency and cache handling (GET except read-only AniList GraphQL POST).
+- **WorkRank:** `{ time: number | null, time_share_percent: number, rating: number | null }`.
+  Compute over visible non-planned library works in the same effective category using latest,
+  deduplicated events and current overrides/ratings. Competition ties are `1, 1, 3`; rating ties use
+  integer tenths and a personal rating of zero is valid. Zero-minute works have no time rank and a
+  zero share. Hidden/planned details have null rank. Shares use the category's total consumed minutes,
+  not current search/sort/page filters. No stored rank table or history rewrites.
+- **Local banners:** `GET /api/meta-banner/:provider/:id` validates provider/ID and rejects unknown
+  query parameters; returns 404 when absent/unavailable. Resolve AniList `bannerImage`, TMDB backdrop,
+  TVmaze `/shows/<id>/images` background or Cinemeta `background`. Cache sources and absence for
+  30 days in `dirname(db_path)/metadata-cache`, and successful image bytes permanently in
+  `dirname(db_path)/covers/meta-banner`. Concurrent requests share one download; cached images work
+  even with metadata providers disabled. Use existing image GET timeout/size validation and reject
+  SVG banners. Serve successful images with a one-year immutable cache header. Browser fallback:
+  local banner → blurred local cover → category gradient; never expose upstream artwork URLs.
+
+AniList's narrative-sequel boundary and append-only archive repair are documented in
+`docs/metadata-accuracy.md`; the richer responsive header is documented in `web/DESIGN.md`.

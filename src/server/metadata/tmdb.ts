@@ -25,6 +25,8 @@ import {
   isTmdbConfigured,
   isValidProviderId,
   metaCoverUrl,
+  metaBannerUrl,
+  normalizeCommunityScore,
   parseYear,
   type ProviderContext,
   type RankedCandidate,
@@ -56,6 +58,9 @@ interface TmdbGenre {
 }
 
 interface TmdbMovieResponse {
+  backdrop_path?: string | null;
+  vote_average?: number | null;
+  vote_count?: number | null;
   id?: number | string;
   title?: string | null;
   original_title?: string | null;
@@ -83,6 +88,9 @@ interface TmdbTvSeason {
 }
 
 interface TmdbTvResponse {
+  backdrop_path?: string | null;
+  vote_average?: number | null;
+  vote_count?: number | null;
   id?: number | string;
   name?: string | null;
   original_name?: string | null;
@@ -334,6 +342,8 @@ function mapTmdbMovie(
       category: "film",
       title,
       original_title: originalTitle,
+      banner_url: data.backdrop_path ? metaBannerUrl("tmdb", requestedId) : null,
+      community_score: normalizeCommunityScore("TMDB", data.vote_average, 10, data.vote_count),
       year,
       cover_url: remoteCoverUrl ? metaCoverUrl("tmdb", requestedId) : null,
       creators,
@@ -345,6 +355,7 @@ function mapTmdbMovie(
       external_ids: externalIds,
     },
     remoteCoverUrl,
+    remoteBannerUrl: buildPosterUrl(ctx, data.backdrop_path)?.replace("/w500/", "/w1280/") ?? null,
   };
 }
 
@@ -466,6 +477,8 @@ async function mapTmdbTv(
       category: "series",
       title,
       original_title: originalTitle,
+      banner_url: data.backdrop_path ? metaBannerUrl("tmdb", requestedId) : null,
+      community_score: normalizeCommunityScore("TMDB", data.vote_average, 10, data.vote_count),
       year,
       cover_url: remoteCoverUrl ? metaCoverUrl("tmdb", requestedId) : null,
       creators,
@@ -477,6 +490,7 @@ async function mapTmdbTv(
       external_ids: externalIds,
     },
     remoteCoverUrl,
+    remoteBannerUrl: buildPosterUrl(ctx, data.backdrop_path)?.replace("/w500/", "/w1280/") ?? null,
   };
 }
 

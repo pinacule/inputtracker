@@ -622,6 +622,14 @@ export function getYoutubeVideoWorkDetail(
     seasons: [],
     history,
     note: override?.note ?? null,
+    description: null,
+    genres: [],
+    creators: channel ? [channel] : [],
+    narrators: [],
+    year: null,
+    banner_url: null,
+    community_score: null,
+    rank: null,
   };
 }
 

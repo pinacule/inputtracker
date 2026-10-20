@@ -211,6 +211,48 @@ export function writeWorkCache(
   }
 }
 
+// Banner source resolution (including an absent background) shares the work TTL.
+export function readBannerSource(config: Config, provider: MetaProvider, id: string, nowMs: number): { url: string | null } | null {
+  if (!isMetaProvider(provider) || !isValidProviderId(id)) return null;
+  try {
+    const raw = JSON.parse(readFileSync(join(metadataCacheDir(config), `bannerurl_${provider}_${id}.json`), "utf8")) as { savedAt: number; url: unknown };
+    if (!Number.isFinite(raw.savedAt) || nowMs - raw.savedAt >= WORK_CACHE_TTL_MS) return null;
+    return raw.url === null || typeof raw.url === "string" ? { url: raw.url } : null;
+  } catch { return null; }
+}
+
+export function writeBannerSource(config: Config, provider: MetaProvider, id: string, url: string | null, nowMs: number): void {
+  if (!isMetaProvider(provider) || !isValidProviderId(id)) return;
+  try {
+    mkdirSync(metadataCacheDir(config), { recursive: true });
+    writeFileSync(join(metadataCacheDir(config), `bannerurl_${provider}_${id}.json`), JSON.stringify({ savedAt: nowMs, url }));
+  } catch { /* Best-effort. */ }
+}
+
+export function metaBannerCacheDir(config: Config): string {
+  return join(storageBaseDir(config), "covers", "meta-banner");
+}
+
+export function readCachedMetaBanner(config: Config, provider: MetaProvider, id: string): RemoteImageResult | null {
+  if (!isMetaProvider(provider) || !isValidProviderId(id)) return null;
+  try {
+    const path = join(metaBannerCacheDir(config), `${provider}_${id}`);
+    const contentType = normalizeImageType(readFileSync(`${path}.type`, "utf8"));
+    const bytes = new Uint8Array(readFileSync(`${path}.img`));
+    return contentType && contentType !== "image/svg+xml" && bytes.byteLength > 0 ? { bytes, contentType } : null;
+  } catch { return null; }
+}
+
+export function writeCachedMetaBanner(config: Config, provider: MetaProvider, id: string, image: RemoteImageResult): void {
+  if (!isMetaProvider(provider) || !isValidProviderId(id)) return;
+  try {
+    const path = join(metaBannerCacheDir(config), `${provider}_${id}`);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(`${path}.img`, image.bytes);
+    writeFileSync(`${path}.type`, image.contentType);
+  } catch { /* Best-effort. */ }
+}
+
 // --- Cover source URL & provider hint cache ----------------------------------
 
 function coverUrlPath(config: Config, provider: MetaProvider, id: string): string {

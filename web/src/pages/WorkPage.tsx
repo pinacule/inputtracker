@@ -21,6 +21,7 @@ import {
 } from "../lib/categories";
 import { formatLocalDay } from "../lib/format-date";
 import { canRateCategory } from "../lib/rating";
+import { WorkBanner, WorkContext } from "../ui/WorkContext";
 import { sourceLabel } from "../lib/sources";
 import { formatMinutes } from "../lib/stats";
 import {
@@ -98,8 +99,8 @@ export function buildManualWorkFromDetail(detail: LibraryWorkDetail): ManualWork
     provider: "manual",
     category: detail.category,
     title: detail.title,
-    year: detail.seasons[0]?.year ?? null,
-    creators: detail.creator ? [detail.creator] : [],
+    year: detail.year ?? detail.seasons[0]?.year ?? null,
+    creators: detail.creators.length > 0 ? detail.creators : detail.creator ? [detail.creator] : [],
     seasons:
       detail.seasons.length > 0
         ? detail.seasons.map((s) => ({
@@ -159,7 +160,10 @@ export function WorkPage({
   const [overrideTick, setOverrideTick] = useState(0);
 
   useEffect(() => {
-    return subscribeWorkEdits(() => setOverrideTick((t) => t + 1));
+    return subscribeWorkEdits(() => {
+      setOverrideTick((t) => t + 1);
+      setRefreshTick((t) => t + 1);
+    });
   }, []);
 
   useEffect(() => {
@@ -322,6 +326,7 @@ export function WorkPage({
         <>
           {/* Work Hero Card */}
           <Card padding="lg" class="work-hero-card">
+            <WorkBanner key={`${effectiveWorkDetail.key}:${effectiveWorkDetail.banner_url}`} detail={effectiveWorkDetail} />
             <div
               class="work-hero-layout"
               {...bindContextMenu({
@@ -386,11 +391,12 @@ export function WorkPage({
                       rating={effectiveWorkDetail.rating}
                       source={effectiveWorkDetail.sources[0] ?? "manual"}
                       variant="inline"
-                      onRated={(next) =>
+                      onRated={(next) => {
                         setWorkDetail((prev) =>
                           prev ? { ...prev, rating: next } : prev
-                        )
-                      }
+                        );
+                        setRefreshTick((tick) => tick + 1);
+                      }}
                     />
                   )}
                 </div>
@@ -426,6 +432,8 @@ export function WorkPage({
                     </p>
                   )}
                 </div>
+
+                <WorkContext key={effectiveWorkDetail.key} detail={effectiveWorkDetail} />
 
                 {/* Key Metrics Strip */}
                 <div class="work-hero-metrics tabular-nums">
@@ -739,13 +747,14 @@ export function WorkPage({
                 initialRating={effectiveWorkDetail.rating}
                 initialNote={effectiveWorkDetail.note}
                 skipFetch
-                onSaved={(ann) =>
+                onSaved={(ann) => {
                   setWorkDetail((prev) =>
                     prev
                       ? { ...prev, rating: ann.rating, note: ann.note }
                       : prev
-                  )
-                }
+                  );
+                  setRefreshTick((tick) => tick + 1);
+                }}
               />
             </Card>
 

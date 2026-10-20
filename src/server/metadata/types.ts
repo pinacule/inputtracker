@@ -3,6 +3,7 @@
  */
 
 import type { Config, MetadataConfig } from "../../core/config.ts";
+import type { CommunityScore } from "../../core/contract.ts";
 import type { Category, LookupHit, MetaProvider, SeasonInfo, WorkDetails } from "../../core/contract.ts";
 import type { Limiter } from "../openlibrary.ts";
 
@@ -35,6 +36,24 @@ export function metaCoverUrl(provider: MetaProvider, providerId: string): string
   return `/api/meta-cover/${provider}/${providerId}`;
 }
 
+export function metaBannerUrl(provider: MetaProvider, providerId: string): string {
+  return `/api/meta-banner/${provider}/${providerId}`;
+}
+
+/** Missing, malformed and zero-vote placeholder scores are not public ratings. */
+export function normalizeCommunityScore(
+  source: CommunityScore["source"], raw: unknown, scale: 5 | 10 | 100, votes?: unknown
+): CommunityScore | null {
+  const value = typeof raw === "number" ? raw
+    : typeof raw === "string" && /^\d+(?:\.\d+)?$/.test(raw.trim()) ? Number(raw) : NaN;
+  if (!Number.isFinite(value) || value <= 0 || value > scale || votes === 0) return null;
+  return {
+    source,
+    value_10: Math.round(value * 100 / scale) / 10,
+    votes: typeof votes === "number" && Number.isSafeInteger(votes) && votes > 0 ? votes : null,
+  };
+}
+
 /** Error raised when an upstream provider fails (timeout, 5xx, network error, bad JSON). */
 export class ProviderError extends Error {
   constructor(
@@ -62,6 +81,7 @@ export interface RankedCandidate {
 export interface WorkWithCover {
   work: WorkDetails;
   remoteCoverUrl?: string | null;
+  remoteBannerUrl?: string | null;
 }
 
 export interface ProviderContext {

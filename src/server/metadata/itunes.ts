@@ -18,6 +18,7 @@ import {
   cleanDescription,
   isValidProviderId,
   metaCoverUrl,
+  normalizeCommunityScore,
   parseYear,
   type ProviderContext,
   type RankedCandidate,
@@ -25,6 +26,8 @@ import {
 } from "./types.ts";
 
 interface ItunesItem {
+  averageUserRating?: number | null;
+  userRatingCount?: number | null;
   wrapperType?: string;
   kind?: string;
   trackId?: number;
@@ -195,6 +198,8 @@ export async function getItunesWork(
       category: "film",
       title,
       original_title: null,
+      banner_url: null,
+      community_score: normalizeCommunityScore("iTunes", item.averageUserRating, 5, item.userRatingCount),
       year,
       cover_url: remoteCoverUrl ? metaCoverUrl("itunes", providerId) : null,
       creators,
