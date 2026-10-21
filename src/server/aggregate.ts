@@ -13,6 +13,7 @@
  *   its sync day, but its time of day is unknown, so the hour grid leaves it out.
  */
 
+import { cachedUntilWrite } from "./db-version-cache.ts";
 import type { Database } from "bun:sqlite";
 import { categoryOf, type Category } from "../core/category.ts";
 import type { DatePrecision } from "../core/contract.ts";
@@ -1040,17 +1041,36 @@ export function getLatestConsumptionEvents(
     .all();
 }
 
+/**
+ * Display events are rebuilt from the whole archive (filter, dedupe, overrides), which
+ * takes seconds on a small server CPU and is needed by most endpoints, so they are kept
+ * until the database changes. Cached events are frozen: a caller can never alter them.
+ */
 export function getDisplayConsumptionEvents(
   db: Database,
   source?: string,
   tz: string = "Europe/Bratislava"
 ): DedupedEvent[] {
-  const events = filterShortYoutubeEvents(
-    getLatestConsumptionEvents(db, source),
-    tz,
-    db
-  );
-  const deduped = dedupeConsumption(events, tz);
+  return [...cachedUntilWrite(db, `display\u0000${source ?? ""}\u0000${tz}`, () =>
+    buildDisplayConsumptionEvents(db, source, tz).map((e) => Object.freeze(e)))];
+}
+
+/** Latest consumption events without short YouTube video-days (shared by every read). */
+export function getFilteredConsumptionEvents(
+  db: Database,
+  source: string | undefined,
+  tz: string
+): ConsumptionEvent[] {
+  return [...cachedUntilWrite(db, `filtered\u0000${source ?? ""}\u0000${tz}`, () =>
+    filterShortYoutubeEvents(getLatestConsumptionEvents(db, source), tz, db).map((e) => Object.freeze(e)))];
+}
+
+function buildDisplayConsumptionEvents(
+  db: Database,
+  source: string | undefined,
+  tz: string
+): DedupedEvent[] {
+  const deduped = dedupeConsumption(getFilteredConsumptionEvents(db, source, tz), tz);
   // Time-only rows have no work key or editable library identity.
   const timeOnly = deduped.filter(isShortform);
   return [...applyWorkOverridesToEvents(db, deduped.filter((e) => !isShortform(e))), ...timeOnly];

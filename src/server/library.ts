@@ -14,6 +14,7 @@
  * - Overrides from `work_overrides_latest` apply on every read.
  */
 
+import { cachedUntilWrite } from "./db-version-cache.ts";
 import type { Database } from "bun:sqlite";
 import { isDeepStrictEqual } from "node:util";
 import { CATEGORIES, categoryOf, type Category } from "../core/category.ts";
@@ -41,6 +42,7 @@ import { computeArchiveRequestMinutes } from "../io/import-achriom.ts";
 import {
   coverUrlFor,
   eventPrecision,
+  getFilteredConsumptionEvents,
   getLatestConsumptionEvents,
   parseExternalIds,
   parseJsonObject,
@@ -248,9 +250,15 @@ export function buildAllLibraryWorks(
 ): InternalLibraryWork[] {
   // Short YouTube video-days (below [youtube] min_watch_minutes) are left out, as in every read.
   // Time-only short-form never creates an archived work.
-  const rawEvents = filterShortYoutubeEvents(getLatestConsumptionEvents(db), tz, db)
-    .filter((e) => e.source_kind !== "shortform_day" && categoryOf(e) !== "shortform");
-  const events = dedupeConsumption(rawEvents, tz);
+  // Events and their work grouping depend on the database only: kept until it changes.
+  const { events, components } = cachedUntilWrite(db, `library-components\u0000${tz}`, () => {
+    const rawEvents = getFilteredConsumptionEvents(db, undefined, tz)
+      .filter((e) => e.source_kind !== "shortform_day" && categoryOf(e) !== "shortform");
+    const deduped = dedupeConsumption(rawEvents, tz).map((e) => Object.freeze(e));
+    const groups = groupEventsIntoWorkComponents(deduped, db)
+      .map((comp) => Object.freeze({ ...comp, events: Object.freeze([...comp.events]) }));
+    return { events: Object.freeze(deduped), components: Object.freeze(groups) };
+  });
   if (events.length === 0) {
     return [];
   }
@@ -285,7 +293,6 @@ export function buildAllLibraryWorks(
     list.push(ann);
   }
 
-  const components = groupEventsIntoWorkComponents(events, db);
   const youtubeEnrichmentMap = readYoutubeEnrichmentByVideoId(db);
   let youtubeLookups: YoutubeWorkLookups | null = null;
   let archiveEntryWork: ReturnType<typeof readArchiveEntryWorks> | null = null;
@@ -947,7 +954,7 @@ export function buildAllLibraryWorks(
     allWorks.push({
       work,
       detail,
-      events: workEvents,
+      events: [...workEvents],
       creators,
       originalTitle,
     });
