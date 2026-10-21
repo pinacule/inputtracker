@@ -13,6 +13,54 @@ Placeholders to replace before running anything:
 - `<port>` — the value of `server.port` (default `8787`),
 - `<snapshot>` — the backup file name, e.g. `inputtracker-2026-10-17.db`.
 
+## Quick path (scripted)
+
+What was run for the first VM (`input-tracker`, x86_64, Ubuntu 24.04). Repeat it for
+the next server by changing `VM` and `VM_URL`. The detailed sections below explain
+each step and the rollback.
+
+```sh
+VM=input-tracker                                  # ssh alias (user ubuntu)
+VM_URL=https://input-tracker.taild61ed4.ts.net    # its Tailscale name
+ABS_URL=http://pinpc.taild61ed4.ts.net:13378      # ABS stays on the PC
+
+# 1. VM packages and Bun (same version as the PC; Bun has x86_64 and arm64 builds)
+BUNV=$(bun --version)
+ssh $VM "sudo apt-get update -qq && sudo apt-get install -y -qq unzip sqlite3 rsync &&
+  curl -fsSL https://bun.sh/install | bash -s bun-v$BUNV && sudo loginctl enable-linger \$USER"
+# Join the tailnet first (sudo tailscale up --hostname=<name>) so $VM_URL resolves.
+
+# 2. Stop every writer on the PC, then take a checked snapshot
+systemctl --user stop inputtracker.service 'inputtracker-sync@*' 'inputtracker-backup*' 'inputtracker-weekly*'
+D=~/.cache/inputtracker-vm; mkdir -p $D && chmod 700 $D
+sqlite3 ~/.local/share/inputtracker/inputtracker.db ".backup '$D/final.db'"
+bun run it verify-copy $D/final.db                # must end "copy OK"
+
+# 3. Server config (never printed, never in git) and data
+scripts/split-config.py vm inputtracker.config.toml $D/vm.config.toml --vm-url $VM_URL --abs-url $ABS_URL
+ssh $VM 'systemctl --user stop inputtracker.service 2>/dev/null; mkdir -p ~/inputtracker ~/.local/share/inputtracker;
+  rm -f ~/.local/share/inputtracker/inputtracker.db-wal ~/.local/share/inputtracker/inputtracker.db-shm'
+rsync -a $D/vm.config.toml $VM:inputtracker/inputtracker.config.toml
+rsync -a $D/final.db $VM:.local/share/inputtracker/inputtracker.db
+(cd ~/.local/share/inputtracker && rsync -a secrets covers metadata-cache posters thumbs $VM:.local/share/inputtracker/)
+ssh $VM 'chmod 600 ~/inputtracker/inputtracker.config.toml ~/.local/share/inputtracker/inputtracker.db;
+  chmod 700 ~/.local/share/inputtracker/secrets'
+
+# 4. Code: committed HEAD + web build from the PC (the VM never builds)
+scripts/deploy-vm.sh $VM                          # also the update command later
+
+# 5. Move the URL and switch the PC to pushing ActivityWatch
+tailscale serve reset
+ssh $VM 'sudo tailscale serve --bg 8787'
+scripts/split-config.py pc inputtracker.config.toml --vm-url $VM_URL
+scripts/install.sh --role pc --no-build
+```
+
+Then on the phone: set the InputTracker URL in the Second Brain app to `$VM_URL` and
+re-add the PWA from `$VM_URL`. The ingest token is unchanged.
+
+Updates later: commit on the PC, then `scripts/deploy-vm.sh input-tracker`.
+
 After the split, the VM owns the archive. The PC pushes ActivityWatch using a
 small cursor file and leaves its old database untouched as a cold backup.
 ActivityWatch stays at `127.0.0.1:5600`: never expose it through Tailscale,
