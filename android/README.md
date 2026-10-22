@@ -40,17 +40,21 @@ native behaviours a home-screen PWA install gets wrong.
   traffic is WireGuard-encrypted either way. Prefer the HTTPS Tailscale
   Serve address.
 
-## Signing (read before the first CI build)
+## Signing
 
-The APK is signed with a **dedicated release keystore created for this
-app**. There is no debug-signing fallback, on purpose: GitHub Actions
-generates a fresh debug key on every run, so each CI build would have a
-different signature and Android would refuse to install it over the
-previous build — every update would mean uninstalling first and losing
-the app's settings.
+**CI builds the debug variant** (decided 2026-10-22). Gradle signs it
+automatically with the runner's debug key, so the pipeline needs no
+secrets at all. Know the tradeoff: every GitHub Actions runner generates
+a **fresh debug key**, so each CI build has a different signature and
+Android refuses to install it over the previous CI build — uninstall the
+old copy first, losing its settings (e.g. a changed server URL). The
+debug package id is `dev.pinacule.inputtracker.debug`, so a CI build
+coexists with a release install instead of fighting it.
 
-The keystore itself is **never committed**. CI receives it through four
-repository secrets (Settings → Secrets and variables → Actions):
+**Release builds** are signed with a dedicated release keystore created
+for this app, so every release APK updates in place. The keystore itself
+is **never committed**. A release CI pipeline would receive it through
+four repository secrets (Settings → Secrets and variables → Actions):
 
 | Secret | Value |
 |---|---|
@@ -60,10 +64,13 @@ repository secrets (Settings → Secrets and variables → Actions):
 | `ANDROID_KEY_PASSWORD` | key password |
 
 `app/build.gradle.kts` reads the same four values as environment variables
-(`KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`), so
-local and CI builds sign identically. Without them, `assembleRelease`
-produces an unsigned APK — a loud failure at install time, never a
-silently wrong signature.
+(`KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`), so a
+local release build — or a future release CI pipeline — signs identically
+every time. Without them, `assembleRelease` produces an unsigned APK — a
+loud failure at install time, never a silently wrong signature. To return
+CI to release builds: add the four secrets, restore the keystore-decode
+step in `.github/workflows/android-apk.yml`, and switch `assembleDebug`
+back to `assembleRelease`.
 
 **Keep the keystore file and its password in a password manager.** If they
 are lost, no future APK can ever update an installed copy; the app would
@@ -72,7 +79,7 @@ have to be uninstalled and reinstalled under a new identity.
 ## Building
 
 CI: push to `muse/android-apk` (touching `android/**`) or run the
-*Android APK* workflow manually; the signed APK is the run's artifact.
+*Android APK* workflow manually; the debug APK is the run's artifact.
 
 Local (JDK 21 + Android SDK platform 35 / build-tools 35 on PATH):
 
