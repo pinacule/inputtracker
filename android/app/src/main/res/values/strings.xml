@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">InputTracker</string>
+    <string name="menu_reload">Reload</string>
+    <string name="menu_server_url">Server URL…</string>
+    <string name="menu_open_browser">Open in browser</string>
+    <string name="error_retry">Retry</string>
+    <string name="error_change_url">Change server URL</string>
+    <string name="dialog_server_title">Server URL</string>
+    <string name="dialog_server_message">The InputTracker server this app connects to. It is reachable only while Tailscale is connected on this phone.</string>
+    <string name="dialog_save">Save</string>
+    <string name="dialog_reset">Reset default</string>
+    <string name="dialog_cancel">Cancel</string>
+</resources>
