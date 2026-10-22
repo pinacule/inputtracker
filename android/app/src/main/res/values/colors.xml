@@ -2,7 +2,9 @@
 <resources>
     <!-- Matches the PWA manifest (web/public/manifest.webmanifest). -->
     <color name="ic_launcher_background">#0B0F19</color>
-    <color name="bar_background">#111827</color>
+    <!-- Matches the web app's theme-color (#14120f, espresso) so the native
+         bar blends into the page instead of reading as separate chrome. -->
+    <color name="bar_background">#14120F</color>
     <color name="screen_background">#0B0F19</color>
     <color name="text_primary">#F9FAFB</color>
     <color name="text_secondary">#9CA3AF</color>

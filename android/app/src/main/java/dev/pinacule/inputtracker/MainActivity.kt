@@ -69,7 +69,6 @@ class MainActivity : Activity() {
         toolbar = findViewById(R.id.toolbar)
         setActionBar(toolbar)
         toolbar.title = getString(R.string.app_name)
-        toolbar.subtitle = serverHost()
 
         progressBar = findViewById(R.id.progress)
         errorBox = findViewById(R.id.errorBox)
@@ -122,15 +121,28 @@ class MainActivity : Activity() {
             allowContentAccess = true
             allowFileAccess = false
             mediaPlaybackRequiresUserGesture = false
-            setSupportZoom(true)
-            builtInZoomControls = true
-            displayZoomControls = false
-            loadWithOverviewMode = true
-            useWideViewPort = true
+            // Render exactly like Chrome does for this PWA: the page ships a
+            // correct width=device-width viewport, so do NOT enable the wide
+            // viewport or overview (fit-to-page) mode — both re-scale the
+            // layout away from the design. Zoom is off for the same reason.
+            setSupportZoom(false)
+            loadWithOverviewMode = false
+            useWideViewPort = false
+            // Android WebView scales text by the phone's system font-size
+            // setting; Chrome does not. Pin 100% so the page's typography
+            // fits the screen exactly as designed.
+            textZoom = 100
             cacheMode = WebSettings.LOAD_DEFAULT
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             userAgentString = "$userAgentString InputTrackerApp/${BuildConfig.VERSION_NAME}"
         }
+
+        // No web-style long-press text selection (Copy/Share popup) on page
+        // content — this is an app, not a browser tab. Text fields keep
+        // their own editing behaviour; this only consumes the page-level
+        // long click.
+        webView.setOnLongClickListener { true }
+        webView.isHapticFeedbackEnabled = false
 
         val cookies = CookieManager.getInstance()
         cookies.setAcceptCookie(true)
@@ -317,7 +329,6 @@ class MainActivity : Activity() {
 
     private fun applyServerUrl(url: String) {
         prefs.edit().putString(KEY_SERVER_URL, url).apply()
-        toolbar.subtitle = Uri.parse(url).host
         errorBox.visibility = View.GONE
         webView.loadUrl(url)
     }
