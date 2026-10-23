@@ -8,6 +8,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Insets
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -91,13 +92,26 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Keep the toolbar and content clear of the status/navigation bars. */
+    /**
+     * Keep the toolbar and content clear of the status/navigation bars —
+     * and consume the insets afterwards. If they were passed on unchanged,
+     * the WebView would forward them to the page as CSS
+     * env(safe-area-inset-*), and the page adds env(safe-area-inset-bottom)
+     * on top of its fixed bottom-nav height: the nav rendered ~48dp taller
+     * than designed and page content stayed hidden behind it, because the
+     * native padding here had already moved everything clear of the bars.
+     * Zeroing the insets for children makes the page see the same geometry
+     * as in Chrome standalone: nav exactly as tall as designed.
+     */
     private fun applyWindowInsets() {
         val root = findViewById<View>(R.id.root)
         root.setOnApplyWindowInsetsListener { v, insets ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val bars = insets.getInsets(WindowInsets.Type.systemBars())
                 v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+                WindowInsets.Builder(insets)
+                    .setInsets(WindowInsets.Type.systemBars(), Insets.NONE)
+                    .build()
             } else {
                 @Suppress("DEPRECATION")
                 v.setPadding(
@@ -106,8 +120,9 @@ class MainActivity : Activity() {
                     insets.systemWindowInsetRight,
                     insets.systemWindowInsetBottom
                 )
+                @Suppress("DEPRECATION")
+                insets.consumeSystemWindowInsets()
             }
-            insets
         }
     }
 
@@ -144,6 +159,12 @@ class MainActivity : Activity() {
         webView.setOnLongClickListener { true }
         webView.isHapticFeedbackEnabled = false
 
+        // App feel, not browser feel: no scrollbars drawn over the page and
+        // no overscroll edge glow.
+        webView.isVerticalScrollBarEnabled = false
+        webView.isHorizontalScrollBarEnabled = false
+        webView.overScrollMode = View.OVER_SCROLL_NEVER
+
         val cookies = CookieManager.getInstance()
         cookies.setAcceptCookie(true)
         cookies.setAcceptThirdPartyCookies(webView, false)
@@ -178,6 +199,16 @@ class MainActivity : Activity() {
                 if (url != null && !url.startsWith("about:")) {
                     errorBox.visibility = View.GONE
                 }
+                // Seamless taps: kill the gray tap-highlight flash and the
+                // page-level rubber-band overscroll. Deliberately does not
+                // touch user-select, so text fields keep native editing.
+                view.evaluateJavascript(
+                    "(function(){var s=document.createElement('style');" +
+                        "s.textContent='*{-webkit-tap-highlight-color:transparent}" +
+                        "html{overscroll-behavior:none}';" +
+                        "if(document.head){document.head.appendChild(s);}})()",
+                    null
+                )
             }
 
             override fun onReceivedError(
