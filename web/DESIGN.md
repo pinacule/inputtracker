@@ -22,6 +22,14 @@ Calendar, leaving other pages' code and palettes untouched.
 This direction supersedes the historical Home layout descriptions below (pills,
 month card beside the day panel and category chip filtering).
 
+## Skin: Dot
+
+Chunky alternative to the thin skins: black canvas with a faint dot grid, every
+home section as its own rounded block (#111 on #000), dot-matrix numbers and
+headings (Doto), Space Grotesk body, small uppercase Space Mono labels, thick
+rounded bars and tracks, entries as tiles, one red accent. Same information and
+layout as the other skins; only presentation changes (`styles/themes/dot.css`).
+
 ## Aesthetic Direction: Calm Nocturnal Reading Room & Personal Archive (v2.2)
 
 InputTracker is both a daily media log and a **long-term personal archive** of everything watched, read, and listened to. Design A v2.2 refines the reading-room aesthetic around six core principles:

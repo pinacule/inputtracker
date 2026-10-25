@@ -1,0 +1,170 @@
+/* Dot: black canvas, chunky rounded blocks, dot-matrix numbers, red accent.
+   Each home section is its own card instead of one thin framed spread. */
+:root[data-theme="dot"],
+.theme-preview[data-theme="dot"] {
+  color-scheme: dark;
+  --font-body: var(--font-sans);
+  --font-display: var(--font-serif);
+  --font-numbers: var(--font-serif);
+  --display-case: uppercase;
+  --display-tracking: 0.02em;
+  --display-weight: 900;
+  --display-color: var(--text-primary);
+  --label-case: uppercase;
+  --label-tracking: 0.1em;
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  --bg-canvas: #000000;
+  --bg-surface: #111111;
+  --bg-surface-raised: #191919;
+  --bg-subtle: #1f1f1f;
+  --bg-muted: #2a2a2a;
+  --bg-overlay: rgba(0, 0, 0, 0.82);
+  --text-primary: #f4f4f4;
+  --text-secondary: #ababab;
+  --text-muted: #969696;
+  --text-on-accent: #000000;
+  --accent-primary: #ff4a4a;
+  --accent-primary-hover: #ff6b6b;
+  --accent-primary-subtle: #2e1212;
+  --accent-primary-border: #6b2424;
+  --border-subtle: #222222;
+  --border-default: #2c2c2c;
+  --border-strong: #4a4a4a;
+  --focus-ring: #ff4a4a;
+
+  --card-border: var(--border-default);
+  --card-shadow: none;
+  --card-shadow-raised: none;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: 0 12px 32px #000000aa;
+  --shadow-lg: 0 20px 48px #000000cc;
+  --shadow-cover: none;
+  --cover-sheen: none;
+  --control-shadow: none;
+  --nav-active-bg: #f4f4f4;
+  --nav-active-color: #000000;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --icon-stroke: 2.2;
+  --chart-radius: 4px;
+  --chart-svg-radius: 4px;
+  --chart-svg-inner-radius: 2px;
+  --chart-cell-radius: 3px;
+  --chart-linecap: round;
+  --scrollbar-thumb: #2c2c2c;
+
+  --heat-0: var(--bg-surface);
+  --heat-1: #2a1414;
+  --heat-2: #4d1c1c;
+  --heat-3: #8a2a2a;
+  --heat-4: #ff4a4a;
+  --heat-border-1: #3a1c1c;
+  --heat-border-2: #5c2424;
+  --heat-border-3: #9c3434;
+  --heat-border-4: #ff6b6b;
+
+  /* Faint dot grid behind the blocks. */
+  --wallpaper: radial-gradient(circle, #ffffff12 1px, transparent 1.6px);
+  --wallpaper-size: 18px 18px;
+  --wallpaper-repeat: repeat;
+
+  --reading-gutter: 12px;
+  --page-reading-bg: var(--bg-surface);
+  --page-reading-border: 1px solid var(--card-border);
+  --page-reading-shadow: none;
+  --home-page-bg: transparent;
+  --home-panel-bg: var(--bg-surface);
+  --home-panel-border: 1px solid var(--card-border);
+  --home-panel-radius: var(--radius-lg);
+  --home-panel-shadow: none;
+  --home-panel-padding: 22px;
+  --home-group-display: flex;
+  --home-group-gap: 14px;
+  --home-column-gap: 14px;
+  --home-topbar-padding: 22px;
+  --home-topbar-padding-wide: 26px 28px;
+  --home-topbar-rule: var(--home-panel-border);
+  --home-contents-rule: var(--home-panel-border);
+  --home-week-padding: 22px;
+  --home-week-padding-wide: 26px 28px;
+  --home-week-rule: var(--home-panel-border);
+  --home-week-rule-wide: var(--home-panel-border);
+  --home-month-padding: 22px;
+  --home-month-padding-wide: 26px 28px;
+  --home-month-rule: var(--home-panel-border);
+  --home-label-font: var(--font-mono);
+  --home-label-tracking: var(--label-tracking);
+  --home-number-tracking: 0em;
+  --home-number-margin: 0px;
+  --home-week-value-wrap: normal;
+  --shell-brand-size: 1.125rem;
+  --shell-brand-weight: var(--display-weight);
+  --shell-brand-tracking: 0.04em;
+  --shell-brand-bg: var(--accent-primary);
+  --mobile-nav-active-bg: var(--nav-active-bg);
+  --mobile-nav-marker: var(--nav-active-color);
+  --mobile-nav-shadow: var(--nav-shadow);
+}
+
+/* Small caps mono labels, like a device readout. */
+:root[data-theme="dot"] :is(.home-kicker, .page-eyebrow, .ui-stat-label, .ui-card-subtitle, .home-week-day-name, .home-skyline-tick, .home-ledger-number, .home-section-link),
+.theme-preview[data-theme="dot"] .theme-preview-label {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+:root[data-theme="dot"] .home-time-unit { font-family: var(--font-mono); font-size: 0.22em; color: var(--text-secondary); }
+
+/* Headline type: dot-matrix, sized up, no thin wide-tracked lettering. */
+:root[data-theme="dot"] .home-month-title { font-size: clamp(2.2rem, 5vw, 3.75rem); letter-spacing: 0.01em; font-weight: 900; }
+:root[data-theme="dot"] :is(.home-day-title, .home-rhythm-title) { font-weight: 900; letter-spacing: 0.02em; }
+:root[data-theme="dot"] .home-time { font-weight: 900; }
+
+/* Blocks: chunky bars, thick tracks, rounded segments. */
+:root[data-theme="dot"] .home-week-bar-stack { gap: 2px; }
+:root[data-theme="dot"] .home-week-bar-seg { border-radius: 3px; }
+:root[data-theme="dot"] .home-week-day-num { font-weight: 900; }
+:root[data-theme="dot"] .home-week-day--selected { background: var(--bg-subtle); border-radius: var(--radius-md); }
+:root[data-theme="dot"] .home-week-day::after { height: 3px; border-radius: 3px; }
+:root[data-theme="dot"] .home-skyline-stack { width: 6px; border-radius: 3px; }
+:root[data-theme="dot"] .home-skyline-well { border-bottom-color: var(--border-strong); }
+:root[data-theme="dot"] .home-share-bar { height: 8px; gap: 3px; }
+:root[data-theme="dot"] .home-share-bar-seg { border-radius: 4px; }
+:root[data-theme="dot"] .home-ledger-track { height: 6px; border-radius: 3px; background: var(--bg-muted); }
+:root[data-theme="dot"] .home-ledger-track > span { border-radius: 3px; }
+:root[data-theme="dot"] .home-ledger-entry { font-weight: 600; }
+:root[data-theme="dot"] .home-legend-dot { border-radius: 3px; width: 10px; height: 10px; }
+:root[data-theme="dot"] .home-norm-actual { height: 6px; top: 1px; border-radius: 3px; }
+:root[data-theme="dot"] .home-day-cat-strip { border-top: 0; padding-top: 4px; }
+
+/* Entries become small tiles instead of hairline rows. */
+:root[data-theme="dot"] :is(.home-day-row, .home-day-collapse-item) {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-raised);
+  margin-top: 10px;
+}
+:root[data-theme="dot"] .home-day-row { padding: 14px 16px; }
+:root[data-theme="dot"] .home-day-collapse-trigger { padding: 14px 16px; min-height: 0; }
+:root[data-theme="dot"] .home-day-drawer-list .home-day-row { background: var(--bg-surface); }
+:root[data-theme="dot"] :is(.home-day-row-title, .home-day-collapse-main .home-day-row-title) { font-weight: 700; font-size: 1rem; }
+:root[data-theme="dot"] .home-day-row-duration { font-family: var(--font-mono); font-weight: 700; }
+:root[data-theme="dot"] .home-day-list { gap: 0 10px; }
+
+/* Buttons and nav: solid, rounded, bold. */
+:root[data-theme="dot"] .ui-btn { border-radius: var(--radius-full); font-weight: 700; }
+:root[data-theme="dot"] :is(.sidebar-nav-link, .sidebar-settings-link, .mobile-tab) { font-family: var(--font-mono); border-radius: var(--radius-full); }
+:root[data-theme="dot"] .ui-card { border-radius: var(--radius-lg); }
+
+/* Even spacing between blocks. */
+:root[data-theme="dot"] .home-day-panel { padding-top: var(--home-group-gap); }
+:root[data-theme="dot"] .home-rhythm-card { margin-top: var(--home-group-gap); }
+:root[data-theme="dot"] .home-day-hero { padding-bottom: 8px; }

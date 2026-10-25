@@ -20,7 +20,8 @@ export type ThemeId =
   | "hermes"
   | "workbench"
   | "cwm"
-  | "signal";
+  | "signal"
+  | "dot";
 
 /** Compatibility aliases for existing callers (CWM is a light skin). */
 export type DarkThemeId = ThemeId;
@@ -253,6 +254,17 @@ export const THEMES: ReadonlyArray<ThemeDefinition> = [
       canvas: "#0c100e", surface: "#111814", surfaceRaised: "#19221c",
       subtle: "#202c24", textPrimary: "#e6f2e9", textSecondary: "#b8cbbc",
       accent: "#a4f5c1", border: "#41594a",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+  {
+    id: "dot",
+    label: "Dot",
+    description: "Black blocks, dot-matrix numbers & a red accent",
+    swatches: {
+      canvas: "#000000", surface: "#111111", surfaceRaised: "#191919",
+      subtle: "#1f1f1f", textPrimary: "#f4f4f4", textSecondary: "#ababab",
+      accent: "#ff4a4a", border: "#2c2c2c",
     },
     categories: SHARED_DARK_CATEGORIES,
   },

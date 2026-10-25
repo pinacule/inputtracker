@@ -13,3 +13,6 @@ bundling them with this app.
 | IBM Plex Mono | IBM | signal, workbench and cwm text |
 | Courier Prime | Alan Dague-Greene | signal headings |
 | Pixelify Sans | Stefie Justprince | workbench headings and numbers |
+| Doto | Oliver Lalan | dot headings and numbers |
+| Space Grotesk | Florian Karsten | dot body text |
+| Space Mono | Colophon Foundry | dot labels |

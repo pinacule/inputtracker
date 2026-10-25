@@ -74,15 +74,15 @@ import {
 } from "../web/src/lib/youtube.ts";
 
 describe("themes & WCAG AA compliance (web/src/lib/theme.ts)", () => {
-  test("keeps five palettes, adds four skins and rejects unnamed modes", () => {
-    expect(DARK_THEMES.length).toBe(9);
+  test("keeps five palettes, adds five skins and rejects unnamed modes", () => {
+    expect(DARK_THEMES.length).toBe(10);
     expect(DEFAULT_THEME).toBe("espresso");
     expect(isDarkThemeId("espresso")).toBe(true);
     expect(isDarkThemeId("midnight")).toBe(true);
     expect(isDarkThemeId("forest")).toBe(true);
     expect(isDarkThemeId("obsidian")).toBe(true);
     expect(isDarkThemeId("plum")).toBe(true);
-    for (const id of ["hermes", "workbench", "cwm", "signal"]) {
+    for (const id of ["hermes", "workbench", "cwm", "signal", "dot"]) {
       expect(isDarkThemeId(id)).toBe(true);
     }
 

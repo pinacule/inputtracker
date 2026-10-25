@@ -10,7 +10,7 @@ import {
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const tokens = read("web/src/styles/tokens.css");
-const skinIds = ["hermes", "workbench", "cwm", "signal"];
+const skinIds = ["hermes", "workbench", "cwm", "signal", "dot"];
 function properties(css: string): Record<string, string> {
   return Object.fromEntries([...css.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)]
     .map((m) => [m[1]!, m[2]!.trim()]));

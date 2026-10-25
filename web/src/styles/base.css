@@ -198,7 +198,7 @@ button:disabled {
 }
 
 /* Class-styled headings on existing pages still receive skin typography. */
-:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) :is(h1, h2, h3, h4) {
+:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"], [data-theme="dot"]) :is(h1, h2, h3, h4) {
   font-family: var(--font-display);
   font-weight: var(--display-weight);
   font-stretch: var(--display-stretch);
@@ -230,7 +230,7 @@ button:disabled {
   text-transform: var(--label-case);
   letter-spacing: var(--label-tracking);
 }
-:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"]) .sidebar-search-input:focus-visible {
+:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"], [data-theme="dot"]) .sidebar-search-input:focus-visible {
   outline: var(--focus-width) var(--focus-style) var(--focus-ring);
   outline-offset: var(--focus-offset);
 }
