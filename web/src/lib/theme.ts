@@ -27,7 +27,7 @@ export type ThemeId =
 export type DarkThemeId = ThemeId;
 export type ThemeMode = ThemeId;
 
-export const DEFAULT_THEME: DarkThemeId = "espresso";
+export const DEFAULT_THEME: DarkThemeId = "dot";
 
 export const THEME_STORAGE_KEY = "inputtracker.theme";
 
@@ -132,7 +132,8 @@ const ANSI_CATEGORIES: Readonly<Record<Category, CategoryThemeColors>> = {
   other: { fg: "#555555", bg: "#ffffff", border: "#000000", solid: "#555555" },
 };
 
-export const THEMES: ReadonlyArray<ThemeDefinition> = [
+/** Every skin ever built, including archived ones (kept so they can be restored). */
+export const ALL_THEMES: ReadonlyArray<ThemeDefinition> = [
   {
     id: "espresso",
     label: "Warm Study",
@@ -270,11 +271,32 @@ export const THEMES: ReadonlyArray<ThemeDefinition> = [
   },
 ];
 
+/**
+ * Archived skins: their code and CSS stay in the repo, but they are not offered
+ * in Settings and a saved choice of one falls back to the default. To bring one
+ * back, remove its id from this list.
+ */
+export const ARCHIVED_THEME_IDS: ReadonlyArray<ThemeId> = [
+  "espresso", "midnight", "forest", "obsidian", "plum",
+  "hermes", "workbench", "cwm", "signal",
+];
+
+/** The skins people can choose. */
+export const THEMES: ReadonlyArray<ThemeDefinition> = ALL_THEMES.filter(
+  (theme) => !ARCHIVED_THEME_IDS.includes(theme.id)
+);
+
 /** Legacy export retained; use THEMES for new code. */
 export const DARK_THEMES = THEMES;
 
+/** Active skins only; archived ids are not valid choices. */
 export const THEME_REGISTRY = Object.fromEntries(
   THEMES.map((theme) => [theme.id, theme])
+) as Readonly<Partial<Record<ThemeId, ThemeDefinition>>> & Readonly<Record<typeof DEFAULT_THEME, ThemeDefinition>>;
+
+/** Every skin by id, archived ones included (for tests and restoring). */
+export const ALL_THEME_REGISTRY = Object.fromEntries(
+  ALL_THEMES.map((theme) => [theme.id, theme])
 ) as Readonly<Record<ThemeId, ThemeDefinition>>;
 
 export interface ThemeStorageLike {
@@ -354,7 +376,7 @@ export function applyThemeToDocument(theme: DarkThemeId): void {
     root.setAttribute("data-theme", valid);
     const meta = doc?.querySelector?.('meta[name="theme-color"]');
     if (meta) {
-      meta.setAttribute("content", THEME_REGISTRY[valid].swatches.canvas);
+      meta.setAttribute("content", ALL_THEME_REGISTRY[valid].swatches.canvas);
     }
   } catch {
     // Ignore when no DOM exists.

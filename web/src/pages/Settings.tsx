@@ -316,7 +316,7 @@ export function Settings({
       <Card
         padding="md"
         title="Appearance"
-        subtitle="Nine local skins — fonts, wallpaper and frames. Applied before first paint."
+        subtitle="Dot is the only skin for now; the older ones are archived."
       >
         <ThemePicker value={localTheme} onChange={handleThemeSelect} />
       </Card>

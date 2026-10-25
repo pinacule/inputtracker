@@ -22,7 +22,11 @@ Calendar, leaving other pages' code and palettes untouched.
 This direction supersedes the historical Home layout descriptions below (pills,
 month card beside the day panel and category chip filtering).
 
-## Skin: Dot
+## Skin: Dot (the only active skin)
+
+The older skins are archived in `ARCHIVED_THEME_IDS` (`web/src/lib/theme.ts`): their code
+and CSS stay, but they are not offered in Settings. Remove an id from that list to bring it back.
+
 
 Chunky alternative to the thin skins: black canvas with a faint dot grid, every
 home section as its own rounded block (#111 on #000), dot-matrix numbers and

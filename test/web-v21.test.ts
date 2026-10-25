@@ -49,6 +49,8 @@ import {
 } from "../web/src/lib/rating.ts";
 import { parseAppRoute, resolveLegacyRedirect } from "../web/src/lib/router.ts";
 import {
+  ALL_THEMES,
+  ARCHIVED_THEME_IDS,
   DARK_THEMES,
   DEFAULT_THEME,
   THEME_REGISTRY,
@@ -74,16 +76,15 @@ import {
 } from "../web/src/lib/youtube.ts";
 
 describe("themes & WCAG AA compliance (web/src/lib/theme.ts)", () => {
-  test("keeps five palettes, adds five skins and rejects unnamed modes", () => {
-    expect(DARK_THEMES.length).toBe(10);
-    expect(DEFAULT_THEME).toBe("espresso");
-    expect(isDarkThemeId("espresso")).toBe(true);
-    expect(isDarkThemeId("midnight")).toBe(true);
-    expect(isDarkThemeId("forest")).toBe(true);
-    expect(isDarkThemeId("obsidian")).toBe(true);
-    expect(isDarkThemeId("plum")).toBe(true);
-    for (const id of ["hermes", "workbench", "cwm", "signal", "dot"]) {
-      expect(isDarkThemeId(id)).toBe(true);
+  test("Dot is the only active skin; the others are archived, not deleted", () => {
+    expect(DEFAULT_THEME).toBe("dot");
+    expect(DARK_THEMES.map((t) => t.id)).toEqual(["dot"]);
+    expect(ALL_THEMES.length).toBe(10);
+    expect(isDarkThemeId("dot")).toBe(true);
+    for (const id of ["espresso", "midnight", "forest", "obsidian", "plum", "hermes", "workbench", "cwm", "signal"]) {
+      expect(ARCHIVED_THEME_IDS as readonly string[]).toContain(id);
+      expect(isDarkThemeId(id)).toBe(false);
+      expect(ALL_THEMES.some((t) => t.id === id)).toBe(true);
     }
 
     expect(isDarkThemeId("light")).toBe(false);
@@ -94,6 +95,8 @@ describe("themes & WCAG AA compliance (web/src/lib/theme.ts)", () => {
   test("every theme meets WCAG AA contrast (>= 4.5:1) for text and all 10 categories", () => {
     for (const theme of DARK_THEMES) {
       expect(THEME_REGISTRY[theme.id]).toBe(theme);
+    }
+    for (const theme of ALL_THEMES) {
 
       // Text primary & secondary on canvas and surface
       expect(
@@ -123,7 +126,7 @@ describe("themes & WCAG AA compliance (web/src/lib/theme.ts)", () => {
     }
   });
 
-  test("persists theme selection in storage and falls back to espresso", () => {
+  test("persists theme selection in storage; archived or unknown choices fall back to Dot", () => {
     const store = new Map<string, string>();
     const storage: ThemeStorageLike = {
       getItem: (k) => store.get(k) ?? null,
@@ -131,10 +134,12 @@ describe("themes & WCAG AA compliance (web/src/lib/theme.ts)", () => {
         store.set(k, v);
       },
     };
-    expect(readThemePreference(storage)).toBe("espresso");
-    expect(saveThemePreference("forest", storage)).toBe("forest");
-    expect(readThemePreference(storage)).toBe("forest");
-    expect(saveThemePreference("invalid-theme", storage)).toBe("espresso");
+    expect(readThemePreference(storage)).toBe("dot");
+    expect(saveThemePreference("dot", storage)).toBe("dot");
+    expect(readThemePreference(storage)).toBe("dot");
+    store.set("inputtracker.theme", "signal");
+    expect(readThemePreference(storage)).toBe("dot");
+    expect(saveThemePreference("invalid-theme", storage)).toBe("dot");
   });
 });
 

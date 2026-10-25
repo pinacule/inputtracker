@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { CATEGORIES } from "../web/src/lib/categories.ts";
 import {
-  THEMES, THEME_REGISTRY, THEME_STORAGE_KEY, applyThemeToDocument,
+  ALL_THEMES, ALL_THEME_REGISTRY, THEMES, THEME_REGISTRY, THEME_STORAGE_KEY, applyThemeToDocument,
   contrastRatio, isThemeId, readThemePreference, resolveThemePreference,
   saveThemePreference, themeBootstrapScript,
 } from "../web/src/lib/theme.ts";
@@ -27,7 +27,7 @@ describe("app skins", () => {
   test("registry validation is own-key only and all choices round-trip", () => {
     for (const bad of [null, undefined, "", "light", "system", "__proto__", "constructor", "toString", {}, 1]) {
       expect(isThemeId(bad)).toBe(false);
-      expect(resolveThemePreference(bad)).toBe("espresso");
+      expect(resolveThemePreference(bad)).toBe("dot");
     }
     const store = new Map<string, string>();
     const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } };
@@ -36,10 +36,12 @@ describe("app skins", () => {
       expect(readThemePreference(storage)).toBe(theme.id);
       expect(store.get(THEME_STORAGE_KEY)).toBe(theme.id);
     }
-    expect(readThemePreference(null)).toBe("espresso");
+    expect(readThemePreference(null)).toBe("dot");
     const blocked = { getItem: () => { throw Error("blocked"); }, setItem: () => { throw Error("blocked"); } };
-    expect(readThemePreference(blocked)).toBe("espresso");
-    expect(saveThemePreference("cwm", blocked)).toBe("cwm");
+    expect(readThemePreference(blocked)).toBe("dot");
+    expect(saveThemePreference("dot", blocked)).toBe("dot");
+    // Archived skins are no longer valid choices.
+    expect(saveThemePreference("signal", blocked)).toBe("dot");
   });
 
   test("synchronous head bootstrap uses the registry and handles blocked storage", () => {
@@ -53,19 +55,20 @@ describe("app skins", () => {
       runInNewContext(script, { document, localStorage: { getItem: () => raw } });
       const expected = resolveThemePreference(raw);
       expect(attrs["data-theme"]).toBe(expected);
-      expect(attrs.meta).toBe(THEME_REGISTRY[expected].swatches.canvas);
+      expect(attrs.meta).toBe(ALL_THEME_REGISTRY[expected].swatches.canvas);
     }
     let chosen = "";
     const document = { documentElement: { setAttribute: (_: string, v: string) => { chosen = v; } }, querySelector: () => null };
     runInNewContext(script, { document, localStorage: { getItem: () => { throw Error("blocked"); } } });
-    expect(chosen).toBe("espresso");
+    expect(chosen).toBe("dot");
     expect(() => applyThemeToDocument("signal")).not.toThrow();
     expect(read("web/index.html")).toContain("/* inputtracker-theme-bootstrap */");
     expect(read("web/vite.config.ts")).toContain("themeBootstrapScript()");
   });
 
   test("live CSS and preview colours agree with registry; text is AA on all surfaces", () => {
-    for (const theme of THEMES) {
+    expect(THEMES.every((t) => THEME_REGISTRY[t.id] === t)).toBe(true);
+    for (const theme of ALL_THEMES) {
       const props = themeProperties(theme.id);
       const swatches = {
         canvas: "--bg-canvas", surface: "--bg-surface", surfaceRaised: "--bg-surface-raised",
@@ -122,7 +125,7 @@ describe("app skins", () => {
 
   test("CWM category colours are unique ANSI colours and all other interface tokens are monochrome", () => {
     const ansi = new Set(["#000000", "#aa0000", "#00aa00", "#aa5500", "#0000aa", "#aa00aa", "#00aaaa", "#aaaaaa", "#555555", "#ff5555", "#55ff55", "#ffff55", "#5555ff", "#ff55ff", "#55ffff", "#ffffff"]);
-    for (const colors of Object.values(THEME_REGISTRY.cwm.categories)) {
+    for (const colors of Object.values(ALL_THEME_REGISTRY.cwm.categories)) {
       for (const color of Object.values(colors)) expect(ansi.has(color)).toBe(true);
     }
     const props = themeProperties("cwm");

@@ -354,12 +354,14 @@ describe("v2 theme storage & calendar cell summaries", () => {
       },
     };
 
-    expect(readThemePreference(storage)).toBe("espresso");
+    expect(readThemePreference(storage)).toBe("dot");
+    saveThemePreference("dot", storage);
+    expect(readThemePreference(storage)).toBe("dot");
+    // Archived skins and legacy "light" or "system" fall back to the default (Dot)
     saveThemePreference("midnight", storage);
-    expect(readThemePreference(storage)).toBe("midnight");
-    // Legacy "light" or "system" falls back to "espresso"
+    expect(readThemePreference(storage)).toBe("dot");
     saveThemePreference("light", storage);
-    expect(readThemePreference(storage)).toBe("espresso");
+    expect(readThemePreference(storage)).toBe("dot");
   });
 
   test("summarizeDayCellV2 handles a day with 40 YouTube videos and 120-char titles without bloat", () => {
