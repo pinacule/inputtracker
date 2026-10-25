@@ -9,7 +9,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 args=(--ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --bind "$WT" "$WT")
 for d in "$HOME/.gemini" "$HOME/.cache" "$HOME/.bun" \
          "$HOME/.local/share/opencode" "$HOME/.local/state/opencode" \
-         "$HOME/.local/share/muse" "$HOME/.local/state/muse"; do
+         "$HOME/.local/share/muse" "$HOME/.local/state/muse" "$HOME/.codex"; do
   [ -d "$d" ] && args+=(--bind "$d" "$d")
 done
 [ -e "$REPO/inputtracker.config.toml" ] && args+=(--ro-bind /dev/null "$REPO/inputtracker.config.toml")

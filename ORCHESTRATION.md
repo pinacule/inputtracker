@@ -1,7 +1,7 @@
 # Orchestration
 
 Manager = Claude Code (plans, reviews, merges; writes no feature code).
-Workers = Antigravity (`gemini-3.8-flash-high`) and opencode (`agentrouter-responses/gpt-6-astra`, then `agentrouter-responses/gpt-6.1-sol`). Commands: WORKERS.md.
+Workers = Codex CLI (`gpt-6.1-sol` high, from 2026-10-26), opencode (`agentrouter-responses/gpt-6.1-sol#high`, then `gpt-6-astra`) and Antigravity (`gemini-3.8-flash-high`). Commands: WORKERS.md.
 
 ## Picking a worker
 

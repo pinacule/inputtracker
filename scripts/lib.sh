@@ -10,10 +10,12 @@ mkdir -p "$ORCH"
 
 # opencode models via the AgentRouter proxy, in preference order (your decision 2026-10-20:
 # gpt-6-astra and gpt-6.1-sol only; still no nebius/*).
+# 2026-10-26: skins work runs Sol at high reasoning first (`#high` = opencode variant).
 OPENCODE_MODELS=(
-  agentrouter-responses/gpt-6-astra
-  agentrouter-responses/gpt-6.1-sol
+  agentrouter-responses/gpt-6.1-sol#high
+  agentrouter-responses/gpt-6-astra#high
 )
+CODEX_MODEL="gpt-6.1-sol"   # Codex CLI (ChatGPT login), effort via CODEX_EFFORT (default high)
 AGY_MODEL="gemini-3.8-flash-high"
 
 now() { date +%s; }

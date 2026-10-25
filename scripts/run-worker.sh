@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Run one worker on one task, jailed to its worktree, and classify the result.
-# Usage: scripts/run-worker.sh <task> <antigravity|opencode> <model> <prompt-file> [resume-session-id]
+# Usage: scripts/run-worker.sh <task> <codex|antigravity|opencode> <model> <prompt-file> [resume-session-id]
+# Models: codex gpt-6.1-sol (effort from CODEX_EFFORT, default high); opencode
+#   agentrouter-responses/gpt-6.1-sol#high; antigravity gemini-3.8-flash-high.
 # Writes .worktrees/<task>/.task/{result,model,session,exit,<worker logs>} and prints the result:
 #   ok | limit | error | stuck
 source "$(dirname "$0")/lib.sh"
@@ -22,6 +24,34 @@ if [[ "$MODEL" == google-vertex/* ]]; then
 fi
 
 case "$WORKER" in
+codex)
+  # Codex's own workspace-write sandbox nests inside the bwrap jail (tested 2026-10-26); network
+  # stays on for wallpaper/font downloads, ~/.bun and ~/.cache are extra writable dirs.
+  # --search gives the model the native web_search tool. Resume: same flags + `resume <id>`.
+  out="$T/codex.jsonl"; : > "$out"
+  sub=(); [ -n "$RESUME" ] && sub=(resume "$RESUME")
+  timeout "${WORKER_TIMEOUT:-90m}" "$REPO/scripts/jail.sh" "$WT" codex --search exec \
+    -m "$MODEL" -c "model_reasoning_effort=\"${CODEX_EFFORT:-high}\"" \
+    -s workspace-write -c sandbox_workspace_write.network_access=true \
+    --add-dir "$HOME/.bun" --add-dir "$HOME/.cache" \
+    --json -o "$T/codex-last.md" "${sub[@]}" "$PROMPT" < /dev/null > "$out" 2> "$T/codex.err" &
+  pid=$!
+  last=$(now); size=0; stalled=0
+  while kill -0 $pid 2>/dev/null; do
+    sleep 30
+    s=$(stat -c %s "$out" 2>/dev/null || echo 0)
+    if [ "$s" != "$size" ]; then size=$s; last=$(now)
+    elif [ $(( $(now) - last )) -gt "${STALL_SECONDS:-900}" ]; then stalled=1; kill $pid; sleep 5; kill -9 $pid 2>/dev/null; break; fi
+  done
+  wait $pid; rc=$?; echo "$rc" > "$T/exit"
+  sid=$(jq -r 'select(.type=="thread.started") | .thread_id' "$out" 2>/dev/null | head -1)
+  [ -n "$sid" ] && echo "$sid" > "$T/session"
+  if [ $stalled -eq 1 ] || [ $rc -eq 124 ]; then r=stuck
+  elif jq -r 'select(.type=="error" or .type=="turn.failed") | tostring' "$out" 2>/dev/null | grep -Eq "$LIMIT_RE" \
+       || grep -Eq "$LIMIT_RE" "$T/codex.err" 2>/dev/null; then r=limit
+  elif [ $rc -eq 0 ] && grep -q '"type":"turn.completed"' "$out"; then r=ok
+  else r=error; fi
+  ;;
 antigravity)
   extra=(); [ -n "$RESUME" ] && extra=(--conversation "$RESUME")
   timeout 50m "$REPO/scripts/jail.sh" "$WT" antigravity -p "$PROMPT" --model "$MODEL" \

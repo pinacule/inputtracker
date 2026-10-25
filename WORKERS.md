@@ -5,11 +5,69 @@ Verified on this PC on 2026-10-17 against real `--help` output and live test run
 | Worker | Binary | Version | Auth state |
 |---|---|---|---|
 | Antigravity CLI | `antigravity` (alias `agy`, via mise shim) | 1.4.0 | signed in, Gemini quota 100% |
-| opencode | `opencode` | v2.0.31 | AgentRouter models gpt-6-astra, gpt-6.1-sol (Nebius paid models exist but are not allowed) |
+| opencode | `opencode` | v2.1.4 (re-checked 2026-10-26) | AgentRouter models gpt-6-astra, gpt-6.1-sol (Nebius paid models exist but are not allowed) |
+| Codex CLI | `codex` (mise) | codex-cli 0.164.0 (2026-10-26) | ChatGPT login; `gpt-6.1-sol`, efforts low…ultra |
 
 Both workers run **in the task's git worktree** `.worktrees/<task>` inside the project, jailed with bubblewrap so they can only write there. Neither may push,
 touch `main`, or read `inputtracker.config.toml` (secrets). The manager runs the final
 checks, merges and pushes.
+
+---
+
+## Codex CLI (added 2026-10-26, main worker for the skins)
+
+### Model
+
+`codex debug models` lists `gpt-6.1-sol` (GPT-6.1-Sol, efforts low, medium, high, xhigh, max, ultra).
+Use `-m gpt-6.1-sol -c model_reasoning_effort="high"`. `~/.codex/config.toml` already defaults to
+the same model and effort.
+
+### Headless command (tested 2026-10-26, jailed)
+
+`scripts/run-worker.sh <task> codex gpt-6.1-sol <prompt-file> [session]` runs:
+
+```bash
+WT=~/Projects/inputtracker/.worktrees/NC-b
+scripts/jail.sh "$WT" codex --search exec \
+  -m gpt-6.1-sol -c 'model_reasoning_effort="high"' \
+  -s workspace-write -c sandbox_workspace_write.network_access=true \
+  --add-dir ~/.bun --add-dir ~/.cache \
+  --json -o .task/codex-last.md "$(cat .task/prompt.md)" < /dev/null \
+  > .task/codex.jsonl 2> .task/codex.err
+```
+
+- `scripts/jail.sh` binds `~/.codex` writable (sessions, logs) on top of the usual dirs.
+- Codex's own `workspace-write` sandbox works **nested inside the bwrap jail** (tested: wrote a file in
+  the workspace, ran `bun --version`, `curl` to Wikimedia with `network_access=true`).
+- `--search` (a top-level flag, before `exec`) turns on the native `web_search` tool (tested:
+  found a Wikimedia Commons file). Needed for wallpaper/font hunting.
+- `< /dev/null`: otherwise `exec` waits for "additional input from stdin".
+- Not used: `--dangerously-bypass-approvals-and-sandbox` (not needed, the nested sandbox works).
+
+### Output and finish signals
+
+`--json` gives JSON Lines: `thread.started` (`thread_id` = session id), `turn.started`,
+`item.started/completed` (`agent_message`, `command_execution`, `web_search`, `file_change`),
+`turn.completed`, `turn.failed`, `error`. `-o` writes the final message to `.task/codex-last.md`.
+
+| Situation | How to tell |
+|---|---|
+| Finished OK | exit `0`, a `turn.completed` line |
+| Limit | `error`/`turn.failed` or stderr matching usage limit / 429 / rate limit (reset time is in the message: note it) |
+| Stuck | no new JSON line for 15 min (`STALL_SECONDS`, default 900) or the outer `timeout` (90 min) |
+
+### Resume (send back / continue after a limit)
+
+Same flags, plus `resume <thread_id>` after the exec options (tested: the session remembered
+the earlier turn):
+
+```bash
+scripts/run-worker.sh NC-b codex gpt-6.1-sol .worktrees/NC-b/.task/feedback.md "$(cat .worktrees/NC-b/.task/session)"
+```
+
+### Liveness probe (tested, ~6 s)
+
+`scripts/probe-worker.sh codex` (PONG at low effort, read-only sandbox).
 
 ---
 
@@ -172,10 +230,29 @@ stdout with `--format json` is **JSON Lines**, one event per line:
 The exact error text for a free-tier rate limit is **not yet observed**; the wrapper
 classifies by the keywords above and logs the raw message so we can tighten it.
 
-### Liveness probe (tested, ~4 s)
+### Reasoning level (2026-10-26)
+
+Variants from `~/.config/opencode/opencode.jsonc` go after `#`: the skins work uses
+`agentrouter-responses/gpt-6.1-sol#high` (tested jailed: wrote a file, ran `bun --version`).
+
+### AgentRouter stops mid-task
+
+AgentRouter sometimes just stops (no output, connection error, early exit). The work so far stays
+in the worktree. That is **not** a failed attempt: don't reset the worktree, continue the same
+session (tested 2026-10-26, the session remembered its earlier turn):
 
 ```bash
-opencode run --model agentrouter-responses/gpt-6.1-sol --format json "Reply with exactly: PONG" | jq -r 'select(.type=="text").part.text'
+scripts/run-worker.sh RW-b opencode 'agentrouter-responses/gpt-6.1-sol#high' .worktrees/RW-b/.task/continue.md "$(cat .worktrees/RW-b/.task/session)"
+# = opencode run --standalone --auto --format json --model ... --session <id> "continue where you stopped"
+```
+
+Three stops in a row on the same task → give the task to Codex with a note of what is done.
+Every restart is logged in MORNING_REPORT.md.
+
+### Liveness probe (tested, ~4–30 s; AgentRouter sometimes answers only after a few empty steps)
+
+```bash
+opencode run --model 'agentrouter-responses/gpt-6.1-sol#high' --format json "Reply with exactly: PONG" | jq -r 'select(.type=="text").part.text'
 ```
 
 Usage stats: `opencode stats`.

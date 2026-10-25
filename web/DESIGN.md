@@ -22,7 +22,7 @@ Calendar, leaving other pages' code and palettes untouched.
 This direction supersedes the historical Home layout descriptions below (pills,
 month card beside the day panel and category chip filtering).
 
-## Skin: Dot (the only active skin)
+## Skin: Dot (default)
 
 The older skins are archived in `ARCHIVED_THEME_IDS` (`web/src/lib/theme.ts`): their code
 and CSS stay, but they are not offered in Settings. Remove an id from that list to bring it back.
@@ -33,6 +33,22 @@ home section as its own rounded block (#111 on #000), dot-matrix numbers and
 headings (Doto), Space Grotesk body, small uppercase Space Mono labels, thick
 rounded bars and tracks, entries as tiles, one red accent. Same information and
 layout as the other skins; only presentation changes (`styles/themes/dot.css`).
+
+## Skin effects layer (S0)
+
+_Filled in by task S0: how skins add wallpapers, ambient loops, cursors and transitions._
+
+## Skin: Night City (NC)
+
+_Design brief: task NC-a._
+
+## Skin: Rewind (RW)
+
+_Design brief: task RW-a._
+
+## Skin: Thinker (TH)
+
+_Design brief: task TH-a._
 
 ## Aesthetic Direction: Calm Nocturnal Reading Room & Personal Archive (v2.2)
 

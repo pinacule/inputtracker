@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Is a worker usable right now? Tiny PONG prompt (and quota check for Antigravity).
-# Usage: scripts/probe-worker.sh <antigravity|opencode> [model]
+# Usage: scripts/probe-worker.sh <codex|antigravity|opencode> [model]
 # Exit 0 = works. Exit 10 = limited; prints reset epoch seconds if known (else nothing).
 # Exit 1 = other failure.
 source "$(dirname "$0")/lib.sh"
@@ -17,6 +17,13 @@ antigravity)
         --output-format json --print-timeout 100s 2>&1)
   echo "$out" | grep -q PONG && exit 0
   echo "$out" | grep -Eq '429|RESOURCE_EXHAUSTED|[Qq]uota|[Rr]ate|credits' && exit 10
+  exit 1 ;;
+codex)
+  git init -q .
+  out=$(timeout 120 codex exec -m "${MODEL:-$CODEX_MODEL}" -c 'model_reasoning_effort="low"' -s read-only \
+        "Reply with exactly: PONG" < /dev/null 2>&1)
+  echo "$out" | grep -q PONG && exit 0
+  echo "$out" | grep -Eq '429|[Qq]uota|[Rr]ate|[Uu]sage limit|[Ee]xhausted' && exit 10
   exit 1 ;;
 opencode)
   out=$(timeout 120 opencode run --model "${MODEL:-${OPENCODE_MODELS[0]}}" --format json \
