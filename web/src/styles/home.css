@@ -74,9 +74,11 @@
 
 /* The selected day's total is the headline. Week sits between headline and entries on phone. */
 .home-day-panel { display: grid; grid-template-columns: minmax(0, 1fr); padding-top: 28px; min-width: 0; row-gap: var(--home-group-gap); }
-.home-day-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.home-day-heading-group { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; flex: 1; }
-.home-day-title { font-size: clamp(1.5rem, 3vw, 2.125rem); font-weight: 400; line-height: 1.2; }
+/* The title scales with its card (narrow beside the week chart at ~1000px) and drops
+   under the arrows when it can't sit beside them, so words never split mid-word. */
+.home-day-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; container-type: inline-size; }
+.home-day-heading-group { display: flex; flex-flow: row-reverse wrap; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+.home-day-title { font-size: min(clamp(1.5rem, 3vw, 2.125rem), 16cqi); font-weight: 400; line-height: 1.2; }
 .home-day-step-btns { display: flex; flex-shrink: 0; }
 .home-page .ui-icon-btn { border-radius: 0; min-width: 32px; min-height: 44px; }
 .home-day-header-right .ui-btn { background: none; border: 0; border-radius: 0; color: var(--accent-primary); padding: 8px; min-height: 44px; }
