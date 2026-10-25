@@ -30,13 +30,11 @@ import {
   Button,
   Card,
   CategoryChips,
-  CategoryShareChart,
   ChevronLeftIcon,
   ChevronRightIcon,
   Cover,
   EmptyState,
   IconButton,
-  PunchCardChart,
   Skeleton,
   Sparkline,
   StackedSeriesChart,
@@ -588,25 +586,6 @@ export function Review({
                 />
               </Card>
 
-              {/* Category Share + Monthly Punch Card */}
-              <div class="insights-two-col">
-                <Card
-                  padding="md"
-                  title="Category Breakdown"
-                  subtitle="Share of time and works this month"
-                >
-                  <CategoryShareChart categories={filteredMonth.categories} />
-                </Card>
-
-                <Card
-                  padding="md"
-                  title="Monthly Rhythm (Hour × Weekday)"
-                  subtitle="Time of day and day of week patterns"
-                >
-                  <PunchCardChart hourWeekday={filteredMonth.hour_weekday} />
-                </Card>
-              </div>
-
               {/* Cover Highlights: Top Works, Finished, Started */}
               <Card
                 padding="md"
@@ -747,14 +726,6 @@ export function Review({
                     setView("month");
                   }}
                 />
-              </Card>
-
-              <Card
-                padding="md"
-                title={`Category Share in ${filteredYear.year}`}
-                subtitle="Annual time and works distribution"
-              >
-                <CategoryShareChart categories={filteredYear.categories} />
               </Card>
 
               <Card
