@@ -98,6 +98,7 @@ lookups are fast and gentle on the providers. Tests mock `fetch`; never hit the 
 ## 3. Library (backend task B2)
 
 - `GET /api/library?category=<Category>&q=&sort=recent|time|title` → `LibraryResult`.
+  `fields=categories` returns the same shape with `works: []` (per-category totals only).
   `categories` always lists every category that has data (for the tabs), `works` the filtered list.
 - A **work** joins events of every source that belong together: same category and the same normalized
   series-or-title (reuse `getSeriesOrTitle` and `normalizeForSearch`), or the same external id

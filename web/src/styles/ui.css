@@ -1692,3 +1692,9 @@
   border-radius: inherit;
   background-color: var(--mp-color);
 }
+
+/* Previous data kept on screen while its replacement loads. */
+.ui-stale {
+  opacity: 0.55;
+  transition: opacity 150ms ease;
+}

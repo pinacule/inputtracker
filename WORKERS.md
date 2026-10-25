@@ -5,7 +5,7 @@ Verified on this PC on 2026-10-17 against real `--help` output and live test run
 | Worker | Binary | Version | Auth state |
 |---|---|---|---|
 | Antigravity CLI | `antigravity` (alias `agy`, via mise shim) | 1.4.0 | signed in, Gemini quota 100% |
-| opencode | `opencode` | v2.0.31 | OpenCode Zen free models (Nebius paid models exist but are not allowed) |
+| opencode | `opencode` | v2.0.31 | AgentRouter models gpt-6-astra, gpt-6.1-sol (Nebius paid models exist but are not allowed) |
 
 Both workers run **in the task's git worktree** `.worktrees/<task>` inside the project, jailed with bubblewrap so they can only write there. Neither may push,
 touch `main`, or read `inputtracker.config.toml` (secrets). The manager runs the final
@@ -107,29 +107,22 @@ Logs: `~/.gemini/antigravity-cli/cli.log` (override with `--log-file`).
 
 ## opencode
 
-### Models available now (`opencode models`, 34 total)
+### Models in use (AgentRouter, decided 2026-10-20)
 
-Free (OpenCode Zen, no cost):
+Only these two, in this order (`OPENCODE_MODELS` in `scripts/lib.sh`):
 
 ```
-opencode/deepseek-v4.1-flash-free
-opencode/glm-5.3-flash-free          <- tested, works
-opencode/nemotron-3-ultra-free
-opencode/nemotron-3.5-lightning-free
-opencode/nemotron-3.5-super-vl-free
-opencode/mimo-v2.6-flash-free
-opencode/longcat-2.5-preview-free
-opencode/space-bunny-free
-opencode/beam-free
+agentrouter-responses/gpt-6-astra
+agentrouter-responses/gpt-6.1-sol
 ```
 
-`opencode/big-pickle` is listed too but not labelled Free, so it is not used.
+They use the `agentrouter-responses` provider defined in `~/.config/opencode/opencode.jsonc`
+(`@ai-sdk/openai`, base URL `https://agentrouter.org/v1`, `/v1/responses`, codex-style headers). The key is
+stored with `opencode auth login agentrouter-responses` (never in the config). Check with
+`opencode models | grep agentrouter-responses`. Paid Nebius models (`nebius/*`) are still **not allowed**.
+The earlier free `opencode/*` models are no longer used by the scripts.
 
-Paid Nebius models (`nebius/*`) are also listed — **not allowed** (your decision 2026-10-17:
-free models only). Local `ollama/qwen2.5:3b` is too small for coding.
-
-Plan: start on `opencode/deepseek-v4.1-flash-free`, fall back to `opencode/glm-5.3-flash-free`,
-then the other free ones in the order of `OPENCODE_MODELS` in `scripts/lib.sh` (all nine Free models).
+Plan: start on `agentrouter-responses/gpt-6-astra`, fall back to `agentrouter-responses/gpt-6.1-sol` when limited.
 Every run's model is logged in `MORNING_REPORT.md`.
 
 ### Headless command (tested inside the jail, 2026-10-17)
@@ -150,7 +143,7 @@ timeout 45m bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp \
   --ro-bind /dev/null ~/Projects/inputtracker/inputtracker.config.toml \
   --die-with-parent --chdir "$WT" \
 opencode run --standalone \
-  --model opencode/deepseek-v4.1-flash-free \
+  --model agentrouter-responses/gpt-6-astra \
   --auto \
   --format json \
   --title "T05" \
@@ -182,7 +175,7 @@ classifies by the keywords above and logs the raw message so we can tighten it.
 ### Liveness probe (tested, ~4 s)
 
 ```bash
-opencode run --model opencode/glm-5.3-flash-free --format json "Reply with exactly: PONG" | jq -r 'select(.type=="text").part.text'
+opencode run --model agentrouter-responses/gpt-6.1-sol --format json "Reply with exactly: PONG" | jq -r 'select(.type=="text").part.text'
 ```
 
 Usage stats: `opencode stats`.

@@ -171,16 +171,23 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
     }
   });
 
-  // GET /api/library?category=<Category,...>&exclude=<Category,...>&q=&sort=recent|time|title
+  // GET /api/library?category=<Category,...>&exclude=<Category,...>&q=&sort=recent|time|title[&fields=categories]
+  // `fields=categories` leaves `works` empty: the per-category totals without the whole archive.
   app.get("/api/library", (c) => {
     const err = validateQueryParams(c.req.url, [
       "category",
       "exclude",
       "q",
       "sort",
+      "fields",
     ]);
     if (err) {
       return c.json({ error: err }, 400);
+    }
+
+    const fields = c.req.query("fields");
+    if (fields !== undefined && fields !== "" && fields !== "categories") {
+      return c.json({ error: `Invalid fields: '${fields}' (expected categories)` }, 400);
     }
 
     const q = c.req.query("q");
@@ -206,16 +213,15 @@ export function registerV2Routes(app: Hono, deps: AppDeps): void {
     }
 
     try {
-      return c.json(
-        getLibrary(db, {
-          category: c.req.query("category"),
-          exclude: c.req.query("exclude"),
-          q,
-          sort,
-          tz,
-          config,
-        })
-      );
+      const result = getLibrary(db, {
+        category: c.req.query("category"),
+        exclude: c.req.query("exclude"),
+        q,
+        sort,
+        tz,
+        config,
+      });
+      return c.json(fields === "categories" ? { ...result, works: [] } : result);
     } catch (caught) {
       if (caught instanceof CategoryFilterValidationError) {
         return c.json({ error: caught.message }, 400);

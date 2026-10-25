@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useState } from "preact/hooks";
 import { rangeIsComplete } from "../lib/data-completeness";
 import { MostPlayed } from "../ui/MostPlayed";
 import {
@@ -16,7 +16,6 @@ import {
   type HeatmapDaysResult,
   type HeatmapHoursResult,
   type InsightsResult,
-  type LibraryWork,
   type SeriesPoint,
   type SeriesResult,
   type YoutubeOverview,
@@ -90,6 +89,19 @@ export interface InsightsProps {
   initialYear?: string;
   /** @deprecated Insights "All" always includes YouTube and Music. */
   includeYoutubeInAll?: boolean;
+}
+
+/** The requests one Insights view waits on; all but `library` follow the range/filter. */
+type PendingRequest = "series" | "insights" | "hours" | "youtube" | "library";
+const RANGE_PENDING: readonly PendingRequest[] = ["series", "insights", "hours", "youtube"];
+
+function rangeKeyOf(range: { from: string; to: string; bucket: string }): string {
+  return `${range.bucket}:${range.from}:${range.to}`;
+}
+
+/** Dims a section whose data is from the previous filter while the new data loads. */
+function staleClass(stale: boolean): string | undefined {
+  return stale ? "ui-stale" : undefined;
 }
 
 const RANGE_TABS: ReadonlyArray<TabOption<InsightsRangePreset>> = [
@@ -456,10 +468,13 @@ export function Insights({
   );
 
   const [seriesData, setSeriesData] = useState<SeriesResult | null>(null);
+  // The range the series/YouTube data was fetched for: numbers from another range are
+  // not shown dimmed under the new range's labels, the section loads afresh instead.
+  const [seriesRangeKey, setSeriesRangeKey] = useState<string | null>(null);
+  const [youtubeRangeKey, setYoutubeRangeKey] = useState<string | null>(null);
   const [libraryCategories, setLibraryCategories] = useState<CategoryTotal[]>(
     []
   );
-  const [libraryWorks, setLibraryWorks] = useState<LibraryWork[]>([]);
   const [youtubeOverview, setYoutubeOverview] =
     useState<YoutubeOverview | null>(null);
   const [insightsData, setInsightsData] = useState<InsightsResult | null>(null);
@@ -469,7 +484,12 @@ export function Insights({
   const [heatmapHours, setHeatmapHours] = useState<HeatmapHoursResult | null>(
     null
   );
-  const [loading, setLoading] = useState(true);
+  // Requests still in flight. Each section renders as soon
+  // as its own response lands; until then it shows a skeleton (first load) or keeps the
+  // previous data dimmed (refresh), never zeros that look like real empty results.
+  const [pending, setPending] = useState<ReadonlySet<PendingRequest>>(
+    () => new Set([...RANGE_PENDING, "library"])
+  );
   const [error, setError] = useState<string | null>(null);
   const [, setOverrideTick] = useState(0);
 
@@ -490,74 +510,116 @@ export function Insights({
     [rangePreset, todayStr]
   );
 
-  useEffect(() => {
+  const settleRequest = <T,>(
+    key: PendingRequest,
+    load: Promise<T>,
+    apply: (value: T) => void,
+    isCancelled: () => boolean
+  ) => {
+    load
+      .then((value) => {
+        if (!isCancelled()) apply(value);
+      })
+      .catch((err) => {
+        if (!isCancelled()) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (isCancelled()) return;
+        setPending((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      });
+  };
+
+  // The server answers one request at a time, in arrival order. A layout effect sends the
+  // charts' requests before the passive effects of child cards (Most played, goals) and
+  // before the slow all-time library totals below.
+  useLayoutEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const isCancelled = () => cancelled;
+    const settle = <T,>(key: PendingRequest, load: Promise<T>, apply: (value: T) => void) =>
+      settleRequest(key, load, apply, isCancelled);
+    setPending((prev) => new Set([...RANGE_PENDING, ...(prev.has("library") ? ["library" as const] : [])]));
     setError(null);
 
     const filterParams = buildCategoryFilterParams(selectedCategories, "all");
+    const rangeKey = rangeKeyOf(resolvedRange);
 
-    const fetchSeries = getSeries({
-      bucket: resolvedRange.bucket,
-      from: resolvedRange.from,
-      to: resolvedRange.to,
-      category: filterParams.category,
-      exclude: filterParams.exclude,
-    }).catch(() =>
+    settle(
+      "series",
       getSeries({
         bucket: resolvedRange.bucket,
         from: resolvedRange.from,
         to: resolvedRange.to,
-      })
+        category: filterParams.category,
+        exclude: filterParams.exclude,
+      }).catch(() =>
+        getSeries({
+          bucket: resolvedRange.bucket,
+          from: resolvedRange.from,
+          to: resolvedRange.to,
+        })
+      ),
+      (res) => {
+        setSeriesData(res);
+        setSeriesRangeKey(rangeKey);
+      }
     );
 
-    const fetchHours = getHeatmapHours(String(heatmapYear), filterParams).catch(
-      () => getHeatmapHours(String(heatmapYear)).catch(() => null)
+    settle(
+      "insights",
+      getInsights(filterParams).catch(() => getInsights().catch(() => null)),
+      setInsightsData
     );
 
-    const fetchIns = getInsights(filterParams).catch(() =>
-      getInsights().catch(() => null)
+    settle(
+      "hours",
+      getHeatmapHours(String(heatmapYear), filterParams).catch(() =>
+        getHeatmapHours(String(heatmapYear)).catch(() => null)
+      ),
+      setHeatmapHours
     );
 
-    const fetchYt = getYoutubeOverview({
-      from: resolvedRange.from,
-      to: resolvedRange.to,
-    }).catch(() => null);
-
-    Promise.all([
-      fetchSeries,
-      getLibrary().catch(() => null),
-      fetchIns,
-      fetchHours,
-      fetchYt,
-    ])
-      .then(([seriesRes, libRes, insRes, hoursRes, ytRes]) => {
-        if (cancelled) return;
-        setSeriesData(seriesRes);
-        if (libRes?.categories) {
-          setLibraryCategories(libRes.categories);
-        }
-        if (libRes?.works) {
-          setLibraryWorks(libRes.works);
-        }
-        setInsightsData(insRes);
-        setHeatmapHours(hoursRes);
-        setYoutubeOverview(ytRes);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
-        setLoading(false);
-      });
+    settle(
+      "youtube",
+      getYoutubeOverview({
+        from: resolvedRange.from,
+        to: resolvedRange.to,
+      }).catch(() => null),
+      (res) => {
+        setYoutubeOverview(res);
+        setYoutubeRangeKey(rangeKey);
+      }
+    );
 
     return () => {
       cancelled = true;
     };
   }, [resolvedRange, selectedCategories, heatmapYear]);
 
-  // Fetch 52-week heatmap days whenever `heatmapYear` or category filter changes
+  // All-time category totals (chip hours, works per category) ignore the range and
+  // filter, so they load once, after everything else.
   useEffect(() => {
+    let cancelled = false;
+    settleRequest(
+      "library",
+      getLibrary({ fields: "categories" }).catch(() => null),
+      (libRes) => {
+        if (libRes?.categories) {
+          setLibraryCategories(libRes.categories);
+        }
+      },
+      () => cancelled
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch 52-week heatmap days whenever `heatmapYear` or category filter changes
+  useLayoutEffect(() => {
     let cancelled = false;
     const filterParams = buildCategoryFilterParams(selectedCategories, "all");
     getHeatmapDays(String(heatmapYear), filterParams)
@@ -649,8 +711,7 @@ export function Insights({
 
   // YouTube Insights data (with 404 fallback from libraryWorks)
   const effectiveYoutube = useMemo<YoutubeOverview>(() => {
-    const base =
-      youtubeOverview ?? buildYoutubeOverviewFromWorks(libraryWorks);
+    const base = youtubeOverview ?? buildYoutubeOverviewFromWorks([]);
     return {
       ...base,
       channels: (base.channels ?? []).map((ch) => ({
@@ -658,7 +719,7 @@ export function Insights({
         topic: getChannelTopicOverride(ch.channel, ch.topic),
       })),
     };
-  }, [youtubeOverview, libraryWorks]);
+  }, [youtubeOverview]);
 
   const youtubeTopicGroups = useMemo(
     () => groupYoutubeByTopic(effectiveYoutube).slice(0, 8),
@@ -682,13 +743,31 @@ export function Insights({
     );
   }, [effectiveYoutube]);
 
+  // `null` data with its request pending = first load (skeleton); data with its request
+  // pending = refresh (previous data, dimmed).
+  const rangeKey = rangeKeyOf(resolvedRange);
+  const seriesPending = pending.has("series");
+  const seriesFirstLoad = seriesPending && (seriesData === null || seriesRangeKey !== rangeKey);
+  const seriesStale = seriesPending && !seriesFirstLoad;
+  const insightsFirstLoad = insightsData === null && pending.has("insights");
+  const hoursFirstLoad = heatmapHours === null && pending.has("hours");
+  const youtubeFirstLoad =
+    pending.has("youtube") && (youtubeOverview === null || youtubeRangeKey !== rangeKey);
+  const daysFirstLoad = heatmapDays === null;
+  const daysStale = heatmapDays !== null && heatmapDays.year !== String(heatmapYear);
+  const statSkeleton = <Skeleton width="6ch" height="1.75rem" />;
+
   const streakOverall = insightsData?.streaks.overall;
   const onThisDayYears = insightsData?.on_this_day.years ?? [];
   const singleCategory =
     selectedCategories.length === 1 ? selectedCategories[0] : undefined;
 
   return (
-    <section class="page-container insights-page" aria-label="Insights">
+    <section
+      class="page-container insights-page"
+      aria-label="Insights"
+      aria-busy={pending.size > 0}
+    >
       <header class="page-header">
         <div class="page-header-titles">
           <h1>Insights</h1>
@@ -735,24 +814,36 @@ export function Insights({
 
       {/* Compact 3-Item KPI Strip with Sparklines */}
       <div class="insights-kpi-strip">
-        <Card padding="md">
+        <Card padding="md" class={staleClass(seriesStale)}>
           <Stat
             label={`Time (${resolvedRange.label})`}
-            value={formatMinutes(rangeTotalMinutes)}
+            value={seriesFirstLoad ? statSkeleton : formatMinutes(rangeTotalMinutes)}
             category={singleCategory}
             sparkline={
-              <Sparkline
-                values={bucketTotals}
-                category={singleCategory}
-                label={`Time trend (${resolvedRange.label})`}
-              />
+              seriesFirstLoad ? undefined : (
+                <Sparkline
+                  values={bucketTotals}
+                  category={singleCategory}
+                  label={`Time trend (${resolvedRange.label})`}
+                />
+              )
             }
             sublabel={`${resolvedRange.from} – ${resolvedRange.to}`}
           />
         </Card>
 
-        <Card padding="md">
-          {rangeIsComplete(resolvedRange.from) ? (
+        <Card padding="md" class={staleClass(seriesStale)}>
+          {seriesFirstLoad ? (
+            <Stat
+              label={
+                rangeIsComplete(resolvedRange.from)
+                  ? `Average per ${resolvedRange.bucket}`
+                  : `Active ${resolvedRange.bucket}s`
+              }
+              value={statSkeleton}
+              category={singleCategory}
+            />
+          ) : rangeIsComplete(resolvedRange.from) ? (
             <Stat
               label={`Average per ${resolvedRange.bucket}`}
               value={formatMinutes(avgPerBucket)}
@@ -779,13 +870,15 @@ export function Insights({
           )}
         </Card>
 
-        <Card padding="md">
+        <Card padding="md" class={staleClass(insightsData !== null && pending.has("insights"))}>
           <Stat
             label="Daily Streak"
             value={
-              streakOverall
-                ? `${formatDayCount(streakOverall.current)} current`
-                : "—"
+              insightsFirstLoad
+                ? statSkeleton
+                : streakOverall
+                  ? `${formatDayCount(streakOverall.current)} current`
+                  : "—"
             }
             sublabel={
               streakOverall
@@ -813,9 +906,10 @@ export function Insights({
         title={`Minutes by Category (${resolvedRange.label})`}
         subtitle={`Stacked by ${resolvedRange.bucket} — click any bar to inspect`}
       >
-        {loading && !seriesData ? (
+        {seriesFirstLoad ? (
           <Skeleton height={220} />
         ) : (
+          <div class={staleClass(seriesStale)}>
           <StackedSeriesChart
             points={points}
             bucketType={resolvedRange.bucket}
@@ -828,6 +922,7 @@ export function Insights({
               }
             }}
           />
+          </div>
         )}
       </Card>
 
@@ -838,16 +933,22 @@ export function Insights({
           title="Category Share"
           subtitle="Proportion of time and works across categories"
         >
-          <CategoryShareChart
-            categories={derivedCategoryTotals.filter((c) =>
-              matchesCategorySelection(c.category, selectedCategories, "all")
-            )}
-            selectedCategory={singleCategory ?? ""}
-            onSelectCategory={(cat) =>
-              setSelectedCategories(cat ? [cat] : [])
-            }
-            title="Category share"
-          />
+          {seriesFirstLoad ? (
+            <Skeleton height={220} />
+          ) : (
+            <div class={staleClass(seriesStale || pending.has("library"))}>
+              <CategoryShareChart
+                categories={derivedCategoryTotals.filter((c) =>
+                  matchesCategorySelection(c.category, selectedCategories, "all")
+                )}
+                selectedCategory={singleCategory ?? ""}
+                onSelectCategory={(cat) =>
+                  setSelectedCategories(cat ? [cat] : [])
+                }
+                title="Category share"
+              />
+            </div>
+          )}
         </Card>
 
         <Card
@@ -855,12 +956,18 @@ export function Insights({
           title="Hour × Weekday Punch Card"
           subtitle="When you watch, read, and listen across the week"
         >
-          <PunchCardChart
-            cells={heatmapHours?.cells ?? []}
-            unplacedCount={heatmapHours?.unplaced_count ?? 0}
-            unplacedMinutes={heatmapHours?.unplaced_minutes ?? 0}
-            title="Hour by weekday rhythm"
-          />
+          {hoursFirstLoad ? (
+            <Skeleton height={220} />
+          ) : (
+            <div class={staleClass(heatmapHours !== null && pending.has("hours"))}>
+              <PunchCardChart
+                cells={heatmapHours?.cells ?? []}
+                unplacedCount={heatmapHours?.unplaced_count ?? 0}
+                unplacedMinutes={heatmapHours?.unplaced_minutes ?? 0}
+                title="Hour by weekday rhythm"
+              />
+            </div>
+          )}
         </Card>
       </div>
 
@@ -870,14 +977,20 @@ export function Insights({
         title="YouTube — Topics & Top Channels"
         subtitle="Breakdown of YouTube watch time by topic and channel"
       >
-        {effectiveYoutube.total_minutes === 0 &&
+        {youtubeFirstLoad ? (
+          <Skeleton height={160} />
+        ) : effectiveYoutube.total_minutes === 0 &&
         youtubeTopicGroups.length === 0 &&
         youtubeTopChannels.length === 0 ? (
           <p class="ui-text-muted">
             No YouTube activity recorded in this period.
           </p>
         ) : (
-          <div class="yt-insights-stack">
+          <div
+            class={["yt-insights-stack", staleClass(pending.has("youtube"))]
+              .filter(Boolean)
+              .join(" ")}
+          >
             <div class="yt-insights-summary">
               <Stat
                 label="YouTube Time"
@@ -994,9 +1107,9 @@ export function Insights({
       {/* Ranked music/YouTube lists beside the small short-form total. */}
       <div class="insights-media-row">
         <MostPlayed categories={selectedCategories} />
-        <Card padding="md" title="Short-form time" subtitle="Daily time only — no archived videos">
-          <Stat label="Short-form" value={formatMinutes(points.reduce((sum, p) => sum + (p.minutes_by_category.shortform ?? 0), 0))} category="shortform"
-            sparkline={<Sparkline values={points.map((p) => p.minutes_by_category.shortform ?? 0)} category="shortform" label="Short-form time trend" />} />
+        <Card padding="md" title="Short-form time" subtitle="Daily time only — no archived videos" class={staleClass(seriesStale)}>
+          <Stat label="Short-form" value={seriesFirstLoad ? statSkeleton : formatMinutes(points.reduce((sum, p) => sum + (p.minutes_by_category.shortform ?? 0), 0))} category="shortform"
+            sparkline={seriesFirstLoad ? undefined : <Sparkline values={points.map((p) => p.minutes_by_category.shortform ?? 0)} category="shortform" label="Short-form time trend" />} />
         </Card>
       </div>
 
@@ -1034,13 +1147,19 @@ export function Insights({
           </div>
         }
       >
-        <HeatmapCalendarChart
-          year={heatmapYear}
-          days={heatmapDays?.days ?? []}
-          onSelectDay={(dateStr) => {
-            window.location.hash = `#/calendar?date=${dateStr}`;
-          }}
-        />
+        {daysFirstLoad ? (
+          <Skeleton height={160} />
+        ) : (
+          <div class={staleClass(daysStale)}>
+            <HeatmapCalendarChart
+              year={heatmapYear}
+              days={heatmapDays.days}
+              onSelectDay={(dateStr) => {
+                window.location.hash = `#/calendar?date=${dateStr}`;
+              }}
+            />
+          </div>
+        )}
       </Card>
 
       {/* Memories: On This Day + Annual Goals */}

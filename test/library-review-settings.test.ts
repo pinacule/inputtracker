@@ -231,6 +231,15 @@ describe("Library endpoints (GET /api/library, GET /api/library/work)", () => {
       ["Synthetic Essays Channel", 40, 2, "unknown", ["youtube"]],
     ]);
 
+    // `fields=categories` keeps the totals but sends no works.
+    const catsRes = await app.request("/api/library?fields=categories");
+    expect(catsRes.status).toBe(200);
+    const cats = (await catsRes.json()) as LibraryResult;
+    expect(cats.categories).toEqual(lib.categories);
+    expect(cats.total_minutes).toBe(lib.total_minutes);
+    expect(cats.works).toEqual([]);
+    expect((await app.request("/api/library?fields=works")).status).toBe(400);
+
     // Check YouTube channel work detail lists the individual videos in history
     const ytWork = lib.works.find((w) => w.category === "youtube")!;
     const ytDetailRes = await app.request(

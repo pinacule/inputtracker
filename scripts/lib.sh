@@ -8,17 +8,11 @@ CURRENT="$ORCH/current.json"
 REPORT="$REPO/MORNING_REPORT.md"
 mkdir -p "$ORCH"
 
-# Free opencode models only, in preference order (your decision 2026-10-17: no nebius/*).
+# opencode models via the AgentRouter proxy, in preference order (your decision 2026-10-20:
+# gpt-6-astra and gpt-6.1-sol only; still no nebius/*).
 OPENCODE_MODELS=(
-  opencode/deepseek-v4.1-flash-free
-  opencode/glm-5.3-flash-free
-  opencode/mimo-v2.6-flash-free
-  opencode/nemotron-3-ultra-free
-  opencode/longcat-2.5-preview-free
-  opencode/nemotron-3.5-super-vl-free
-  opencode/nemotron-3.5-lightning-free
-  opencode/beam-free
-  opencode/space-bunny-free
+  agentrouter-responses/gpt-6-astra
+  agentrouter-responses/gpt-6.1-sol
 )
 AGY_MODEL="gemini-3.8-flash-high"
 

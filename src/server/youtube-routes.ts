@@ -34,6 +34,7 @@ import {
   type ConsumptionEvent,
 } from "./aggregate.ts";
 import type { AppDeps } from "./app.ts";
+import { cachedUntilWrite } from "./db-version-cache.ts";
 import { dedupeConsumption } from "./dedup.ts";
 import { getWorkOverrides } from "./overrides.ts";
 import { normalizeForSearch } from "./search.ts";
@@ -678,28 +679,30 @@ function buildYoutubeDataset(
   const minWatchMinutes =
     opts.minWatchMinutes ?? getYoutubeMinWatchMinutesForDb(db);
 
-  const allRaw = getLatestConsumptionEvents(db);
-  const youtubeRaw = allRaw.filter((ev) => {
-    if (!CONSUMPTION_KINDS.has(ev.source_kind)) {
-      return false;
-    }
-    if (categoryOf(ev) !== "youtube") {
-      return false;
-    }
-    if ((from !== null || to !== null) && eventPrecision(ev) === "unknown") {
-      return false;
-    }
+  // The whole-archive scan depends on the database only: kept until it changes.
+  const allYoutube = cachedUntilWrite(db, `youtube-raw\u0000${tz}`, () =>
+    getLatestConsumptionEvents(db)
+      .filter((ev) => CONSUMPTION_KINDS.has(ev.source_kind) && categoryOf(ev) === "youtube")
+      .map((ev) => Object.freeze({
+        ev: Object.freeze(ev),
+        // `null` for unknown precision: such rows never match a date range.
+        localDate: eventPrecision(ev) === "unknown" ? null : formatLocalParts(ev.started_at, tz).date,
+      })));
+  const youtubeRaw: ConsumptionEvent[] = [];
+  for (const { ev, localDate } of allYoutube) {
     if (from !== null || to !== null) {
-      const localDate = formatLocalParts(ev.started_at, tz).date;
+      if (localDate === null) {
+        continue;
+      }
       if (from !== null && localDate < from) {
-        return false;
+        continue;
       }
       if (to !== null && localDate > to) {
-        return false;
+        continue;
       }
     }
-    return true;
-  });
+    youtubeRaw.push(ev);
+  }
 
   const deduped = dedupeConsumption(youtubeRaw, tz);
   const { kept, shortVideoDaysHidden } = partitionYoutubeEvents(deduped, {

@@ -17,6 +17,7 @@
 import type { Database } from "bun:sqlite";
 import type { Config, YoutubeConfig } from "../core/config.ts";
 import type { YoutubeVideoRow } from "../core/schema.ts";
+import { cachedUntilWrite } from "./db-version-cache.ts";
 import { dedupeShortform } from "./shortform.ts";
 import {
   formatLocalParts,
@@ -103,24 +104,29 @@ export function isMeasuredYoutubeVideoEvent(event: ConsumptionEvent): boolean {
   );
 }
 
-/** Read cached enrichment rows from `youtube_videos_latest` (no network). */
+/**
+ * Read cached enrichment rows from `youtube_videos_latest` (no network). Several reads per
+ * request need the whole table, so it is kept until the database changes; rows are frozen.
+ */
 export function readYoutubeEnrichmentByVideoId(
   db: Database
-): Map<string, YoutubeVideoRow> {
-  const map = new Map<string, YoutubeVideoRow>();
-  try {
-    const rows = db
-      .query<YoutubeVideoRow, []>(
-        "SELECT * FROM youtube_videos_latest;"
-      )
-      .all();
-    for (const row of rows) {
-      map.set(row.video_id, row);
+): ReadonlyMap<string, Readonly<YoutubeVideoRow>> {
+  return cachedUntilWrite(db, "youtube-enrichment", () => {
+    const map = new Map<string, Readonly<YoutubeVideoRow>>();
+    try {
+      const rows = db
+        .query<YoutubeVideoRow, []>(
+          "SELECT * FROM youtube_videos_latest;"
+        )
+        .all();
+      for (const row of rows) {
+        map.set(row.video_id, Object.freeze(row));
+      }
+    } catch {
+      // Table/view may not exist on a pre-v7 read-only snapshot.
     }
-  } catch {
-    // Table/view may not exist on a pre-v7 read-only snapshot.
-  }
-  return map;
+    return map;
+  });
 }
 
 /**

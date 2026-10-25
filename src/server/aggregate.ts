@@ -448,7 +448,33 @@ export interface LocalTimeParts {
   localTime: string; // "HH:mm"
 }
 
+/**
+ * Every read re-buckets the same archive timestamps, and `formatToParts` dominates a cold
+ * page load on a small server CPU, so results are memoised per timezone. They depend only
+ * on the input, are frozen, and the memo is dropped wholesale once it grows large.
+ */
+const localPartsCache = new Map<string, Map<string, Readonly<LocalTimeParts>>>();
+const LOCAL_PARTS_CACHE_MAX = 200_000;
+
 export function formatLocalParts(iso: string, tz: string): LocalTimeParts {
+  let byIso = localPartsCache.get(tz);
+  if (byIso === undefined) {
+    byIso = new Map();
+    localPartsCache.set(tz, byIso);
+  }
+  const cached = byIso.get(iso);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const parts = Object.freeze(computeLocalParts(iso, tz));
+  if (byIso.size >= LOCAL_PARTS_CACHE_MAX) {
+    byIso.clear();
+  }
+  byIso.set(iso, parts);
+  return parts;
+}
+
+function computeLocalParts(iso: string, tz: string): LocalTimeParts {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
     throw new Error(`Invalid timestamp: "${iso}"`);

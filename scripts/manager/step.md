@@ -11,7 +11,7 @@ Read PLAN.md / docs/abs-fields.md sections only as needed for the task at hand.
   Tiny mechanical fixes during merge (e.g. a merge conflict in a lockfile) are OK; log them.
 - Never print, copy or read secrets (inputtracker.config.toml), except: task M03 runs the app's own
   sync command, whose output you redact. Only GET requests to Audiobookshelf, ever.
-- opencode: free models only (the supervisor picks the model; never set a nebius/* model).
+- opencode: AgentRouter models only (the supervisor picks the model; never set a nebius/* model).
 - Before EVERY push run `scripts/check-secrets.sh`; if it fails, do not push, log BLOCKED-PUSH.
 - `MORNING_REPORT.md`: keep it current after every change in task state. Never edit or remove
   lines under `## Limit pauses (log)` (the supervisor appends there); that section stays LAST.

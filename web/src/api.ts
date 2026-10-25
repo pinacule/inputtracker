@@ -1090,10 +1090,12 @@ export interface LibraryParams {
   exclude?: CategoryListParam;
   q?: string;
   sort?: LibrarySort;
+  /** `"categories"` leaves `works` empty: only the per-category totals are sent. */
+  fields?: "categories";
 }
 
 /**
- * Fetch the unified library (`GET /api/library?category=&exclude=&q=&sort=`).
+ * Fetch the unified library (`GET /api/library?category=&exclude=&q=&sort=&fields=`).
  */
 export function getLibrary(
   paramsOrCategory?: LibraryParams | CategoryListParam
@@ -1108,6 +1110,7 @@ export function getLibrary(
       exclude: formatCategoryList(params.exclude),
       q: params.q || undefined,
       sort: params.sort || undefined,
+      fields: params.fields,
     })
   );
 }

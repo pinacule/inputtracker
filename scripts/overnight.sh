@@ -20,7 +20,7 @@ worker_until() {  # epoch until which a worker (or opencode model) is limited
   esac
 }
 
-opencode_model() {  # first free model not currently limited
+opencode_model() {  # first model not currently limited
   for m in "${OPENCODE_MODELS[@]}"; do
     [ "$(worker_until opencode "$m")" -le "$(now)" ] && { echo "$m"; return 0; }
   done

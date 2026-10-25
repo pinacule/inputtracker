@@ -1259,6 +1259,32 @@ describe("Topic precedence and YouTube endpoints (GET /api/youtube, GET /api/you
       { bucket: "2026-10-12", minutes_by_category: { youtube: 15 } },
       { bucket: "2026-10-13", minutes_by_category: { youtube: 10 } },
     ]);
+
+    // The overview's cached archive scan and enrichment map refresh after a write.
+    seedEvents(db, [
+      {
+        source: "youtube",
+        source_kind: "aw_play",
+        source_id: `${VID_D}:2026-10-12T15:00:00.000Z`,
+        external_ids: { youtube_video: VID_D },
+        media_type: "video",
+        title: "Mystery Vlog",
+        parent_title: null,
+        started_at: "2026-10-12T15:00:00.000Z",
+        duration_seconds: 480, // 8m
+      },
+    ]);
+    db.run(
+      `INSERT INTO youtube_videos (video_id, title, channel, channel_id, genre, status, http_status, fetched_at)
+       VALUES (?, 'Mystery Vlog', 'Renamed Channel', 'UCuncat', NULL, 'ok', 200, '2026-10-19T10:00:00.000Z');`,
+      [VID_D]
+    );
+    const afterWrite = (await (
+      await app.request("/api/youtube?from=2026-10-11&to=2026-10-13")
+    ).json()) as YoutubeOverview;
+    expect(afterWrite.total_minutes).toBe(35 + 8);
+    expect(afterWrite.videos).toBe(4);
+    expect(afterWrite.channels.map((c) => c.channel)).toContain("Renamed Channel");
   });
 
   test("GET /api/youtube/videos supports channel, topic, from, to, q filters, local thumbnail URLs, and limit/offset paging", async () => {

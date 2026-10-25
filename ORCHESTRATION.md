@@ -1,7 +1,7 @@
 # Orchestration
 
 Manager = Claude Code (plans, reviews, merges; writes no feature code).
-Workers = Antigravity (`gemini-3.8-flash-high`) and opencode (free models first). Commands: WORKERS.md.
+Workers = Antigravity (`gemini-3.8-flash-high`) and opencode (`agentrouter-responses/gpt-6-astra`, then `agentrouter-responses/gpt-6.1-sol`). Commands: WORKERS.md.
 
 ## Picking a worker
 
@@ -9,7 +9,7 @@ Default routing (logged per task in TASKS.md and MORNING_REPORT.md):
 
 - **Antigravity**: logic where correctness matters (schema/hash, ABS client + mapping, API
   aggregation, calendar/heat map components). Stronger model, quota-limited, so spend it on hard tasks.
-- **opencode (free)**: boilerplate and well-specified tasks (scaffold, config loader, export/import,
+- **opencode (AgentRouter)**: boilerplate and well-specified tasks (scaffold, config loader, export/import,
   CLI wiring, PWA files, systemd units, docs).
 - If the preferred worker is limited, the other one takes the task when it can do it.
 
@@ -69,7 +69,7 @@ State per worker in `.orchestrator/state.json` (gitignored): `available | limite
   is too low" → read `antigravity -p /usage --output-format json`; `until` = the Gemini bucket's
   `reset_time` (5-hour or weekly) when remaining is ~0, else now + 15 min.
 - **opencode**: `error` event matching 429/rate/quota/limit/exhausted → first switch to the next
-  free model in the list (models have separate limits; never a paid `nebius/*` model); if all free models are limited,
+  model in the list (models have separate limits; never a paid `nebius/*` model); if all models are limited,
   `until` = now + 15 min.
 - **Probe** when `until` passes: the PONG prompt from WORKERS.md. Still limited → back off
   15 → 30 → 60 min (cap 60). Recovered → resume.
@@ -116,7 +116,7 @@ Serial: one task at a time (simpler, and merges never race). Log: `.orchestrator
 ## Worker permissions
 
 Decided 2026-10-17: Antigravity may act autonomously but only inside the project folder;
-opencode free models only.
+opencode: AgentRouter models only (gpt-6-astra, gpt-6.1-sol).
 
 - **Folder limit is enforced by bubblewrap**, not by the CLIs: every worker runs in a `bwrap`
   jail where `/` is read-only and only its own worktree `.worktrees/<task>` (plus the CLI's

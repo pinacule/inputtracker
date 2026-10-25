@@ -7,7 +7,7 @@
 
 - ✅ bun 1.4.2, node 26, git 2.55, gh 2.102 (logged in as `pinacule`), tmux 3.7c, sqlite3, jq, yt-dlp, uv/python
 - ✅ Antigravity CLI 1.4.0 signed in, `gemini-3.8-flash-high` available, quota 100%
-- ✅ opencode 2.0.31, free models working
+- ✅ opencode 2.0.31, AgentRouter models (gpt-6-astra, gpt-6.1-sol)
 - ✅ Tailscale up; phone `motorola-edge-40-pro` is on the tailnet with this PC (`pinpc`)
 - ✅ Private repo created: https://github.com/pinacule/inputtracker
 - ✅ gitleaks 8.30.1 installed globally via mise (used by the pre-push hook)
@@ -19,7 +19,7 @@
   (mode 600). Verified 2026-10-17 with one GET → HTTP 200, 302 sessions.
 - [x] **Worker permissions**: Antigravity autonomous but limited to the project folder
   (enforced with bubblewrap; `--mode auto` isn't available on your account, default headless
-  mode works). opencode: free models only, no Nebius.
+  mode works). opencode: AgentRouter gpt-6-astra and gpt-6.1-sol only, no Nebius.
 - [x] **Phone**: `tailscale serve` running, https://pinpc.taild61ed4.ts.net/ → port 8787.
 - [ ] **Accept/reject extra features** F1–F15 in PLAN.md (v1 builds none of them).
 - [ ] **Keep the PC awake overnight** (no suspend) and stay logged in so tmux + workers keep running.
