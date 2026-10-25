@@ -27,6 +27,7 @@ import {
 import { QuickRatingPill } from "../QuickRating";
 import { HomeWorkThumb } from "./HomeWorkThumb";
 import { CategoryLegend } from "./CategoryLegend";
+import { DayMap } from "./DayMap";
 import { HomeTimeDisplay } from "./HomeTimeDisplay";
 import { NormComparison } from "./NormComparison";
 
@@ -315,6 +316,9 @@ export function DayDetailPanel({
           )}
         </div>
       ) : (
+        <>
+        {/* Treemap view of the same entries; skins opt in via CSS (Dot shows it instead of the list). */}
+        <DayMap model={model} />
         <ul class="home-day-list">
           {model.shortformMinutes > 0 && (
              <li class="home-day-row home-day-row--shortform">
@@ -539,6 +543,7 @@ export function DayDetailPanel({
             </li>
           )}
         </ul>
+        </>
       )}
       </div>
     </section>

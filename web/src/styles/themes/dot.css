@@ -181,3 +181,7 @@
 :root[data-theme="dot"] .home-skyline-dot { width: 6px; height: 6px; border-radius: 2px; background: var(--bg-muted); }
 :root[data-theme="dot"] .home-skyline-col--selected::after { width: 8px; height: 8px; border-radius: 2px; bottom: 12px; }
 :root[data-theme="dot"] .home-ledger-track { height: 8px; border-radius: 4px; }
+
+/* Dot shows the day as a map of tiles instead of the row list. */
+:root[data-theme="dot"] .home-day-map { display: block; }
+:root[data-theme="dot"] :is(.home-day-list, .home-day-cat-strip) { display: none; }

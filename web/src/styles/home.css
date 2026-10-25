@@ -271,3 +271,19 @@
 .home-legend-dot { width: 8px; height: 8px; border-radius: var(--radius-full, 999px); flex-shrink: 0; }
 .home-legend-name { color: var(--text-primary); }
 .home-week-card .home-legend { margin-top: 18px; }
+
+/* Day map (treemap of the day's entries). Hidden unless a skin opts in. */
+.home-day-map { display: none; position: relative; margin: 8px -4px 0; min-width: 0; }
+.home-map-tile { position: absolute; box-sizing: border-box; }
+.home-map-tile-inner { position: relative; width: 100%; height: 100%; box-sizing: border-box; overflow: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface-raised); }
+.home-map-cell { position: absolute; box-sizing: border-box; padding: 1px; color: var(--text-primary); text-decoration: none; }
+.home-map-fill { display: block; width: 100%; height: 100%; border-radius: var(--radius-sm); background: var(--map-cat); opacity: 0.11; transition: opacity var(--duration-fast); }
+.home-map-cell:hover .home-map-fill, .home-map-cell:focus-visible .home-map-fill { opacity: 0.28; }
+.home-map-cell:focus-visible { outline: var(--focus-width) var(--focus-style) var(--focus-ring); outline-offset: -2px; border-radius: var(--radius-sm); }
+.home-map-name { position: absolute; left: 10px; right: 8px; bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 0.75rem; font-weight: 500; pointer-events: none; }
+.home-map-name b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.home-map-name > span { flex-shrink: 0; font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-secondary); }
+.home-map-head { position: absolute; left: 12px; top: 12px; overflow: hidden; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.home-map-label { display: flex; align-items: center; gap: 6px; min-width: 0; font: 400 0.6875rem/1.2 var(--font-mono); letter-spacing: var(--label-tracking); text-transform: uppercase; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-map-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; background: var(--map-cat); }
+.home-map-time { font-family: var(--font-display); font-weight: 900; line-height: 0.95; white-space: nowrap; color: var(--text-primary); }
