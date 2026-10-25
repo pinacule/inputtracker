@@ -104,7 +104,7 @@
 .app-shell--editorial :is(
   .ui-cat-share-row, .ui-cat-share-track, .ui-cat-share-fill, .ui-punchcard-peak-chip,
   .yt-insights-bar-row, .yt-bar-track, .yt-bar-fill, .mp-segmented, .mp-seg, .mp-bar,
-  .insights-otd-card, .review-work-card, .settings-source-row, .settings-run-row, .settings-provider-row
+  .insights-otd-card, .settings-source-row, .settings-run-row, .settings-provider-row
 ) { border-radius: 0; }
 /* Theme tiles in Settings keep their own shapes: they preview other skins. */
 .app-shell--editorial .ui-cat-pill { background: none; border-radius: 0; padding-left: 0; }
