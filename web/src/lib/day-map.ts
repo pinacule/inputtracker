@@ -14,6 +14,8 @@ export interface DayMapItem {
   readonly key: string;
   readonly title: string;
   readonly minutes: number;
+  /** Second line for the tooltip: episodes, artist, channel. */
+  readonly detail: string | null;
   /** Library link for the work, or null when there is nothing to open. */
   readonly href: string | null;
   readonly workKey: string | null;
@@ -51,6 +53,7 @@ export function buildDayMapGroups(model: HomeDayDetailModel): DayMapGroup[] {
     push(row.category, {
       key: row.key,
       title: row.title,
+      detail: row.subtitle,
       minutes: row.totalSeconds > 0 ? row.totalSeconds / 60 : row.totalMinutes,
       href: workHref(row.workKey),
       workKey: row.workKey,
@@ -74,6 +77,7 @@ export function buildDayMapGroups(model: HomeDayDetailModel): DayMapGroup[] {
       push("youtube", {
         key: `yt:${v.id}`,
         title: v.title,
+        detail: v.channel || null,
         minutes: v.durationSeconds / 60,
         href: workHref(v.workKey),
         workKey: v.workKey,
@@ -94,6 +98,7 @@ export function buildDayMapGroups(model: HomeDayDetailModel): DayMapGroup[] {
     push("music", {
       key: `music:${t.id}`,
       title: t.title,
+      detail: t.artist,
       minutes: t.durationSeconds / 60,
       href: workHref(t.workKey),
       workKey: t.workKey,
@@ -111,6 +116,7 @@ export function buildDayMapGroups(model: HomeDayDetailModel): DayMapGroup[] {
     push("shortform", {
       key: "shortform",
       title: "Short-form",
+      detail: null,
       minutes: model.shortformMinutes,
       href: null,
       workKey: null,
@@ -118,7 +124,8 @@ export function buildDayMapGroups(model: HomeDayDetailModel): DayMapGroup[] {
     });
   }
   const groups: DayMapGroup[] = [];
-  for (const [category, items] of byCat) {
+  for (const [category, raw] of byCat) {
+    const items = mergeEpisodes(raw);
     items.sort((a, b) => b.minutes - a.minutes || a.title.localeCompare(b.title));
     groups.push({ category, items, minutes: items.reduce((s, i) => s + i.minutes, 0) });
   }
@@ -173,4 +180,55 @@ export function compactMinutes(minutes: number): string {
   const m = Math.max(0, Math.round(minutes));
   if (m < 60) return `${m}m`;
   return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+}
+
+/** Trailing episode markers: "S1E12", "S01 E03", "#3", "Ep 4", "Episode 4". */
+const EPISODE_MARK = /^(.*?\S)[\s\-–—:·|]+(S\d{1,2}\s?E\d{1,4}|#\d{1,5}|Ep(?:isode)?\.?\s?\d{1,4})\s*$/i;
+
+export function splitEpisodeTitle(title: string): { show: string; mark: string } | null {
+  const m = EPISODE_MARK.exec(title.trim());
+  if (!m || !m[1] || !m[2]) return null;
+  const show = m[1].trim();
+  const raw = m[2].replace(/\s+/g, "").toUpperCase();
+  const mark = raw.startsWith("EP") ? `E${raw.replace(/\D/g, "")}` : raw;
+  return show ? { show, mark } : null;
+}
+
+/**
+ * Episodes of one show watched on the same day become one block ("Harbor
+ * Lights", "S1E10 · S1E12"). Real Simkl episodes already arrive grouped under
+ * the show; this covers titles typed with the episode in them.
+ */
+export function mergeEpisodes(items: readonly DayMapItem[]): DayMapItem[] {
+  const byShow = new Map<string, { show: string; parts: { item: DayMapItem; mark: string }[] }>();
+  const out: DayMapItem[] = [];
+  for (const item of items) {
+    const ep = splitEpisodeTitle(item.title);
+    if (!ep) {
+      out.push(item);
+      continue;
+    }
+    const key = ep.show.toLowerCase();
+    const entry = byShow.get(key) ?? { show: ep.show, parts: [] };
+    entry.parts.push({ item, mark: ep.mark });
+    byShow.set(key, entry);
+  }
+  for (const { show, parts } of byShow.values()) {
+    if (parts.length === 1) {
+      out.push(parts[0]!.item);
+      continue;
+    }
+    parts.sort((a, b) => a.mark.localeCompare(b.mark, undefined, { numeric: true }));
+    const first = parts[0]!.item;
+    out.push({
+      key: `show:${show.toLowerCase()}`,
+      title: show,
+      detail: `${parts.map((p) => p.mark).join(" · ")} · ${parts.length} episodes`,
+      minutes: parts.reduce((sum, p) => sum + p.item.minutes, 0),
+      href: first.href,
+      workKey: first.workKey,
+      menu: null,
+    });
+  }
+  return out;
 }

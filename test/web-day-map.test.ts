@@ -3,6 +3,7 @@ import {
   buildDayMapGroups,
   compactMinutes,
   layoutTreemap,
+  splitEpisodeTitle,
 } from "../web/src/lib/day-map.ts";
 import type { HomeDayDetailModel, HomeDayWorkRow } from "../web/src/lib/home.ts";
 
@@ -60,8 +61,12 @@ describe("day map", () => {
     expect(groups.map((g) => g.category)).toEqual(["film", "series", "youtube", "shortform"]);
     const series = groups[1]!;
     expect(series.minutes).toBe(69);
-    expect(series.items.map((i) => i.title)).toEqual(["Fake Show S1E3", "Fake Show S1E2"]);
-    expect(series.items[0]!.href).toBe("#/library?work=series%3Afake%20show%20s1e3");
+    // Two episodes of one show merge into a single block.
+    expect(series.items).toHaveLength(1);
+    expect(series.items[0]!.title).toBe("Fake Show");
+    expect(series.items[0]!.detail).toBe("S1E2 · S1E3 · 2 episodes");
+    expect(series.items[0]!.minutes).toBe(69);
+    expect(series.items[0]!.href).toBe("#/library?work=series%3Afake%20show%20s1e2");
     expect(groups[2]!.items[0]!.menu?.kind).toBe("youtube-video");
     const short = groups[3]!.items[0]!;
     expect(short.href).toBeNull();
@@ -92,6 +97,14 @@ describe("day map", () => {
         expect(overlapX <= 1e-6 || overlapY <= 1e-6).toBe(true);
       }
     }
+  });
+
+  test("episode markers split off show names; plain titles are left alone", () => {
+    expect(splitEpisodeTitle("Fake Show S1E12")).toEqual({ show: "Fake Show", mark: "S1E12" });
+    expect(splitEpisodeTitle("Fake Cast #3")).toEqual({ show: "Fake Cast", mark: "#3" });
+    expect(splitEpisodeTitle("Fake Show - Episode 4")).toEqual({ show: "Fake Show", mark: "E4" });
+    expect(splitEpisodeTitle("Step 4")).toBeNull();
+    expect(splitEpisodeTitle("Fake Film")).toBeNull();
   });
 
   test("treemap handles one item, drops zero weights, and compact times read well", () => {
