@@ -3,6 +3,7 @@ import {
   buildShareLines,
   formatChange,
   formatHours,
+  isMilestoneCategory,
   isYoutubeOnly,
   monthLabel,
   weekdayLabel,
@@ -185,5 +186,18 @@ describe("buildShareLines", () => {
     expect(lines).toContain("0 active days");
     expect(lines).toContain("Longest streak: none");
     expect(lines).toHaveLength(6);
+  });
+});
+
+describe("isMilestoneCategory", () => {
+  test("books, films, series, anime and audiobooks have a start and finish", () => {
+    for (const c of ["book", "film", "series", "anime", "audiobook"] as const) {
+      expect(isMilestoneCategory(c)).toBe(true);
+    }
+  });
+  test("music, YouTube and other plays stay out of Finished/Started", () => {
+    for (const c of ["music", "youtube", "podcast", "shortform", "other"] as const) {
+      expect(isMilestoneCategory(c)).toBe(false);
+    }
   });
 });

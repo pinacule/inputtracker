@@ -3,7 +3,7 @@
  * safe to run under Bun or in the browser.
  */
 
-import type { YearReview } from "../api";
+import type { Category, YearReview } from "../api";
 
 const MONTH_LABELS = [
   "Jan",
@@ -78,6 +78,16 @@ export function weekdayLabel(weekday: number): string {
 export function isYoutubeOnly(review: YearReview): boolean {
   const sources = Object.keys(review.by_source);
   return sources.length === 1 && sources[0] === "youtube";
+}
+
+const MILESTONE_CATEGORIES: ReadonlySet<Category> = new Set(["book", "film", "series", "anime", "audiobook"]);
+
+/**
+ * Finished/Started lists show only works with a real start and end: books, films,
+ * series, anime and audiobooks. A first play of a song or video would flood them.
+ */
+export function isMilestoneCategory(category: Category): boolean {
+  return MILESTONE_CATEGORIES.has(category);
 }
 
 /**

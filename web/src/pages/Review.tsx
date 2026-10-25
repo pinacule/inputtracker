@@ -25,7 +25,7 @@ import {
   applyWorkOverridesToList,
   subscribeWorkEdits,
 } from "../lib/work-edits";
-import { formatChange, formatHours } from "../lib/year-review";
+import { formatChange, formatHours, isMilestoneCategory } from "../lib/year-review";
 import {
   AddIcon,
   Badge,
@@ -315,8 +315,8 @@ export function Review({
       categories,
       days,
       top_works: filterWorks(monthData.top_works ?? []),
-      started_works: filterWorks(monthData.started_works ?? []),
-      finished_works: filterWorks(monthData.finished_works ?? []),
+      started_works: filterWorks(monthData.started_works ?? []).filter((w) => isMilestoneCategory(w.category)),
+      finished_works: filterWorks(monthData.finished_works ?? []).filter((w) => isMilestoneCategory(w.category)),
     };
   }, [monthData, selectedCategories, overrideTick]);
 
@@ -353,7 +353,7 @@ export function Review({
       categories,
       months,
       top_works: filterWorks(yearData.top_works ?? []),
-      finished_works: filterWorks(yearData.finished_works ?? []),
+      finished_works: filterWorks(yearData.finished_works ?? []).filter((w) => isMilestoneCategory(w.category)),
     };
   }, [yearData, selectedCategories, overrideTick]);
 
