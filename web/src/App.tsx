@@ -261,7 +261,7 @@ export function App() {
 
   return (
     <div
-      class={loc.route === "calendar" && ["espresso", "midnight", "forest", "obsidian", "plum"].includes(theme)
+      class={["espresso", "midnight", "forest", "obsidian", "plum"].includes(theme)
         ? "app-shell app-shell--editorial" : "app-shell"}
     >
       {/* Desktop Left Sidebar */}

@@ -523,7 +523,7 @@
   color: var(--text-secondary);
 }
 
-/* D1 Editorial shell — scoped to Calendar; other pages keep their own system. */
+/* D1 Editorial shell on every page; page-level rules live in editorial.css. */
 .app-shell--editorial {
   --bg-canvas: var(--editorial-canvas);
   --bg-surface: var(--editorial-surface);

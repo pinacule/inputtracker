@@ -21,8 +21,8 @@ each step and the rollback.
 
 ```sh
 VM=input-tracker                                  # ssh alias (user ubuntu)
-VM_URL=https://input-tracker.taild61ed4.ts.net    # its Tailscale name
-ABS_URL=http://pinpc.taild61ed4.ts.net:13378      # ABS stays on the PC
+VM_URL=https://<vm-name>.<your-tailnet>.ts.net  # its Tailscale name
+ABS_URL=http://<pc-name>.<your-tailnet>.ts.net:13378  # where ABS runs
 
 # 1. VM packages and Bun (same version as the PC; Bun has x86_64 and arm64 builds)
 BUNV=$(bun --version)

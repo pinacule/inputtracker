@@ -1,0 +1,111 @@
+/**
+ * Editorial pages: the Calendar's print language carried to every other page
+ * (Library, Insights, Review, work pages, Settings) in the five Editorial themes.
+ * Square corners, hairline rules, no fills or shadows; the accent marks the
+ * active choice. Wallpaper skins (hermes, workbench, cwm, signal) never get
+ * .app-shell--editorial, so they keep their own frames.
+ */
+.app-shell--editorial .page-container {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.app-shell--editorial .page-header { border-bottom-color: var(--border-strong); padding-bottom: 20px; }
+.app-shell--editorial .page-header h1 {
+  font-size: clamp(2.4rem, 5vw, 3.75rem);
+  font-weight: 400;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+.app-shell--editorial :is(h2, h3) { font-weight: 400; letter-spacing: -0.03em; }
+
+.app-shell--editorial .ui-btn { border-radius: 0; box-shadow: none; }
+.app-shell--editorial :is(.ui-btn--primary, .ui-btn--secondary) {
+  background: none;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.app-shell--editorial :is(.ui-btn--primary, .ui-btn--secondary):hover:not(:disabled) {
+  background: none;
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.app-shell--editorial .ui-card {
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--border-default);
+  border-radius: 0;
+  box-shadow: none;
+}
+.app-shell--editorial .ui-card--pad-md,
+.app-shell--editorial .ui-card--pad-lg { padding-left: 0; padding-right: 0; }
+.app-shell--editorial .ui-card--interactive:hover { transform: none; box-shadow: none; border-color: var(--border-strong); }
+
+.app-shell--editorial :is(.ui-stat-label, .ui-card-subtitle, .page-eyebrow) {
+  font-family: var(--home-label-font, var(--font-body));
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.app-shell--editorial .ui-stat-value { font-family: var(--font-numbers, var(--font-display)); font-weight: 400; letter-spacing: -0.04em; }
+
+/* Tabs read as a typeset index: underline for the current one. */
+.app-shell--editorial .ui-tabs {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border-default);
+  border-radius: 0;
+  padding: 0;
+  gap: 20px;
+}
+.app-shell--editorial .ui-tab {
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-size: 0.8125rem;
+}
+.app-shell--editorial .ui-tab--active {
+  background: none;
+  color: var(--text-primary);
+  box-shadow: inset 0 -1px 0 var(--accent-primary);
+}
+
+.app-shell--editorial :is(.ui-tabs--pills .ui-tab, .ui-cat-chip) {
+  background: none;
+  border: 1px solid var(--border-default);
+  border-radius: 0;
+  padding: 0.32rem 0.75rem;
+}
+.app-shell--editorial .ui-tabs--pills { border-bottom: 0; gap: 8px; }
+.app-shell--editorial :is(.ui-tabs--pills .ui-tab, .ui-cat-chip):hover:not(:disabled) {
+  background: none;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.app-shell--editorial :is(.ui-tabs--pills .ui-tab--active, .ui-cat-chip--active) {
+  background: none;
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  box-shadow: none;
+}
+
+.app-shell--editorial .ui-input {
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.app-shell--editorial :is(.ui-badge, .ui-progress-track, .ui-progress-fill, .ui-quick-rate-pill, .library-work-planned-badge, .library-archive-entry-row) { border-radius: 0; }
+.app-shell--editorial :is(
+  .ui-cat-share-row, .ui-cat-share-track, .ui-cat-share-fill, .ui-punchcard-peak-chip,
+  .yt-insights-bar-row, .yt-bar-track, .yt-bar-fill, .mp-segmented, .mp-seg, .mp-bar,
+  .insights-otd-card, .review-work-card, .settings-source-row, .settings-run-row, .settings-provider-row
+) { border-radius: 0; }
+/* Theme tiles in Settings keep their own shapes: they preview other skins. */
+.app-shell--editorial .ui-cat-pill { background: none; border-radius: 0; padding-left: 0; }
+.app-shell--editorial .ui-cover { border-radius: 2px; box-shadow: none; }
