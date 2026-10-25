@@ -220,3 +220,24 @@
   :root[data-theme="dot"] .home-time--month { padding-left: 14px; }
   :root[data-theme="dot"] .home-skyline-well { height: 120px; }
 }
+
+/* "Back to today" reads as a button, not a stray word. */
+:root[data-theme="dot"] .home-month-nav { align-items: center; }
+:root[data-theme="dot"] .home-today-btn { min-height: 0; padding: 8px 14px; border-radius: var(--radius-full); background: var(--accent-primary); color: var(--text-on-accent); font: 700 0.75rem/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+:root[data-theme="dot"] .home-today-btn:hover { background: var(--accent-primary-hover); }
+
+/* Masthead and category filter become one card; the filter is a slim row. */
+:root[data-theme="dot"] .home-topbar { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 0; }
+:root[data-theme="dot"] .home-category-index { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; padding-top: 0; padding-bottom: 0; }
+:root[data-theme="dot"] .home-category-index summary { min-height: 0; padding: 12px 0 16px; border-top: 1px dashed var(--border-default); }
+:root[data-theme="dot"] .home-category-index[open] summary { padding-bottom: 8px; }
+
+/* The week total sits in the day card's empty space, under a rule; the week card keeps only the bars. */
+:root[data-theme="dot"] .home-day-week-total { display: flex; flex-direction: column; gap: 10px; margin-top: auto; padding-top: 18px; border-top: 1px dashed var(--border-default); }
+:root[data-theme="dot"] .home-time--week-side { font-family: var(--font-serif); font-weight: 900; font-size: clamp(2rem, 3.4vw, 3rem); }
+:root[data-theme="dot"] .home-week-summary { display: none; }
+:root[data-theme="dot"] .home-week-card .home-week-bars { margin-top: 12px; }
+@media (max-width: 1023px) {
+  :root[data-theme="dot"] .home-day-week-total { display: none; }
+  :root[data-theme="dot"] .home-week-summary { display: flex; }
+}

@@ -359,8 +359,9 @@ export function Calendar({
               type="button"
               class="home-today-btn"
               onClick={handleJumpToday}
+              title="Jump back to today"
             >
-              Today
+              ← Back to today
             </button>
           )}
         </div>
@@ -398,6 +399,7 @@ export function Calendar({
           <DayDetailPanel
             model={dayDetailModel}
             usualMinutes={weekModel.hasNorms ? weekModel.norms.get(selectedDate) ?? 0 : null}
+            weekTotal={{ heading: weekModel.heading, minutes: weekModel.weekMinutes }}
             singleCategory={singleSelectedCategory}
             onSelectDate={handleSelectDate}
             todayStr={todayStr}

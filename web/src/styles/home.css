@@ -302,3 +302,4 @@
 .home-rhythm-stat-of { color: var(--text-muted); font-weight: 400; }
 .home-rhythm-stat > span { font-size: 0.75rem; color: var(--text-secondary); }
 .home-rhythm-readout-mark { display: inline-block; width: 6px; height: 6px; margin-right: 8px; vertical-align: 1px; background: var(--accent-primary); }
+.home-day-week-total { display: none; }

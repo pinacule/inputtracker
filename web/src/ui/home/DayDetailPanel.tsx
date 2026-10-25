@@ -36,6 +36,8 @@ export interface DayDetailPanelProps {
   /** The day's usual time, or null while history is incomplete (no comparison shown). */
   readonly usualMinutes: number | null;
   readonly weekGraph?: ComponentChildren;
+  /** The seven-day total, repeated under the day headline in skins that show it there. */
+  readonly weekTotal?: { readonly heading: string; readonly minutes: number };
   readonly singleCategory?: Category;
   readonly onSelectDate: (date: string) => void;
   readonly todayStr?: string;
@@ -204,6 +206,7 @@ export function DayDetailPanel({
   model,
   usualMinutes,
   weekGraph,
+  weekTotal,
   singleCategory,
   onSelectDate,
   todayStr,
@@ -262,6 +265,12 @@ export function DayDetailPanel({
           <NormComparison actual={model.totalMinutes} norm={usualMinutes} label={model.heading} />
         )}
       </div>
+      {weekTotal && (
+        <div class="home-day-week-total">
+          <span class="home-kicker">{weekTotal.heading}</span>
+          <HomeTimeDisplay minutes={weekTotal.minutes} class="home-time--week-side" />
+        </div>
+      )}
       </div>
       {weekGraph}
 
