@@ -89,20 +89,27 @@ function formatMonthHeading(month: string): string {
   });
 }
 
+/** `limit` shows the first N cards with a toggle for the rest. */
 function WorkShowcaseGrid({
   works,
   emptyLabel,
+  limit,
 }: {
   works: readonly LibraryWork[];
   emptyLabel: string;
+  limit?: number;
 }) {
+  const [showAll, setShowAll] = useState(false);
   if (works.length === 0) {
     return <p class="ui-text-muted">{emptyLabel}</p>;
   }
+  const capped = limit !== undefined && works.length > limit;
+  const shown = capped && !showAll ? works.slice(0, limit) : works;
 
   return (
+    <>
     <div class="review-works-grid">
-      {works.map((work) => {
+      {shown.map((work) => {
         const workHref = `#/library?work=${encodeURIComponent(work.key)}`;
         const menuTarget = {
           kind: "work" as const,
@@ -166,6 +173,12 @@ function WorkShowcaseGrid({
         );
       })}
     </div>
+    {capped && (
+      <button type="button" class="ui-inline-link review-works-toggle" onClick={() => setShowAll((v) => !v)}>
+        {showAll ? "Show fewer" : `Show all ${works.length}`}
+      </button>
+    )}
+    </>
   );
 }
 
@@ -642,7 +655,9 @@ export function Review({
                     subtitle="Completed during this month"
                   >
                     <WorkShowcaseGrid
+                      key={month}
                       works={filteredMonth.finished_works}
+                      limit={6}
                       emptyLabel="No works marked finished this month."
                     />
                   </Card>
@@ -653,7 +668,9 @@ export function Review({
                     subtitle="Begun during this month"
                   >
                     <WorkShowcaseGrid
+                      key={month}
                       works={filteredMonth.started_works}
+                      limit={6}
                       emptyLabel="No new works started this month."
                     />
                   </Card>
@@ -782,7 +799,9 @@ export function Review({
                   subtitle="Works completed during the year"
                 >
                   <WorkShowcaseGrid
-                    works={filteredYear.finished_works}
+                    key={filteredYear.year}
+                      works={filteredYear.finished_works}
+                      limit={6}
                     emptyLabel="No works finished this year."
                   />
                 </Card>
