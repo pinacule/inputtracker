@@ -211,3 +211,12 @@
 :root[data-theme="dot"] .home-time--month .home-time-typeset { flex-wrap: nowrap; }
 :root[data-theme="dot"] .home-rhythm-heading .home-section-link { white-space: nowrap; }
 :root[data-theme="dot"] .home-rhythm-title { white-space: nowrap; }
+
+/* Month name reads as a label, the total as the figure, with a rule between them. */
+:root[data-theme="dot"] .home-rhythm-title { color: var(--text-secondary); }
+:root[data-theme="dot"] .home-time--month { padding-left: 28px; border-left: 2px solid var(--border-strong); line-height: 1; }
+:root[data-theme="dot"] .home-skyline-well { height: 150px; }
+@media (max-width: 699px) {
+  :root[data-theme="dot"] .home-time--month { padding-left: 14px; }
+  :root[data-theme="dot"] .home-skyline-well { height: 120px; }
+}
