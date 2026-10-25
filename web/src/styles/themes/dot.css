@@ -168,3 +168,16 @@
 :root[data-theme="dot"] .home-day-panel { padding-top: var(--home-group-gap); }
 :root[data-theme="dot"] .home-rhythm-card { margin-top: var(--home-group-gap); }
 :root[data-theme="dot"] .home-day-hero { padding-bottom: 8px; }
+
+/* Dot-matrix only where numbers are big; small figures use bold mono so they stay readable. */
+:root[data-theme="dot"] { --font-numbers: var(--font-mono); }
+:root[data-theme="dot"] :is(.home-time--hero, .home-time--week, .home-time--month, .home-week-day-num, .ui-stat-value) { font-family: var(--font-serif); font-weight: 900; }
+:root[data-theme="dot"] .tabular-nums { font-weight: 700; }
+:root[data-theme="dot"] .home-legend-value { color: var(--text-primary); }
+
+/* Month bars: chunky columns instead of hairlines. */
+:root[data-theme="dot"] .home-skyline-stack { width: min(70%, 16px); border-radius: 4px 4px 2px 2px; gap: 2px; }
+:root[data-theme="dot"] .home-skyline-seg { border-radius: 2px; }
+:root[data-theme="dot"] .home-skyline-dot { width: 6px; height: 6px; border-radius: 2px; background: var(--bg-muted); }
+:root[data-theme="dot"] .home-skyline-col--selected::after { width: 8px; height: 8px; border-radius: 2px; bottom: 12px; }
+:root[data-theme="dot"] .home-ledger-track { height: 8px; border-radius: 4px; }
