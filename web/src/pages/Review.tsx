@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { previousMonthName } from "../lib/format-date";
+import { formatShortDate, previousMonthName } from "../lib/format-date";
 import {
   getMonthReview,
   getYearReviewV2,
@@ -12,6 +12,7 @@ import {
 import { shiftMonth } from "../lib/calendar";
 import {
   CATEGORIES,
+  categoryCssColor,
   categoryLabel,
   formatWorkCardMeta,
 } from "../lib/categories";
@@ -89,15 +90,20 @@ function formatMonthHeading(month: string): string {
   });
 }
 
-/** `limit` shows the first N cards with a toggle for the rest. */
+/**
+ * `limit` shows the first N cards with a toggle for the rest. `stamp` switches to
+ * the poster strip: cover first, with the finish or start date stamped on it.
+ */
 function WorkShowcaseGrid({
   works,
   emptyLabel,
   limit,
+  stamp,
 }: {
   works: readonly LibraryWork[];
   emptyLabel: string;
   limit?: number;
+  stamp?: "finished" | "started";
 }) {
   const [showAll, setShowAll] = useState(false);
   if (works.length === 0) {
@@ -108,7 +114,7 @@ function WorkShowcaseGrid({
 
   return (
     <>
-    <div class="review-works-grid">
+    <div class={stamp ? "review-poster-strip" : "review-works-grid"}>
       {shown.map((work) => {
         const workHref = `#/library?work=${encodeURIComponent(work.key)}`;
         const menuTarget = {
@@ -121,6 +127,27 @@ function WorkShowcaseGrid({
           href: workHref,
           source: work.sources[0] ?? "manual",
         };
+        if (stamp) {
+          const at = stamp === "finished" ? work.last_at : work.first_at;
+          return (
+            <div key={work.key} class="review-poster" tabIndex={0} {...bindContextMenu(menuTarget)}>
+              <a href={workHref} class="review-poster-cover">
+                <Cover src={work.cover_url} title={work.title} category={work.category} size="fill" aspect="poster" />
+                {work.rating != null && <span class="review-poster-rating">★ {work.rating}</span>}
+                {at && (
+                  <span class={`review-poster-stamp review-poster-stamp--${stamp}`}>
+                    {stamp === "finished" ? "Done" : "New"} {formatShortDate(at)}
+                  </span>
+                )}
+              </a>
+              <a href={workHref} class="review-poster-title" title={work.title}>{work.title}</a>
+              <span class="review-poster-cat">
+                <span class="review-poster-dot" style={{ background: categoryCssColor(work.category) }} />
+                {categoryLabel(work.category)}
+              </span>
+            </div>
+          );
+        }
         return (
           <div
             key={work.key}
@@ -658,6 +685,7 @@ export function Review({
                       key={month}
                       works={filteredMonth.finished_works}
                       limit={6}
+                      stamp="finished"
                       emptyLabel="No works marked finished this month."
                     />
                   </Card>
@@ -671,6 +699,7 @@ export function Review({
                       key={month}
                       works={filteredMonth.started_works}
                       limit={6}
+                      stamp="started"
                       emptyLabel="No new works started this month."
                     />
                   </Card>
@@ -802,6 +831,7 @@ export function Review({
                     key={filteredYear.year}
                       works={filteredYear.finished_works}
                       limit={6}
+                      stamp="finished"
                     emptyLabel="No works finished this year."
                   />
                 </Card>

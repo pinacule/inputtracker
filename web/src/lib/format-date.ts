@@ -58,6 +58,15 @@ export function formatDateTime(iso: string, timeZone: string): string {
   return `${day}.${month}.${year} ${hour}:${minute}`;
 }
 
+/** A UTC ISO timestamp as a short local day, "21 Oct". Invalid input is returned unchanged. */
+export function formatShortDate(iso: string, timeZone: string = DEFAULT_TIMEZONE): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone });
+}
+
 /**
  * Format an already-local calendar date ("YYYY-MM-DD", e.g. a streak day from
  * the API) as `DD.MM.YYYY`. No timezone conversion: the server already
