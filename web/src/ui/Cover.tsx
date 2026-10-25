@@ -43,9 +43,12 @@ export function Cover({
   class: className,
 }: CoverProps) {
   const [failed, setFailed] = useState(false);
+  // Square art (e.g. Audiobookshelf covers) in a poster frame: shown whole over a blurred copy, not cropped.
+  const [letterbox, setLetterbox] = useState(false);
 
   useEffect(() => {
     setFailed(false);
+    setLetterbox(false);
   }, [src]);
 
   const resolvedCategory: Category =
@@ -63,6 +66,7 @@ export function Cover({
     `ui-cover--${aspect}`,
     `ui-cover--cat-${resolvedCategory}`,
     kind ? `ui-cover--${kind}` : "",
+    letterbox ? "ui-cover--letterbox" : "",
     className ?? "",
   ]
     .filter(Boolean)
@@ -71,13 +75,29 @@ export function Cover({
   return (
     <div class={classes} aria-hidden={alt === "" ? "true" : undefined}>
       {src && !failed ? (
-        <img
-          class="ui-cover-img"
-          src={src}
-          alt={alt}
-          loading="lazy"
-          onError={() => setFailed(true)}
-        />
+        <>
+          {letterbox && (
+            <span
+              class="ui-cover-backdrop"
+              style={{ backgroundImage: `url("${src}")` }}
+            />
+          )}
+          <img
+            class="ui-cover-img"
+            src={src}
+            alt={alt}
+            loading="lazy"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              setLetterbox(
+                aspect === "poster" &&
+                  img.naturalHeight > 0 &&
+                  img.naturalWidth / img.naturalHeight > 0.8,
+              );
+            }}
+            onError={() => setFailed(true)}
+          />
+        </>
       ) : (
         <div class="ui-cover-fallback" aria-hidden="true">
           <span class="ui-cover-icon">

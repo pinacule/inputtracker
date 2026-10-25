@@ -1257,7 +1257,6 @@ export function Library({
                           size="fill"
                           aspect={
                             work.category === "music" ||
-                            work.category === "audiobook" ||
                             work.category === "podcast"
                               ? "square"
                               : "poster"

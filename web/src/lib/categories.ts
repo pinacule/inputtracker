@@ -90,7 +90,7 @@ export const CATEGORY_META: Readonly<Record<Category, CategoryMeta>> = {
     unitPlural: "sessions",
     cssVarPrefix: "--cat-audiobook",
     color: "#6d3fa0",
-    defaultAspect: "square",
+    defaultAspect: "poster",
   },
   youtube: {
     category: "youtube",

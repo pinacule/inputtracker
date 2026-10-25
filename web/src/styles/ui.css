@@ -667,6 +667,19 @@
   display: block;
 }
 
+.ui-cover--letterbox .ui-cover-img {
+  position: relative;
+  object-fit: contain;
+}
+
+.ui-cover-backdrop {
+  position: absolute;
+  inset: -12px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(10px) brightness(0.7) saturate(1.2);
+}
+
 /* Fallback Tile: Coloured by Category / MediaKind with icon + title initials */
 .ui-cover-fallback {
   width: 100%;
