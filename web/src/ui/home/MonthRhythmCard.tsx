@@ -10,11 +10,27 @@ export interface MonthRhythmCardProps {
   readonly onSelectDate: (date: string) => void;
 }
 
+/** Change against the previous month, shown only when it is at least half an hour. */
+function monthDelta(model: MonthRhythmModel): { up: boolean; minutes: number; vsLabel: string } | null {
+  const prev = model.previousMonthMinutes;
+  if (prev === null || prev <= 0 || model.totalMinutes <= 0) return null;
+  const diff = model.totalMinutes - prev;
+  if (Math.abs(diff) < 30) return null;
+  const [y, m] = model.month.split("-").map(Number);
+  let vsLabel = "last month";
+  if (y && m) {
+    vsLabel = new Date(Date.UTC(y, m - 2, 1)).toLocaleString("en-GB", { month: "long", timeZone: "UTC" });
+  }
+  return { up: diff > 0, minutes: Math.abs(diff), vsLabel };
+}
+
 /** A full-width rhythm line and aligned category ledger, without a second filter. */
 export function MonthRhythmCard({ model, todayStr, onSelectDate }: MonthRhythmCardProps) {
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   const inspectedBar = model.skyline.find((bar) => bar.date === hoveredDate)
     ?? model.skyline.find((bar) => bar.isSelected);
+
+  const delta = monthDelta(model);
 
   return (
     <section class="home-rhythm-card" aria-label={`${model.heading} overview graph`}>
@@ -28,12 +44,20 @@ export function MonthRhythmCard({ model, todayStr, onSelectDate }: MonthRhythmCa
       <div class="home-rhythm-header">
         <HomeTimeDisplay minutes={model.totalMinutes} class="home-time--month" />
         <div class="home-rhythm-meta">
-          <span>{model.activeDays} active {model.activeDays === 1 ? "day" : "days"}</span>
-          {model.deltaLabel && <span>{model.deltaLabel}</span>}
+          <span class="home-rhythm-stat">
+            <strong class="tabular-nums">{model.activeDays}<span class="home-rhythm-stat-of">/{model.daysInMonth}</span></strong>
+            <span>days active</span>
+          </span>
+          {delta && (
+            <span class={`home-rhythm-stat home-rhythm-stat--${delta.up ? "up" : "down"}`}>
+              <strong class="tabular-nums"><span aria-hidden="true">{delta.up ? "↑" : "↓"} </span>{formatMinutes(delta.minutes)}</strong>
+              <span>{delta.up ? "more" : "less"} than {delta.vsLabel}</span>
+            </span>
+          )}
         </div>
       </div>
       <div class="home-rhythm-readout" aria-live="polite" aria-atomic="true">
-        {inspectedBar ? <><span>{formatCleanDayHeading(inspectedBar.date, todayStr)}</span><strong>{inspectedBar.totalMinutes > 0 ? formatMinutes(inspectedBar.totalMinutes) : inspectedBar.totalCount > 0 ? `${inspectedBar.totalCount} items` : "Nothing logged"}</strong></> : <span>Daily record</span>}
+        {inspectedBar ? <><span><span class="home-rhythm-readout-mark" aria-hidden="true" />{formatCleanDayHeading(inspectedBar.date, todayStr)}</span><strong>{inspectedBar.totalMinutes > 0 ? formatMinutes(inspectedBar.totalMinutes) : inspectedBar.totalCount > 0 ? `${inspectedBar.totalCount} items` : "Nothing logged"}</strong></> : <span>Daily record</span>}
       </div>
       <div class="home-skyline" role="group" aria-label={`Daily activity bars for ${model.heading}`} onMouseLeave={() => setHoveredDate(null)}>
         {model.skyline.map((bar) => {

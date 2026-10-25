@@ -294,3 +294,11 @@
 .home-map-tip-time { font: 700 0.75rem var(--font-mono); color: var(--text-primary); }
 @keyframes home-map-tip-in { from { opacity: 0; } to { opacity: 1; } }
 .home-map-tip-title .home-map-dot { transform: translateY(1px); }
+
+/* Month stats: number first, words under it. */
+.home-rhythm-meta { flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 12px 28px; }
+.home-rhythm-stat { display: flex; flex-direction: column; gap: 2px; }
+.home-rhythm-stat strong { font: 700 1.125rem/1.1 var(--font-mono); color: var(--text-primary); }
+.home-rhythm-stat-of { color: var(--text-muted); font-weight: 400; }
+.home-rhythm-stat > span { font-size: 0.75rem; color: var(--text-secondary); }
+.home-rhythm-readout-mark { display: inline-block; width: 6px; height: 6px; margin-right: 8px; vertical-align: 1px; background: var(--accent-primary); }

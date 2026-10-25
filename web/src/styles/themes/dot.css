@@ -185,3 +185,29 @@
 /* Dot shows the day as a map of tiles instead of the row list. */
 :root[data-theme="dot"] .home-day-map { display: block; }
 :root[data-theme="dot"] :is(.home-day-list, .home-day-cat-strip) { display: none; }
+
+/* Month card: title, total and stats share one row; no kicker. */
+:root[data-theme="dot"] .home-rhythm-card { display: grid; grid-template-columns: auto auto 1fr auto; align-items: end; column-gap: 28px; }
+:root[data-theme="dot"] :is(.home-rhythm-heading, .home-rhythm-heading > div, .home-rhythm-header) { display: contents; }
+:root[data-theme="dot"] .home-rhythm-heading .home-kicker { display: none; }
+:root[data-theme="dot"] .home-rhythm-title { grid-column: 1; grid-row: 1; margin: 0; font-size: clamp(1.75rem, 3vw, 2.5rem); }
+:root[data-theme="dot"] .home-time--month { grid-column: 2; grid-row: 1; font-size: clamp(1.75rem, 3vw, 2.5rem); }
+:root[data-theme="dot"] .home-rhythm-meta { grid-column: 3; grid-row: 1; justify-self: end; }
+:root[data-theme="dot"] .home-rhythm-heading .home-section-link { grid-column: 4; grid-row: 1; min-height: 0; }
+:root[data-theme="dot"] .home-rhythm-card > :not(.home-rhythm-heading):not(.home-rhythm-header) { grid-column: 1 / -1; }
+:root[data-theme="dot"] .home-rhythm-stat--up strong { color: var(--text-primary); }
+:root[data-theme="dot"] .home-rhythm-readout { justify-content: flex-start; margin-top: 18px; min-height: 0; }
+:root[data-theme="dot"] .home-rhythm-readout > * { display: inline-flex; align-items: center; }
+:root[data-theme="dot"] .home-rhythm-readout { width: fit-content; gap: 10px; padding: 5px 12px; border-radius: var(--radius-full); background: var(--bg-subtle); }
+:root[data-theme="dot"] .home-rhythm-readout-mark { border-radius: 2px; }
+@media (max-width: 699px) {
+  :root[data-theme="dot"] .home-rhythm-card { grid-template-columns: auto 1fr; column-gap: 14px; row-gap: 14px; }
+  :root[data-theme="dot"] :is(.home-rhythm-title, .home-time--month) { font-size: 1.3rem; }
+  :root[data-theme="dot"] .home-rhythm-title { grid-column: 1; grid-row: 1; }
+  :root[data-theme="dot"] .home-time--month { grid-column: 2; grid-row: 1; justify-self: end; }
+  :root[data-theme="dot"] .home-rhythm-meta { grid-column: 1; grid-row: 2; justify-self: start; gap: 8px 20px; }
+  :root[data-theme="dot"] .home-rhythm-heading .home-section-link { grid-column: 2; grid-row: 2; justify-self: end; align-self: end; }
+}
+:root[data-theme="dot"] .home-time--month .home-time-typeset { flex-wrap: nowrap; }
+:root[data-theme="dot"] .home-rhythm-heading .home-section-link { white-space: nowrap; }
+:root[data-theme="dot"] .home-rhythm-title { white-space: nowrap; }
