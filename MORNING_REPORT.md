@@ -5,7 +5,12 @@ the default. Previous report (2026-10-17 overnight build): `docs/reports/2026-10
 
 ## Summary
 
-_In progress._
+**Paused 2026-10-26 ~01:15: the manager (Claude) hit its usage limit after setup.** No worker has
+started yet and no skin code exists. Done: uncommitted WIP committed (128196e), all three workers
+tested jailed, Codex added to the scripts and WORKERS.md, review tool `scripts/shots.ts`, Dot
+baseline (`.orchestrator/dot-baseline.json`), task list in TASKS.md (847ff23).
+Next on restart: write `.task/prompt.md` for S0 (Codex), NC-a (Codex) and RW-a (opencode), create
+their worktrees from main, run them in parallel, then TH-a on opencode.
 
 ## Workers (step 0, tested 2026-10-26 00:40–01:10)
 
