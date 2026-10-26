@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 // Keep the browser-only DOM types out of the server tsconfig's ES-only lib.
 const browserModuleUrl = new URL("../web/src/skins/rewind/index.ts", import.meta.url).href;
 const { foundation: effects } = await import(browserModuleUrl) as {
   foundation: { mount(ctx: { bg: { classList: unknown }; fx: { classList: unknown } }): () => void };
 };
-import { contrastRatio } from "../web/src/lib/theme.ts";
+import { THEMES, THEME_REGISTRY, contrastRatio } from "../web/src/lib/theme.ts";
 
 const css = readFileSync(new URL("../web/src/styles/themes/rewind.css", import.meta.url), "utf8");
 const properties = (block: string) => Object.fromEntries(
@@ -19,6 +19,50 @@ function composite(hex: string, channel: number, alpha: number) {
 }
 
 describe("Rewind VCR foundation", () => {
+  test("is an active choice with the live palette and a static CRT preview", () => {
+    expect(THEMES.find((theme) => theme.id === "rewind")).toBe(THEME_REGISTRY.rewind);
+    expect(THEME_REGISTRY.rewind?.label).toBe("Rewind");
+    // All swatches, categories and AA pairs are also checked by web-themes.test.ts.
+    const preview = css.slice(css.indexOf("/* A static, self-contained CRT miniature"), css.indexOf("/* Blue television wall"));
+    expect(preview).toContain('.theme-preview[data-theme="rewind"] .theme-preview-window');
+    for (const mark of ["PLAY ▶", "REC ●", "0:02:48", "repeating-linear-gradient", "--accent-primary", "--font-numbers"]) {
+      expect(preview).toContain(mark);
+    }
+    for (const state of [".theme-tile:hover", ":checked", ":focus-visible"]) expect(preview).toContain(state);
+    expect(preview).not.toMatch(/animation\s*:|transition\s*:|url\(/);
+  });
+
+  test("responsive images meet viewport budgets and every font has credits", () => {
+    const dir = new URL("../web/public/wallpapers/rewind/", import.meta.url);
+    const credits = readFileSync(new URL("CREDITS.md", dir), "utf8");
+    for (const [file, budget, width, height] of [
+      ["vcr-desktop.webp", 350 * 1024, 2400, 1350],
+      ["vcr-phone.webp", 200 * 1024, 1080, 1800],
+    ] as const) {
+      const data = readFileSync(new URL(file, dir));
+      expect(data.byteLength).toBeLessThanOrEqual(budget);
+      // The shipped lossy WebP's VP8 frame header records its real dimensions.
+      expect(data.toString("ascii", 12, 16)).toBe("VP8 ");
+      expect(data.readUInt16LE(26) & 0x3fff).toBe(width);
+      expect(data.readUInt16LE(28) & 0x3fff).toBe(height);
+      expect(credits).toContain(file);
+      expect(credits).toContain(data.byteLength.toLocaleString("en-US"));
+    }
+    expect(credits).toContain("Liana S");
+    expect(credits).toContain("https://unsplash.com/license");
+    const fonts = new URL("../web/public/fonts/rewind/", import.meta.url);
+    const licence = readFileSync(new URL("LICENSE.md", fonts), "utf8");
+    const names = readdirSync(fonts).filter((file) => file.endsWith(".woff2"));
+    expect(names).toHaveLength(5);
+    expect(names.reduce((sum, file) => sum + statSync(new URL(file, fonts)).size, 0)).toBeLessThanOrEqual(300 * 1024);
+    for (const file of names) {
+      expect(licence).toContain(file);
+      expect(licence).toContain(statSync(new URL(file, fonts)).size.toLocaleString("en-US"));
+    }
+    for (const family of ["ibmplexsans", "vt323", "sharetechmono"]) expect(licence).toContain(`https://github.com/google/fonts/tree/main/ofl/${family}`);
+    expect(licence.match(/SIL OPEN FONT LICENSE Version 1.1/g)).toHaveLength(3);
+  });
+
   test("ships one VCR palette and one responsive wallpaper pair", () => {
     expect(base["--bg-canvas"]).toBe("#07164c");
     expect(base["--accent-primary"]).toBe("#ffdf6d");
