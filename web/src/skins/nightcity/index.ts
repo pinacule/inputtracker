@@ -1,8 +1,11 @@
 import type { SkinEffects } from "../types.ts";
+import { createCity } from "./city.ts";
 
 const effects: SkinEffects = {
-  mount(_ctx) {
-    return () => {};
+  mount(ctx) {
+    const city = createCity();
+    ctx.bg.append(city);
+    return () => city.remove();
   },
 };
 

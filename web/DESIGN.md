@@ -478,8 +478,20 @@ No new dependencies; no CDN/runtime external assets; production credits include 
 Check Home, Library, work page, Insights, Review, Settings, Search and Add at 1440px and 390px, plus keyboard/reduced motion.
 Build worker must run Dot and Night City screenshot sweeps and inspect PNGs: overflow 0, blocked count no worse than Dot;
 inspect animation frames for protected text and controls, then pass `bun run check` and `bun run build:web`.
-This task delivers the brief and inspected source previews only; effects implementation and live Night City screenshots
-belong to the build task, after S0's shared effects API lands.
+NC-b foundation: local `skyline-desktop.webp` (1920×1200, 201,338 bytes, Base64 / CC BY-SA 3.0)
+and `street-phone.webp` (1080×2340, 145,878 bytes, Romain Guy / CC0) implement the selected crops,
+offline grade and plain replacement signs. `CREDITS.md` records the changes and derivative licence.
+The phone media query overrides both root and miniature wallpaper tokens, so phone visits fetch only
+the portrait. Local WOFF2 faces supply every specified Latin weight (Plex 400 reuses shared files);
+The CSS-only `Night City Plex Mono` alias avoids the shared 600 face’s weight range.
+Noto Sans JP 700 contains exactly `夜の街電脳未来`. The new font payload is 198,824 bytes.
+`city.svg` contains the original static silhouette/window planes. S0's bg layer mounts `.nc-city`
+and its three aria-hidden signs via `skins/nightcity/city.ts`; cleanup removes the scenery.
+The gradient, silhouettes and signs survive photo failure and reduced motion. NC-b contains no
+timers or animations; NC-c can add controllers alongside this static scene and replace the scoped
+animation/transition suppression. Tokens, opaque controls, rectangular navigation, category day-map
+cells and inset frame brackets already cover all routes. Motion, rain, cursor and preview polish
+remain the later NC-c/NC-d tasks.
 
 ## Skin: Rewind (RW)
 
