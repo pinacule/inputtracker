@@ -141,11 +141,11 @@ Skin ids: `nightcity`, `rewind`, `thinker`.
 | NC-b | Night City wallpapers, fonts, base tokens | CX | S0, NC-a | Local optimised wallpapers + credits, AA contrast, all pages readable | TODO |
 | NC-c | Night City components, animations, ambient loops, cursor | CX | NC-b | Review checklist above | TODO |
 | NC-d | Night City Settings tile, tests, docs | AG/any | NC-c | Tile looks like the skin; tests; README/DESIGN | TODO |
-| RW-a | Rewind design brief, with three candidate VHS looks | OC | — | Brief + 3 looks described | RUNNING |
+| RW-a | Rewind design brief, with three candidate VHS looks | OC | — | Brief + 3 looks described | DONE (opencode gpt-6.1-sol#high, 1 send-back: full-screen scanlines, content tracking glitch, rolling counters) |
 | RW-b | Rewind wallpapers, fonts, base tokens; three quick looks to compare, then keep the best | OC | S0, RW-a | Manager picks a look from screenshots; the other two removed | TODO |
 | RW-c | Rewind components, animations (tracking glitch on day/week change), ambient loops, cursor | OC | RW-b | Review checklist above | TODO |
 | RW-d | Rewind Settings tile, tests, docs | AG/any | RW-c | As NC-d | TODO |
-| TH-a | Thinker design brief | OC | — | As NC-a | TODO |
+| TH-a | Thinker design brief | OC | — | As NC-a | RUNNING |
 | TH-b | Thinker wallpapers, fonts, base tokens | CX/OC | S0, TH-a | As NC-b | TODO |
 | TH-c | Thinker components, firelight flicker + moving shadows, ambient loops, cursor | CX/OC | TH-b | Review checklist above | TODO |
 | TH-d | Thinker Settings tile, tests, docs | AG/any | TH-c | As NC-d | TODO |
