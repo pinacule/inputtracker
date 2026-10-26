@@ -102,8 +102,8 @@ dates. No quotes anywhere.
   limited and opencode rate-limited, Antigravity finished the Home masthead); Settings tile/tests/docs
   TH-d Antigravity (1 send-back: phone masthead crop, reverted an unneeded layout change).
 - Checks: overflow 0 everywhere; covered controls only the usual items under the phone tab bar;
-  `bun run check` green. Small open nit: on desktop Insights the Plato in the header is cropped to a
-  sliver (the large bust in the right gutter carries the page).
+  `bun run check` green. A late polish task (X2, Antigravity) restored the full busts in the desktop
+  page headers (they had been cropped to a sliver by the phone header fix).
 
 ## Done
 
