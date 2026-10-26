@@ -90,8 +90,9 @@ dates. No quotes anywhere.
 - **Ambient loops** (only in empty wall space, one at a time): ember bursts rising from the bottom
   edge, a shadow figure walking across the cave wall, a flame gust brightening one side, dust in a
   light shaft, a hearth flame tongue, drifting soot, a marble glint.
-- **Cursor:** an ember-tipped torch (normal), a brighter torch (pointer), a carved I-beam (text);
-  small glowing motes trail it in empty gutters (desktop only).
+- **Cursor:** a marble-white arrow with a warm facet and an ember tip (normal), the same with a small
+  flame spark (pointer), an I-beam with amber caps (text); small glowing motes trail it in empty
+  gutters (desktop only).
 - **Images:** The Thinker (plaster cast, The Met, CC0), Victor Hugo bust (Musée Rodin, CC0, Jebulon),
   Plato (CC BY-SA 4.0, Osama Amin — the derivative is shared under the same licence); cut out and
   relit locally. Credits: `web/public/wallpapers/thinker/CREDITS.md`.
