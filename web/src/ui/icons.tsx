@@ -141,6 +141,26 @@ export function MoreIcon(props: IconProps) {
   );
 }
 
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </Svg>
+  );
+}
+
+/** Two opposed arrows: the "flip sort direction" glyph. */
+export function SortDirectionIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M7 4v16" />
+      <path d="m3 16 4 4 4-4" />
+      <path d="M17 20V4" />
+      <path d="m13 8 4-4 4 4" />
+    </Svg>
+  );
+}
+
 /* --- Category & Media Kind Icons --- */
 
 export function AnimeIcon(props: IconProps) {

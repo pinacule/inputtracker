@@ -219,11 +219,6 @@
   min-height: 34px;
 }
 
-.library-sort-select {
-  width: auto;
-  min-height: 34px;
-  padding-right: var(--space-6);
-}
 
 /* Cover Grid (Hero Cover Showcase) */
 .library-works-grid {

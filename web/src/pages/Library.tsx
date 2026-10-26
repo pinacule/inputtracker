@@ -63,12 +63,14 @@ import {
   QuickRatingPill,
   SearchIcon,
   Skeleton,
+  SortControl,
   Stat,
   Tabs,
   TrashIcon,
   bindContextMenu,
   openContextMenu,
   type EditableWorkTarget,
+  type SortOption,
   type TabOption,
 } from "../ui";
 import { WorkPage, formatWorkStatusLabel } from "./WorkPage";
@@ -111,26 +113,21 @@ const YOUTUBE_GROUP_TABS: ReadonlyArray<TabOption<YoutubeVideoGroupBy>> = [
 
 function buildSortOptions(
   singleCategory?: Category
-): ReadonlyArray<{ value: LibrarySort; label: string }> {
+): ReadonlyArray<SortOption<LibrarySort>> {
   if (singleCategory === "music") {
     return [
-      { value: "plays", label: "Most played" },
-      { value: "recent", label: "Recent" },
-      { value: "time", label: "Watch / listen time" },
-      { value: "creator", label: "Artist" },
-      { value: "title", label: "Title A–Z" },
+      { value: "plays", label: "Most played", forwardHint: "Most plays first", reversedHint: "Fewest plays first" },
+      { value: "recent", label: "Recent", forwardHint: "Newest first", reversedHint: "Oldest first" },
+      { value: "time", label: "Listen time", forwardHint: "Most time first", reversedHint: "Least time first" },
+      { value: "creator", label: "Artist", forwardHint: "A–Z", reversedHint: "Z–A" },
+      { value: "title", label: "Title", forwardHint: "A–Z", reversedHint: "Z–A" },
     ];
   }
-  const creatorLabel =
-    singleCategory === "book" || singleCategory === "audiobook"
-      ? "Author"
-      : "Creator / Artist";
   return [
-    { value: "recent", label: "Recently active" },
-    { value: "time", label: "Watch / read time" },
-    { value: "category", label: "Category" },
-    { value: "creator", label: creatorLabel },
-    { value: "title", label: "Title A–Z" },
+    { value: "recent", label: "Recently active", forwardHint: "Newest first", reversedHint: "Oldest first" },
+    { value: "rating", label: "Rating", forwardHint: "Highest first", reversedHint: "Lowest first" },
+    { value: "time", label: "Watch / read time", forwardHint: "Most time first", reversedHint: "Least time first" },
+    { value: "progress", label: "Progress", forwardHint: "Closest to done first", reversedHint: "Least progress first" },
   ];
 }
 
@@ -803,6 +800,7 @@ export function Library({
     initialStatus ?? "all"
   );
   const [sort, setSort] = useState<LibrarySort>(initialSort ?? ((initialCategories?.[0] ?? initialCategory) === "music" ? "plays" : "recent"));
+  const [sortReversed, setSortReversed] = useState(false);
   const [searchInput, setSearchInput] = useState(initialQuery);
   const [query, setQuery] = useState(initialQuery);
   const [viewMode, setViewMode] = useState<"grid" | "list">((initialCategories?.[0] ?? initialCategory) === "music" ? "list" : "grid");
@@ -935,8 +933,8 @@ export function Library({
       }
       return true;
     });
-    return sortLibraryWorks(matched, sort);
-  }, [effectiveWorks, selectedCategories, statusFilter, query, sort]);
+    return sortLibraryWorks(matched, sort, sortReversed);
+  }, [effectiveWorks, selectedCategories, statusFilter, query, sort, sortReversed]);
 
   const handleDeleteArchive = async (entryId: string) => {
     setDeletingEntryId(entryId);
@@ -969,6 +967,16 @@ export function Library({
     () => buildSortOptions(singleCategory),
     [singleCategory]
   );
+  // Old links may carry a sort this view no longer offers (e.g. `sort=title`).
+  useEffect(() => {
+    if (!sortOptions.some((o) => o.value === sort)) {
+      setSort(sortOptions[0]!.value);
+    }
+  }, [sortOptions, sort]);
+  const changeSort = (next: LibrarySort) => {
+    setSort(next);
+    setSortReversed(false);
+  };
 
   // --- WORK DETAIL PAGE VIEW (`#/library?work=<key>`) ---
   if (workKey) {
@@ -1107,7 +1115,7 @@ export function Library({
                     ? sort
                     : "recent"
                 }
-                onChange={(val) => setSort(val)}
+                onChange={(val) => changeSort(val)}
               />
             )}
 
@@ -1130,22 +1138,14 @@ export function Library({
                 />
               </div>
 
-              <select
-                class="ui-input library-sort-select"
-                aria-label="Sort library works"
+              <SortControl
+                ariaLabel="Sort library works"
+                options={sortOptions}
                 value={sort}
-                onChange={(e) =>
-                  setSort(
-                    (e.currentTarget as HTMLSelectElement).value as LibrarySort
-                  )
-                }
-              >
-                {sortOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                reversed={sortReversed}
+                onChange={changeSort}
+                onReverse={setSortReversed}
+              />
 
               <Tabs
                 ariaLabel="View density"

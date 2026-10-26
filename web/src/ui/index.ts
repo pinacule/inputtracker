@@ -14,6 +14,7 @@ export * from "./QuickRating";
 export * from "./RatingEditor";
 export * from "./Sheet";
 export * from "./Skeleton";
+export * from "./SortControl";
 export * from "./Stat";
 export * from "./Tabs";
 export * from "./Toast";

@@ -1,6 +1,7 @@
 /**
  * Pure, DOM-free helpers for YouTube videos, topic/channel grouping,
- * Library sorting (`recent | time | title | category | creator`),
+ * Library sorting (`recent | time | rating | progress | title | category | creator`,
+ * each reversible),
  * proportional bar ratios, search filtering, and 404 fallback synthesis.
  */
 
@@ -14,6 +15,10 @@ import type {
   YoutubeVideosResult,
 } from "../api";
 import { CATEGORIES } from "./categories";
+import {
+  compareByProgress,
+  compareByRating,
+} from "../../../src/core/library-sort";
 
 export const UNCATEGORISED_TOPIC = "Uncategorised";
 
@@ -65,11 +70,28 @@ export interface YoutubeVideoGroup {
 
 /**
  * Sorts a list of `LibraryWork`s according to `LibrarySortV2`
- * (`"plays" | "recent" | "time" | "title" | "category" | "creator"`).
+ * (`"plays" | "recent" | "time" | "rating" | "progress" | "title" | "category" | "creator"`).
+ * `reversed` flips the direction; for `rating` and `progress` unrated / finished /
+ * unknown works stay at the end either way.
  */
 export function sortLibraryWorks(
   works: readonly LibraryWork[],
-  sort: LibrarySortV2 = "recent"
+  sort: LibrarySortV2 = "recent",
+  reversed = false
+): LibraryWork[] {
+  if (sort === "rating") {
+    return [...works].sort((a, b) => compareByRating(a, b, reversed));
+  }
+  if (sort === "progress") {
+    return [...works].sort((a, b) => compareByProgress(a, b, reversed));
+  }
+  const sorted = sortLibraryWorksForward(works, sort);
+  return reversed ? sorted.reverse() : sorted;
+}
+
+function sortLibraryWorksForward(
+  works: readonly LibraryWork[],
+  sort: LibrarySortV2
 ): LibraryWork[] {
   const copy = [...works];
   switch (sort) {
