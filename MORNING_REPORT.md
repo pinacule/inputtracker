@@ -35,6 +35,10 @@ and controls whose centre is covered by another element (compared with a Dot bas
 
 ## AgentRouter restarts
 
+| task | time | what happened | action |
+|---|---|---|---|
+| TH-b | 03:07 | opencode exited with "different Azure OpenAI resource" (router moved the session; stored items gone) | `run-worker-retry.sh` restarted fresh with the same prompt + "continue from the files on disk"; finished 03:22, not counted as an attempt |
+
 ## Limit pauses
 
 | worker | model | hit at | recovered at | message |

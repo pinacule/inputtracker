@@ -145,8 +145,8 @@ Skin ids: `nightcity`, `rewind`, `thinker`.
 | RW-a | Rewind design brief, with three candidate VHS looks | OC | — | Brief + 3 looks described | DONE (opencode gpt-6.1-sol#high, 1 send-back: full-screen scanlines, content tracking glitch, rolling counters) |
 | RW-b | Rewind wallpapers, fonts, base tokens; three quick looks to compare, then keep the best | OC | S0, RW-a | Manager picks a look from screenshots; the other two removed | DONE (opencode hit a rate limit before starting -> codex gpt-6.1-sol high; phase 1 three looks, manager chose A vcr; phase 2 in the same session) |
 | RW-c | Rewind components, animations (tracking glitch on day/week change), ambient loops, cursor | OC | RW-b | Review checklist above | DONE (opencode hit a rate limit before starting -> codex gpt-6.1-sol high; phase 1 three looks, manager chose A vcr; phase 2 in the same session) |
-| RW-d | Rewind Settings tile, tests, docs | AG/any | RW-c | As NC-d | TODO |
+| RW-d | Rewind Settings tile, tests, docs | AG/any | RW-c | As NC-d | RUNNING (codex) |
 | TH-a | Thinker design brief | OC | — | As NC-a | DONE (opencode gpt-6.1-sol#high, 1 send-back: firelight on cards, big moving shadows, lively data motion) |
-| TH-b | Thinker wallpapers, fonts, base tokens | CX/OC | S0, TH-a | As NC-b | RUNNING (opencode) |
-| TH-c | Thinker components, firelight flicker + moving shadows, ambient loops, cursor | CX/OC | TH-b | Review checklist above | RUNNING (opencode) |
+| TH-b | Thinker wallpapers, fonts, base tokens | CX/OC | S0, TH-a | As NC-b | DONE (opencode gpt-6.1-sol#high, attempt 1, 1 AgentRouter restart; drama/firelight moved to TH-c) |
+| TH-c | Thinker components, firelight flicker + moving shadows, ambient loops, cursor | CX/OC | TH-b | Review checklist above | DONE (opencode gpt-6.1-sol#high, attempt 1, 1 AgentRouter restart; drama/firelight moved to TH-c) |
 | TH-d | Thinker Settings tile, tests, docs | AG/any | TH-c | As NC-d | TODO |
