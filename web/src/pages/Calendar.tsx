@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { emitSkinEvent } from "../skins/events.ts";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type {
   Category,
   LibraryWork,
@@ -73,6 +74,23 @@ export function Calendar({
   const [selectedDate, setSelectedDate] = useState<string>(
     clampWindowEnd(initialResolved.selectedDate, todayStr)
   );
+  // MonthRhythmCard remounts during fetches; track its month here across refreshes.
+  const previousMonth = useRef(currentMonth);
+  useEffect(() => {
+    if (previousMonth.current !== currentMonth) {
+      emitSkinEvent("month-change", { direction: currentMonth > previousMonth.current ? 1 : -1 });
+      previousMonth.current = currentMonth;
+    }
+  }, [currentMonth]);
+  const previousDate = useRef(selectedDate);
+  useEffect(() => {
+    const from = previousDate.current;
+    if (from !== selectedDate) {
+      emitSkinEvent("day-change", { from, to: selectedDate, direction: selectedDate > from ? 1 : -1 });
+      previousDate.current = selectedDate;
+    }
+  }, [selectedDate]);
+
   const [windowEnd, setWindowEnd] = useState(() => clampWindowEnd(initialResolved.selectedDate, todayStr));
   const [explicitDate, setExplicitDate] = useState<boolean>(
     initialResolved.explicitDate

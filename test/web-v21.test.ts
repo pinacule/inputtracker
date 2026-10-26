@@ -76,10 +76,10 @@ import {
 } from "../web/src/lib/youtube.ts";
 
 describe("themes & WCAG AA compliance (web/src/lib/theme.ts)", () => {
-  test("Dot is the only active skin; the others are archived, not deleted", () => {
+  test("Dot and the three new skins are active; older skins remain archived", () => {
     expect(DEFAULT_THEME).toBe("dot");
-    expect(DARK_THEMES.map((t) => t.id)).toEqual(["dot"]);
-    expect(ALL_THEMES.length).toBe(10);
+    expect(DARK_THEMES.map((t) => t.id)).toEqual(["dot", "nightcity", "rewind", "thinker"]);
+    expect(ALL_THEMES.length).toBe(13);
     expect(isDarkThemeId("dot")).toBe(true);
     for (const id of ["espresso", "midnight", "forest", "obsidian", "plum", "hermes", "workbench", "cwm", "signal"]) {
       expect(ARCHIVED_THEME_IDS as readonly string[]).toContain(id);

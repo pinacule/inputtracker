@@ -56,7 +56,7 @@
   gap: 16px;
   min-height: 54px;
   padding: 12px 0;
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
   list-style: none;
 }
 .home-category-index summary::-webkit-details-marker { display: none; }
@@ -64,7 +64,7 @@
 .home-index-toggle { font: 400 1.5rem/1 var(--font-display); color: var(--accent-primary); transition: transform var(--duration-normal); }
 .home-category-index[open] .home-index-toggle { transform: rotate(45deg); }
 .home-index-options { display: grid; grid-template-columns: 1fr; border: 0; padding: 4px 0 20px; margin: 0; gap: 0 24px; min-width: 0; }
-.home-index-option { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 0.875rem; cursor: pointer; }
+.home-index-option { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 0.875rem; cursor: var(--cursor-pointer, pointer); }
 .home-index-option input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent-primary); flex-shrink: 0; }
 .home-index-note { margin-left: auto; font-size: 0.75rem; color: var(--text-secondary); }
 .home-index-option--all { border-bottom: 1px solid var(--border-default); margin-bottom: 8px; }

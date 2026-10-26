@@ -8,7 +8,13 @@
 @import "./themes/cwm.css";
 @import "./themes/signal.css";
 @import "./themes/dot.css";
+@import "./themes/nightcity.css";
+@import "./themes/rewind.css";
+@import "./themes/thinker.css";
 @import "./fonts.css";
+@import "./fonts/nightcity.css";
+@import "./fonts/rewind.css";
+@import "./fonts/thinker.css";
 @import "./base.css";
 @import "./ui.css";
 @import "./shell.css";

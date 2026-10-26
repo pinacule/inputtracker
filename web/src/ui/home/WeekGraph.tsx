@@ -1,3 +1,4 @@
+import { emitSkinEvent } from "../../skins/events.ts";
 import {
   categoryCssColor,
   categoryPluralLabel,
@@ -27,6 +28,10 @@ export function WeekGraph({
   onSelectDate,
   onStepWindow,
 }: WeekGraphProps) {
+  const stepWindow = (direction: -1 | 1) => {
+    emitSkinEvent("week-change", { direction });
+    onStepWindow(direction);
+  };
   const usualTotal = [...model.norms.values()].reduce((sum, minutes) => sum + minutes, 0);
   return (
     <section
@@ -39,10 +44,10 @@ export function WeekGraph({
         </div>
 
         <div class="home-week-totals">
-          <IconButton label="Previous 7 days" variant="ghost" size="sm" onClick={() => onStepWindow(-1)}>
+          <IconButton label="Previous 7 days" variant="ghost" size="sm" onClick={() => stepWindow(-1)}>
             <ChevronLeftIcon size={17} />
           </IconButton>
-          <IconButton label="Next 7 days" variant="ghost" size="sm" disabled={model.endDate >= todayStr} onClick={() => onStepWindow(1)}>
+          <IconButton label="Next 7 days" variant="ghost" size="sm" disabled={model.endDate >= todayStr} onClick={() => stepWindow(1)}>
             <ChevronRightIcon size={17} />
           </IconButton>
         </div>
