@@ -144,6 +144,29 @@ INPUTTRACKER_API=http://127.0.0.1:8790 bun run dev:web
 ```
 (or `INPUTTRACKER_API=http://127.0.0.1:8790 bunx vite --config web/vite.config.ts`).
 
+## App skins
+
+Settings › Appearance offers four skins; **Dot** is the default. The choice is stored on each device
+(`localStorage["inputtracker.theme"]`). Effects (rain, firelight, tape glitches, ambient loops) load
+only for the chosen skin, never block taps or clicks, pause in a background tab and switch off with
+the system "reduce motion" setting. Design details: `web/DESIGN.md`.
+
+### Dot
+
+Black blocks, dot-matrix numbers and a red accent. Static, no effects.
+
+### Night City
+
+_Filled in by task NC-d._
+
+### Rewind
+
+_Filled in by task RW-d._
+
+### Thinker
+
+_Filled in by task TH-d._
+
 ## Install as a service
 
 `scripts/install.sh` renders the templates in `deploy/` into your systemd
