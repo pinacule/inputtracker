@@ -52,7 +52,7 @@ the frames and a dark vignette. (The worker had recommended B.)
 - **Ambient loops** (now and then, only in free space, max 2 at once / 1 on phone): `TRACKING` OSD
   fading in, a VHS dropout line rolling through empty wallpaper, head-switching noise at the bottom
   edge, rewind streaks, a reel glint, a phosphor afterglow speck.
-- **Cursor:** stepped pixel arrow, a pointer with a ▶ notch, a slim I-beam; tiny phosphor beads trail
+- **Cursor:** a white OSD arrow with a navy outline, the same with a yellow ▶ notch (pointer), a slim I-beam; tiny phosphor beads trail
   behind it in empty gutters (desktop only).
 - **Wallpaper:** a wall of old TVs (Unsplash licence, Liana S.), tinted VCR blue; fonts VT323, Share
   Tech Mono, IBM Plex Sans (OFL). Credits: `web/public/wallpapers/rewind/CREDITS.md`.
