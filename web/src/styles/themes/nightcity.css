@@ -364,9 +364,67 @@
 
 :root[data-theme="nightcity"] .ui-sparkline > path:last-of-type { stroke-width: 2px; }
 
-.theme-preview[data-theme="nightcity"] { --header-art:url('/wallpapers/nightcity/city.svg'); }
-.theme-preview[data-theme="nightcity"] .theme-preview-window { border-top:2px solid var(--accent-primary); }
-.theme-preview[data-theme="nightcity"]::after { content:'電脳'; position:absolute; right:2px; bottom:12px; padding:3px 1px; color:#67e8f9; background:#071221; border:1px solid #3f8697; font:700 7px/1 var(--font-sign); writing-mode:vertical-rl; pointer-events:none; }
+/* Static city-window miniature. Every colour/font comes from this tile's scope,
+   even under Dot. Reuse the small original panorama, not another photo export. */
+.theme-preview[data-theme="nightcity"] {
+  --header-art: url('/wallpapers/nightcity/window.svg');
+  align-items: flex-end;
+  padding: 42px 32px 10px 12px;
+  background-size: auto 88px, var(--wallpaper-size);
+  background-position: center top, var(--wallpaper-position);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+  font-synthesis: none;
+}
+.theme-preview[data-theme="nightcity"]::before {
+  z-index: 0;
+  opacity: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(100deg, transparent 43%, #b6f5ff99 48% 52%, transparent 57%) 8% 8px / 4px 18px no-repeat,
+    linear-gradient(100deg, transparent 43%, #b6f5ff88 48% 52%, transparent 57%) 28% 19px / 4px 24px no-repeat,
+    linear-gradient(100deg, transparent 43%, #b6f5ff88 48% 52%, transparent 57%) 58% 4px / 4px 20px no-repeat,
+    linear-gradient(100deg, transparent 43%, #b6f5ff99 48% 52%, transparent 57%) 74% 22px / 4px 16px no-repeat,
+    linear-gradient(100deg, transparent 43%, #b6f5ff88 48% 52%, transparent 57%) 98% 92px / 4px 26px no-repeat;
+}
+.theme-preview[data-theme="nightcity"]::after {
+  content: '夜の街';
+  position: absolute;
+  right: 8px;
+  top: 15px;
+  padding: 5px 3px;
+  color: var(--accent-secondary);
+  background: var(--bg-canvas);
+  border: 1px solid var(--accent-secondary);
+  font: 700 12px/1.3 var(--font-sign);
+  writing-mode: vertical-rl;
+  text-shadow: 0 0 5px var(--glow-pink);
+  box-shadow: 0 0 9px #f467cf66, inset 0 0 6px #f467cf33;
+  pointer-events: none;
+}
+.theme-preview[data-theme="nightcity"] .theme-preview-window {
+  position: relative;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-top: 2px solid var(--accent-primary);
+  box-shadow: 0 5px 12px #020611bb, 0 0 10px #23d8f326;
+}
+.theme-preview[data-theme="nightcity"] .theme-preview-window::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--accent-primary), var(--accent-primary)) left top / 7px 1px no-repeat,
+    linear-gradient(var(--accent-primary), var(--accent-primary)) left top / 1px 7px no-repeat,
+    linear-gradient(var(--accent-primary), var(--accent-primary)) right bottom / 7px 1px no-repeat,
+    linear-gradient(var(--accent-primary), var(--accent-primary)) right bottom / 1px 7px no-repeat;
+}
+.theme-preview[data-theme="nightcity"] .theme-preview-titlebar { padding: 4px 6px; }
+.theme-preview[data-theme="nightcity"] .theme-preview-bars { height: 5px; }
+.theme-tile:hover .theme-preview[data-theme="nightcity"] { box-shadow: inset 0 0 0 1px var(--accent-primary), 0 0 12px #23d8f326; }
+.theme-tile-radio:checked + .theme-tile-body .theme-preview[data-theme="nightcity"] { box-shadow: inset 0 0 0 2px var(--accent-primary); }
+.theme-tile-radio:focus-visible + .theme-tile-body .theme-preview[data-theme="nightcity"] { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 
 /* The title is a window into the same city on every route. Text has its own
    94% navy backing: worst case over pure white is #16202e, muted text 7.3:1.
