@@ -146,6 +146,8 @@ const VALID_SORTS: ReadonlySet<string> = new Set([
   "title",
   "category",
   "creator",
+  "rating",
+  "progress",
 ]);
 
 const VALID_RANGES: ReadonlySet<string> = new Set([

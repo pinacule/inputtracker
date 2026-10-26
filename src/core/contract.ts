@@ -448,7 +448,15 @@ export interface AchriomImportResult {
  * GET /api/library sort values (v2.2 adds "category" and "creator"):
  * plays | recent | time | title | category | creator. YouTube videos also support topic.
  */
-export type LibrarySortV2 = "recent" | "plays" | "time" | "title" | "category" | "creator";
+export type LibrarySortV2 =
+  | "recent"
+  | "plays"
+  | "time"
+  | "title"
+  | "category"
+  | "creator"
+  | "rating"
+  | "progress";
 
 export type TopKind = "songs" | "artists" | "channels";
 export type TopBy = "plays" | "time";

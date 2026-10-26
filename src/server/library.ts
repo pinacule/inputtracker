@@ -19,6 +19,7 @@ import type { Database } from "bun:sqlite";
 import { isDeepStrictEqual } from "node:util";
 import { CATEGORIES, categoryOf, type Category } from "../core/category.ts";
 import type { Config } from "../core/config.ts";
+import { compareByProgress, compareByRating } from "../core/library-sort.ts";
 import type {
   ArchiveConsumed,
   ArchiveRequest,
@@ -974,6 +975,8 @@ export const VALID_LIBRARY_SORTS: ReadonlySet<LibrarySortV2> = new Set([
   "title",
   "category",
   "creator",
+  "rating",
+  "progress",
 ]);
 
 export function isValidLibrarySort(value: unknown): value is LibrarySortV2 {
@@ -1075,6 +1078,10 @@ export function getLibrary(
         CATEGORIES.indexOf(a.category) - CATEGORIES.indexOf(b.category) ||
         a.title.localeCompare(b.title)
     );
+  } else if (sort === "rating") {
+    works.sort((a, b) => compareByRating(a, b));
+  } else if (sort === "progress") {
+    works.sort((a, b) => compareByProgress(a, b));
   } else if (sort === "creator") {
     works.sort((a, b) => {
       const ca = a.creator?.trim() ?? "";
