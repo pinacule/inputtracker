@@ -225,6 +225,145 @@
   --cat-other-tile-end: var(--bg-surface);
 }
 
+/* A static, self-contained Thinker miniature: stone plinth, warm rim glow and pale statue. */
+.theme-preview[data-theme="thinker"] {
+  position: relative;
+  isolation: isolate;
+  padding: 12px 14px;
+  border: 1px solid #393027;
+  border-radius: 4px;
+  background: radial-gradient(ellipse at 80% 75%, #3d2518 0%, #201610 40%, #0b0a09 85%);
+  box-shadow: inset 0 1px 0 rgba(240, 187, 121, 0.15), 0 4px 16px rgba(0, 0, 0, 0.6);
+  color: var(--text-primary);
+  background-image: none;
+}
+.theme-preview[data-theme="thinker"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse at 85% 80%, rgba(215, 96, 44, 0.35) 0%, transparent 50%),
+    radial-gradient(ellipse at 25% 90%, rgba(126, 62, 34, 0.25) 0%, transparent 55%),
+    url("/wallpapers/thinker/veins.svg") center / cover;
+  opacity: 0.65;
+  pointer-events: none;
+}
+.theme-preview[data-theme="thinker"]::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 0;
+  width: 78px;
+  height: 124px;
+  z-index: 1;
+  pointer-events: none;
+  background-image: url("/wallpapers/thinker/thinker-detail.webp");
+  background-size: contain;
+  background-position: right bottom;
+  background-repeat: no-repeat;
+  filter: brightness(1.2) drop-shadow(-5px 0 10px rgba(240, 165, 87, 0.45));
+}
+.theme-preview[data-theme="thinker"] .theme-preview-window {
+  position: relative;
+  z-index: 2;
+  width: calc(100% - 66px);
+  max-width: 70%;
+  padding: 8px 10px;
+  gap: 7px;
+  border: 1px solid #544638;
+  border-radius: 3px;
+  background-color: #171411;
+  background-image: linear-gradient(135deg, #292018 0%, #171411 36px);
+  box-shadow:
+    inset 0 1px 0 rgba(240, 187, 121, 0.4),
+    inset 1px 0 0 rgba(240, 187, 121, 0.2),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.7),
+    -2px 1px 12px rgba(240, 154, 73, 0.2),
+    0 8px 20px rgba(0, 0, 0, 0.8);
+}
+.theme-preview[data-theme="thinker"] .theme-preview-window::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid #f0bb79;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.45;
+  box-shadow: -2px 1px 12px rgba(240, 154, 73, 0.3);
+}
+.theme-preview[data-theme="thinker"] .theme-preview-titlebar {
+  padding: 3px 6px;
+  border-radius: 2px;
+  background: #211c17;
+  box-shadow: inset 0 1px 0 rgba(240, 187, 121, 0.25), inset 0 -1px 0 #393027;
+  color: #f4eee4;
+}
+.theme-preview[data-theme="thinker"] .theme-preview-heading {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  letter-spacing: -0.015em;
+  color: #f4eee4;
+}
+.theme-preview[data-theme="thinker"] .theme-preview-window-button {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #8a7862;
+  border-radius: 2px;
+  background: #2a231d;
+  color: var(--accent-primary);
+  box-shadow: inset 0 1px 0 rgba(240, 187, 121, 0.2);
+}
+.theme-preview[data-theme="thinker"] .theme-preview-data {
+  gap: 3px;
+  font-size: 0.625rem;
+}
+.theme-preview[data-theme="thinker"] .theme-preview-label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  color: #d5c8b7;
+}
+.theme-preview[data-theme="thinker"] .theme-preview-number {
+  font-family: var(--font-numbers);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #f4eee4;
+}
+.theme-preview[data-theme="thinker"] .theme-preview-bars {
+  flex-shrink: 0;
+  height: 5px;
+  border-radius: 1px;
+  gap: 1px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 #0b0a09;
+}
+.theme-preview[data-theme="thinker"] .theme-preview-bars > span {
+  border-radius: 0;
+  background-image: none;
+  box-shadow: none;
+}
+.theme-tile:hover .theme-preview[data-theme="thinker"] .theme-preview-window {
+  border-color: var(--border-strong);
+  box-shadow:
+    inset 0 1px 0 rgba(240, 187, 121, 0.6),
+    inset 1px 0 0 rgba(240, 187, 121, 0.3),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.8),
+    -3px 1px 16px rgba(240, 154, 73, 0.4),
+    0 10px 26px rgba(0, 0, 0, 0.9);
+}
+.theme-tile:hover .theme-preview[data-theme="thinker"]::after {
+  filter: brightness(1.28) drop-shadow(-7px 0 14px rgba(240, 165, 87, 0.6));
+}
+.theme-tile-radio:checked + .theme-tile-body .theme-preview[data-theme="thinker"] {
+  border-color: var(--accent-primary);
+}
+.theme-tile-radio:focus-visible + .theme-tile-body .theme-preview[data-theme="thinker"] {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 :root[data-theme="thinker"][data-thinker-scene="hugo"] { --th-scene: url("/wallpapers/thinker/hugo-desktop.webp"); --th-statue: url("/wallpapers/thinker/hugo-detail.webp"); --th-projection: url("/wallpapers/thinker/hugo-shadow.webp"); }
 :root[data-theme="thinker"][data-thinker-scene="plato"] { --th-scene: url("/wallpapers/thinker/plato-desktop.webp"); --th-statue: url("/wallpapers/thinker/plato-detail.webp"); --th-projection: url("/wallpapers/thinker/plato-shadow.webp"); }
 :root[data-theme="thinker"] body { background-image: none; }
@@ -426,6 +565,22 @@
     min-height: 0; padding: 16px;
   }
   :root[data-theme="thinker"] .home-topbar { min-height: 170px; }
+  :root[data-theme="thinker"] .home-topbar .home-month-nav {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    max-width: calc(100% - 132px);
+  }
+  :root[data-theme="thinker"] .home-topbar .th-window-photo {
+    background-size: contain;
+    background-position: right 6px center;
+  }
+  :root[data-theme="thinker"] .home-topbar .th-window-light {
+    background-size: contain;
+    background-position: right 6px center;
+    mask-position: right 6px center, center;
+    mask-size: contain, 100% 100%;
+  }
   :root[data-theme="thinker"] .library-page { gap: 20px; }
   :root[data-theme="thinker"] .home-day-hero { padding: 20px 0; }
   :root[data-theme="thinker"] .home-time--month { padding-left: 14px; font-size: 2.5rem; }
