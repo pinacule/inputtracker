@@ -38,11 +38,13 @@ and controls whose centre is covered by another element (compared with a Dot bas
 | task | time | what happened | action |
 |---|---|---|---|
 | TH-b | 03:07 | opencode exited with "different Azure OpenAI resource" (router moved the session; stored items gone) | `run-worker-retry.sh` restarted fresh with the same prompt + "continue from the files on disk"; finished 03:22, not counted as an attempt |
+| TH-c | 03:48 | opencode stopped mid-task: `provider.invalid-request` "Upstream rejected the request as invalid" (after a tool-calls step) | continued the same session with "continue where you stopped" (restart 1) |
 
 ## Limit pauses
 
 | worker | model | hit at | recovered at | message |
 |---|---|---|---|---|
+| codex | gpt-6.1-sol high | 2026-10-26 03:42 (NC-c revision, RW-d) | (reset 06:51) | `You've hit your usage limit … try again at 6:51 AM.` RW-d moved to Antigravity with the partial work kept; NC-c revision waits for the reset (same session). Not counted as attempts. |
 | opencode | agentrouter-responses/gpt-6.1-sol#high | 2026-10-26 02:20–02:27 (RW-b, 3 retries 90 s apart) | — | `rate_limit_exceeded: … gpt-6.1-sol in eastus2 have exceeded token rate limit` (no reset time given). Probe at 02:42 OK. RW-b moved to Codex before any work was done; not counted as an attempt. |
 
 ## Decisions needed
