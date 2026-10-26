@@ -5,12 +5,19 @@ the default. Previous report (2026-10-17 overnight build): `docs/reports/2026-10
 
 ## Summary
 
-**Paused 2026-10-26 ~01:15: the manager (Claude) hit its usage limit after setup.** No worker has
-started yet and no skin code exists. Done: uncommitted WIP committed (128196e), all three workers
-tested jailed, Codex added to the scripts and WORKERS.md, review tool `scripts/shots.ts`, Dot
-baseline (`.orchestrator/dot-baseline.json`), task list in TASKS.md (847ff23).
-Next on restart: write `.task/prompt.md` for S0 (Codex), NC-a (Codex) and RW-a (opencode), create
-their worktrees from main, run them in parallel, then TH-a on opencode.
+**Done: all three new skins are merged and pushed to `main` (last merge `ff374a3`).** Night City, Rewind and Thinker
+can be chosen in Settings › Appearance; **Dot stays the default** and looks pixel-identical to before on
+every page (checked by screenshot diff; only Settings changed, because it now shows four tiles).
+`bun run check`: 1463 tests green. 0 BLOCKED.
+
+- Each skin has its own wallpapers (freely licensed photos, credited), fonts, card shapes, chart
+  styling, cursor, entrance/switch animations, random ambient loops in free space, and a reduced-motion
+  static version. Effects load only for the chosen skin (own JS chunk, 13–19 KB) and never block clicks.
+- **Not on your phone yet:** the app runs on the VM, which only updates when you deploy. One command:
+  `scripts/deploy-vm.sh input-tracker` (see "Decisions needed").
+- Every screenshot in this report uses **synthetic demo data** (new `scripts/demo-server.ts`), not your history.
+- Extra fix found on the way: the Insights "+ Add Goal" button was squeezed to one letter per line on
+  phones in every skin, Dot included (X1).
 
 ## Workers (step 0, tested 2026-10-26 00:40–01:10)
 
@@ -152,14 +159,36 @@ dates. No quotes anywhere.
 
 | task | worker | model | attempts | commit |
 |---|---|---|---|---|
+| S0 skin effects layer + stub skins | Codex | gpt-6.1-sol high | 1 | 6cbb5e5 |
+| D0 demo server (synthetic data) | Antigravity | gemini-3.8-flash-high | 1 + 1 send-back | 984c090 |
+| NC-a Night City brief | Codex | gpt-6.1-sol high | 1 + 1 send-back | ae1d00f |
+| NC-b Night City base | Codex | gpt-6.1-sol high | 1 | 7ead66d |
+| NC-c Night City animations | Codex | gpt-6.1-sol high | 1 + 1 send-back (paused by usage limit) | e264eb9 |
+| NC-d Night City tile/tests/docs | Codex | gpt-6.1-sol high | 1 + 1 send-back | ff374a3 |
+| RW-a Rewind brief (3 looks) | opencode | agentrouter-responses/gpt-6.1-sol#high | 1 + 1 send-back | 9b69b05 |
+| RW-b Rewind base + look comparison | Codex (opencode rate-limited) | gpt-6.1-sol high | 1 (2 phases) | 9f29ae4 |
+| RW-c Rewind animations | Codex | gpt-6.1-sol high | 1 | 2f7ac8e |
+| RW-d Rewind tile/tests/docs | Codex → Antigravity (Codex limit) | gemini-3.8-flash-high | 1 | f37daf8 |
+| TH-a Thinker brief | opencode | agentrouter-responses/gpt-6.1-sol#high | 1 + 1 send-back | 1ab5f34 |
+| TH-b Thinker base | opencode | agentrouter-responses/gpt-6.1-sol#high | 1 (1 AgentRouter restart) | 2871fd0 |
+| TH-c Thinker firelight/motion | opencode → Antigravity (finish) | gpt-6.1-sol#high / gemini-3.8-flash-high | 1 + 1 send-back (5 AgentRouter stops) | 822e8a3 |
+| TH-d Thinker tile/tests/docs | Antigravity | gemini-3.8-flash-high | 1 + 1 send-back | fff833f |
+| X1 card header buttons (all skins) | Antigravity | gemini-3.8-flash-high | 1 | 4184468 |
+| X2 Thinker desktop header busts | Antigravity | gemini-3.8-flash-high | 1 | 6fbffb0 |
 
 ## Failed / sent back
 
 - NC-a, RW-a, TH-a (briefs): each sent back once for livelier motion; all accepted on the revision.
-- NC-c attempt 1: rain practically invisible (≈20 px changed per second), no visible entrances on route change, gibberish neon glyphs. Revision cut by the Codex usage limit (03:42); resumes after 06:51.
-- TH-c attempt 1: Thinker cut-out flat and unlit, phone headers inflated to ~600 px by the statues. Sent back to the same opencode session.
+- NC-c attempt 1: rain practically invisible (≈20 px changed per second), no visible entrances on route change, gibberish neon glyphs. Revision cut by the Codex usage limit (03:42), resumed 06:52 in the same session, accepted.
+- NC-d: Night City effects code was written in a dense minified-looking style; reformatted (no behaviour change).
+- D0: demo config left external cover/metadata lookups on; switched off so the demo server stays offline.
+- TH-d: phone masthead crop still wrong and an unneeded layout change; fixed on the revision.
+- RW-b: not a failure — phase 1 built three looks on purpose; the manager picked A and sent phase 2.
+- TH-c attempt 1: Thinker cut-out flat and unlit, phone headers inflated to ~600 px by the statues. Sent back to the same opencode session; Antigravity finished the last step after AgentRouter's 3rd stop in a row.
 
 ## BLOCKED
+
+None.
 
 ## AgentRouter restarts
 
@@ -176,7 +205,25 @@ dates. No quotes anywhere.
 
 | worker | model | hit at | recovered at | message |
 |---|---|---|---|---|
-| codex | gpt-6.1-sol high | 2026-10-26 03:42 (NC-c revision, RW-d) | 06:52 (probe OK) | `You've hit your usage limit … try again at 6:51 AM.` RW-d moved to Antigravity with the partial work kept; NC-c revision waits for the reset (same session). Not counted as attempts. |
+| codex | gpt-6.1-sol high | 2026-10-26 03:42 (NC-c revision, RW-d) | 06:52 (probe OK) | `You've hit your usage limit … try again at 6:51 AM.` RW-d moved to Antigravity with the partial work kept; NC-c revision resumed 06:52 in the same session and was accepted. Not counted as attempts. |
 | opencode | agentrouter-responses/gpt-6.1-sol#high | 2026-10-26 02:20–02:27 (RW-b, 3 retries 90 s apart) | — | `rate_limit_exceeded: … gpt-6.1-sol in eastus2 have exceeded token rate limit` (no reset time given). Probe at 02:42 OK. RW-b moved to Codex before any work was done; not counted as an attempt. |
 
 ## Decisions needed
+
+1. **Deploy to the VM to see the skins on your phone:** `scripts/deploy-vm.sh input-tracker`
+   (builds the web app here and restarts the server there; nothing was deployed tonight).
+   Then Settings › Appearance on the phone. The choice is per device.
+2. **Image licences:** two wallpapers are CC BY-SA (Hong Kong skyline 3.0, Plato bust 4.0). Their
+   edited versions are therefore also CC BY-SA, with credit in the CREDITS.md files. Fine for a
+   private app; if you ever publish the repo, keep those credit files.
+3. Optional: old worktrees from 2026-10-20 (D1, T1, T2, W16, W18) are still in `.worktrees/`; I left
+   them alone because they aren't from this task.
+
+## Notes for next time
+
+- AgentRouter (opencode) stopped TH-c five times ("Upstream rejected the request as invalid", the
+  router switching Azure resource) and rate-limited Sol twice. `scripts/run-worker-retry.sh` now
+  handles the "Upstream rejected" stop (continue once, then restart fresh from the files on disk).
+- Codex hit its ChatGPT usage limit at 03:42 after about 2½ hours (01:20–03:42) of mostly two parallel sessions; reset at 06:51.
+- `scripts/shots.ts` (screenshots + frame captures + covered-control/overflow checks) and
+  `scripts/demo-server.ts` (synthetic data) are the review tools; see WORKERS.md / README.
