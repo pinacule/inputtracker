@@ -501,7 +501,7 @@ remain the later NC-c/NC-d tasks.
 
 Rewind presents a personal archive through a paused VHS deck: cassette compartments, crisp VT323 OSD headings, transport markings and Share Tech Mono counters. A brighter VCR-blue photograph of real vintage televisions establishes the physical world in gutters. Opaque blue reading surfaces keep every English label and data value clear. Preserve the existing pages, controls, chart geometry, data ordering, focus and navigation behaviour; decorative `PLAY`/`SP` text is never a replacement action or recording claim. Avoid Dot's matrix typography/pill geometry and cyberpunk HUDs.
 
-The current RW-b foundation is **entirely static**. Sections 7–10 describe future RW-c motion/cursor work; section 11 describes future RW-d tile polish.
+RW-c animates the RW-b foundation through S0 (sections 7–10); section 11 remains future RW-d tile polish.
 
 ### 2. Palette and measured contrast
 
@@ -512,9 +512,9 @@ All text-bearing substrates are opaque. Canvas/surface/raised/subtle map to `--b
 - Accent **#FFDF6D**, hover **#FFEB9C**, secondary accent **#91DDFF**, dark action ink **#07164C**. Accent-subtle is surface; accent-border is strong border.
 - Subtle/default/strong borders **#3D5F9E/#5F84C8/#9ABBFF**; focus **#B9DEFF**, solid 2px ring with 3px offset. Necessary controls use the strong outline; decorative rules may use default/subtle. Never use glow as the focus cue.
 - Outer bezel light is restrained RGB **#FF6C9E/#77FFAD/#70BCFF**, outside reading areas; it does not recolour glyphs or chart fills. Double blue rules remain **#537FFF**.
-- Modal backdrop `rgba(0,0,0,.82)`, body = raised. Decorative future REC dot **#FF9587**, letters = primary. No blend mode or translucent wash on content.
+- Modal backdrop `rgba(0,0,0,.82)`, body = raised. Decorative REC dot **#FF9587**, letters = primary. No blend mode or translucent wash on content.
 - Base WCAG contrast vectors are **canvas / surface / raised / subtle**: primary **16.05/14.26/12.58/10.68**, secondary **13.15/11.68/10.30/8.75**, muted **10.37/9.21/8.12/6.89**; accent **13.05/11.59/10.23/8.68**, secondary accent **11.39/10.12/8.93/7.57**. Dark ink on accent/hover **13.05/14.34**. Default control border worst case **3.04**; focus worst case **8.10**.
-- Static foreground scanline ink is black **.06**, one pixel every **3px**. The future white rolling band is capped at **.04**; no band currently exists. Effective combined future content noise must stay within **.07 black/.04 white** using normal source-over composition. Conservative contrast checks darken the light glyph and brighten its background at opposite extrema. The original A audit at both caps gives primary/muted minima **8.18/5.32**, category minimum **4.97**, and strong-border minimum **4.58**. Re-audit token or overlay changes; opacity never lowers real text contrast.
+- Static foreground scanline ink is black **.06**, one pixel every **3px**. The 10s rolling white band is capped at **.04**. Effective combined content noise must stay within **.07 black/.04 white** using normal source-over composition. Conservative contrast checks darken the light glyph and brighten its background at opposite extrema. The original A audit at both caps gives primary/muted minima **8.18/5.32**, category minimum **4.97**, and strong-border minimum **4.58**. Re-audit token or overlay changes; opacity never lowers real text contrast.
 
 Ten distinct category families are retained. Each tuple is **fg / opaque chip bg / border / unlabelled chart solid**:
 - anime: `#D2B6FF / #271E3A / #9874D0 / #B185F2` — violet.
@@ -590,12 +590,12 @@ Use category names and stable legend order as well as colour. Never put primary/
 
 - Ship only `vcr-desktop.webp` (**2400×1350**) and `vcr-phone.webp` (**1080×1800**) under `web/public/wallpapers/rewind/`. These names identify the selected VCR aesthetic; both use **RW-01**, Liana S's [wall of vintage televisions](https://unsplash.com/photos/stack-of-vintage-televisions-in-dark-room-EM6GGiK1_go), [Unsplash License](https://unsplash.com/license). Badge marks were retouched using adjacent plain chassis texture; grayscale, levels and a brighter VCR-blue tint make the real hardware visible in unused gutters. Exact edits, source URLs and bytes are in `CREDITS.md`. No entertainment imagery/logos or runtime hotlinks.
 - S0 `bg`: blue canvas → responsive photo at **.88 opacity**, anchor desktop **72% 46%**, phone **64% 48%** → light canvas tint **.08→.30** → 1px black **.07** scanlines every **4px** → slight edge vignette **0→.25**. These stronger layers are behind opaque reading surfaces, never over text. The unused blank-tape and warm-room pairs are removed.
-- S0 `fx`: a fixed, full-viewport, click-through static scanline gradient, **1px/.06 black every 3px**, aria-hidden through S0. No canvas, noise bitmap or moving band. Main frames have a soft external red/green/blue fringe; screen-edge darkening belongs to the background, not glyphs. Phone glow radius is capped at 6px.
+- S0 `fx`: a fixed, full-viewport, click-through static scanline gradient, **1px/.06 black every 3px**, aria-hidden through S0. A separate 10s rolling band peaks at .04 white; there is no canvas or noise bitmap. Main frames have a soft external red/green/blue fringe; screen-edge darkening belongs to the background, not glyphs. Phone glow radius is capped at 6px.
 - Desktop outer gutter 20px; phone 12px, with existing content padding and layout order. No broad decorative layer may consume control space or change measured chart rectangles. Text-bearing page/card/navigation surfaces remain opaque.
 - Only the viewport's one variant loads. Save-Data and `prefers-reduced-data` use canvas/texture without a photograph. Images stay ≤350KB/2400px desktop and ≤200KB/900–1200px phone, preferred pair ≤300KB+150KB. No unused production images, font variants, remote CSS, video or backdrop blur.
-- RW-c may later add the section-7 rolling brighter band, capped at .04 white and paused/removed for hidden/reduced-motion states. It is not part of the current static foundation.
+- The section-7 rolling brighter band is capped at .04 white, paused while hidden and removed for reduced motion.
 
-### 7. Animations — planned for RW-c
+### 7. Animations — RW-c
 
 - Easing constants: settle `cubic-bezier(.16,1,.3,1)`, interaction `cubic-bezier(.2,.7,.2,1)`, mechanical `steps(2,end)`, linear for streak travel. All decorative nodes click-through; reserve geometry first, never delay fetching/rendering or change document flow.
 - **Page transition:** 260ms settle on border/register decorations (opacity .35→1 and translateY 4px→0), wallpaper light pool settles over 420ms. Text/controls render immediately and remain readable; no whole-page blackout, CRT power-off collapse or brightness flash.
@@ -611,7 +611,7 @@ Use category names and stable legend order as well as colour. Never put primary/
 - Rate-limit switching to one choreography per 900ms; rapid actions still update immediately, replace pending decorations instead of queuing long animations. After the final event, settle cleanly; no more than one short high-contrast glitch pair per switch and no strobe (≤2 abrupt changes/second).
 
 
-### 8. Ambient loops — planned for RW-c
+### 8. Ambient loops — RW-c
 
 - The rolling scanline band and Home REC lamp are continuous base decorations, not scheduled emissions; both pause while hidden. The random scheduler starts after an 8–16s idle wait; sample the six intermittent effects below with independent cooldowns. Defaults **max two desktop / one phone** including cursor accents, excluding the cheap CSS base decorations; transition choreography takes priority and suspends random ambient work. All decorations are `aria-hidden`, `pointer-events: none`, with no audio or live announcements.
 - Free spots are wallpaper gaps, unused bezel margins or genuinely empty padding, never chart plots (even empty ones), covers, text, control hit areas, focus rings, scrollbars or safe-area nav. Inflate exclusions 16px desktop/12px phone; require a complete swept-path fit, revalidate before play, cancel on overlap/scroll/resize, skip rather than force placement.
@@ -625,7 +625,7 @@ Use category names and stable legend order as well as colour. Never put primary/
 - Colouring: white/cyan/yellow with restrained RGB on bezel/slice edges. All six intermittent effects and the steady masthead REC lamp exist on phone, with half streak count/travel and unchanged cooldowns. Random ambient eligibility can safely suppress an emission lacking room; the audited screen sheet/band and deliberately targeted tracking/counter/entrance layers are separate, controlled content-crossing effects, not permission for ambient noise over text.
 
 
-### 9. Cursor — planned for RW-c
+### 9. Cursor — RW-c
 
 - Fine pointers only (`hover: hover` and `pointer: fine`): local 32×32 SVG cursor assets, logical footprint ~18px; native cursor stays visible as the interaction cue, never a JS cursor replacement.
 - Normal: chunky stepped white/cream arrow with 2px canvas-colour outline and a 1px trailing transport notch; hotspot **(3,2)**. Edge cyan; the arrow's bright face uses primary ink.
@@ -634,7 +634,7 @@ Use category names and stable legend order as well as colour. Never put primary/
 - Bind `--cursor-default`, `--cursor-pointer`, `--cursor-text` through S0; clear them on skin teardown. Phone/coarse pointers have no cursor assets requested and no trail.
 
 
-### 10. Signature effect — Tracking lock — planned for RW-c
+### 10. Signature effect — Tracking lock — RW-c
 
 Changing day or week looks like the deck has found the next recorded segment: **both the room's picture and the changed cards' visual contents** briefly track sideways, thin rewind scratches race through the margins, and an OSD `TRACKING` plaque locks into `PLAY` before disappearing.
 - **Content-glitch construction:** use **2–4 horizontal `clip-path` slices of decorative copies of the newly updated card body**, not merely its border. Alternate slice offsets **±6–10px day / ±10–14px week**, with two mechanical positions and a short 1–2px RGB fringe on slice/frame edges, then lock. Copies keep original opaque substrates and crisp original-colour glyphs; fringes affect edges, not recoloured text. The complete card-local glitch lasts **≤240ms**, then copies disappear and the stationary real card is exposed exactly aligned.
@@ -655,7 +655,7 @@ Keep the native radio tile, Rewind label, English description, checked state and
 
 - Keep existing shell order, day map, seven bars, month totals, Library/work-page features and five bottom tabs. Preserve existing responsive breakpoints rather than hard-coding a separate page; outer gutter ~12–16px, frame padding ~14–16px, 44px touch targets, inset counter fonts ≤48px when long values need space.
 - Month heading/total and range controls wrap using the existing grid; full title visibility wins over decorative `SP` stamps. Chips wrap without sideways page scrolling; the 52-week chart keeps its intentional internal scroller. Work descriptions and long source names must wrap, inputs stay 16px, popovers/sheets keep existing mobile behaviour.
-- Current build keeps static full-viewport scanlines. Future RW-c also keeps the slow band, signal-acquired entrance, steady 1Hz Home REC dot, digit rolls and content tracking lock. Use two card slices at **±6px**, two wallpaper bands with half travel, one random ambient effect, a 4px noise zone and max 6px glow; keep the same 240/360/620ms duration caps. Where the fixed bottom tab bar occupies the bottom edge, use a safe side gutter for stronger head-switch noise or skip that emission; only the audited faint screen sheet/band crosses nav.
+- The build keeps static full-viewport scanlines alongside the slow band, signal-acquired entrance, steady 1Hz Home REC dot, digit rolls and content tracking lock. Use two card slices at **±6px**, two wallpaper bands with half travel, one random ambient effect, a 4px noise zone and max 6px glow; keep the same 240/360/620ms duration caps. Where the fixed bottom tab bar occupies the bottom edge, use a safe side gutter for stronger head-switch noise or skip that emission; only the audited faint screen sheet/band crosses nav.
   - Preserve the blue menu, yellow selection strips, square geometry and subtle external RGB frame glow on phone.
 - Use the portrait image only; effects do not allocate full-page canvases. Prefer transform/opacity CSS, no backdrop blur/WebGL/video; if a canvas fallback is necessary cap ambient at **24fps desktop / 15fps phone**, DPR **≤1.5 phone** and ≤2 desktop, render only safe effect bounds. Lazy-load extras after first useful paint; pause when hidden and do not catch up missed loops.
 
@@ -669,11 +669,11 @@ Keep the native radio tile, Rewind label, English description, checked state and
 
 - RW-b implements one blue/yellow palette in `styles/themes/rewind.css`, matched by Rewind's entry in `lib/theme.ts` and its `.theme-preview` tokens. All selectors stay scoped to Rewind; other skins and shared components are untouched. No comparison look preference/attribute remains.
 - Local faces are in `styles/fonts/rewind.css`, assets/licences in `public/fonts/rewind/`; only the two selected photo variants and credits remain in `public/wallpapers/rewind/`. Fonts alias body/display/numbers/mono and legacy sans/serif roles. No new dependencies.
-- `skins/rewind/index.ts` mounts the existing S0 room/screen layers and two local font preloads, honours Save-Data, then removes owned classes/preloads/state on teardown. It reads no localStorage, starts no timers/RAF and adds no motion. Existing component animations/transitions are disabled for the static foundation; RW-c must deliberately replace that temporary static rule when implementing motion.
-- RW-c owns sections 7–10: use actual S0 `SkinEffects`/`SkinContext`, events and ambient free-space APIs, visibility/motion guards, sanitized card copies, exact counters and bounded deadlines. Never animate live data geometry, delay real rendering, duplicate announcements, cover protected controls/covers/focus, queue missed events or fetch/store/log source data. Cleanup must cancel every timer/listener/observer/copy/strip; future cursor files stay under `public/cursors/rewind/`.
+- `skins/rewind/index.ts` composes the static room/preloads with `live.ts`. RW-c adds measured, exact digit windows (350ms), first-visible frame acquisition (300ms), channel-register settle (260ms), and tracking slices removed by the event’s 240ms deadline. Computed presentation copies use only inert divs/text; no IDs, handlers, live regions, forms, links or asset requests survive. An even-odd mask with merged holes protects controls, focus rings and counters; visible covers or open tooltips suppress the local copy. Source controls/data are untouched. The masthead reserves one transport slot for TRACKING → PLAY, a 1Hz REC dot and a static decorative counter. Hover/press feedback changes borders/shadows, never data geometry.
+- RW-c uses actual S0 events and `ctx.ambient` for all six intermittent effects. Independent cooldowns start after 8–16s idle; event choreography preempts ambient work. Geometry changes cancel/revalidate free-space emissions. Related week/month/day notifications coalesce; new clicks replace and a 900ms slice cooldown prevents repeated high-contrast glitches. Reduced motion is static; hidden tabs have no skin timers/RAF. Teardown cancels timers, observers, copies, strips, callbacks, decorations and paused state; host AbortSignal removes DOM listeners. Three original 32px SVG cursors (882 bytes total) live under `public/cursors/rewind/`; fine-pointer beads last 180ms and share the ambient concurrency limit. No assets were downloaded for RW-c.
 - Budgets: theme CSS including nested files ≤64KB; effects source ≤60KB; wallpapers ≤350KB desktop/≤200KB phone, total directory ≤1.5MB; fonts ≤600KB, preferred ≤300KB. Keep local-only runtime assets, responsive selection, no native/npm dependencies.
-- Acceptance: `bun run check`, `bun run build:web`, network-free tests for no storage dependency, lifecycle/Save-Data cleanup, one responsive pair, registry/default/preview agreement and worst-case composited AA. Future motion requires its own S0 event/cleanup, timing, sanitization, pause/reduced-motion and safe-placement coverage.
-- Demo-only screenshots at Vite 5193/API 8793: Home (`calendar?date=2026-10-24`), Insights, Library, Settings and work at 1440px/390px into `.task/shots/final/`; inspect actual PNGs/full-page captures, require no horizontal overflow and blocked controls no worse than Dot. Phase-1 comparison captures remain in ignored `.task/` as historical references, not shipped options.
+- Acceptance: `bun run check`, `bun run build:web`, network-free tests for no storage dependency, lifecycle/Save-Data cleanup, one responsive pair, registry/default/preview agreement and worst-case composited AA. RW-c adds DOM-free counter/direction/exclusion tests and `.task/rewind-capture.ts` CDP checks for replacement, inert copies, reduced motion, hidden state and disposal.
+- Demo-only screenshots at Vite 5193/API 8793: Home (`calendar?date=2026-10-24`), Insights, Library, Settings and work at 1440px/390px into `.task/shots/`; inspect actual PNGs/full-page captures, require no horizontal overflow and blocked controls no worse than Dot. Phase-1 comparison captures remain in ignored `.task/` as historical references, not shipped options.
 
 ## Skin: Thinker (TH)
 
