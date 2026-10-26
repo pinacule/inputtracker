@@ -1,4 +1,4 @@
-/* Night City — static city terminal foundation. All reading fills are opaque. */
+/* Night City — rain-lit city terminal. All reading fills are opaque. */
 :root[data-theme="nightcity"],
 .theme-preview[data-theme="nightcity"] {
   color-scheme: dark;
@@ -70,7 +70,7 @@
   --heat-border-4: #67e8f9;
 
   /* Only the winning media-query URL is resolved, including Settings previews. */
-  --wallpaper: linear-gradient(to bottom, #050b181a, #050b1899), linear-gradient(#050b1894, #050b1894), url("/wallpapers/nightcity/skyline-desktop.webp");
+  --wallpaper: linear-gradient(to bottom, #050b1808, #050b1840), url("/wallpapers/nightcity/skyline-desktop.webp");
   --wallpaper-size: cover;
   --wallpaper-repeat: no-repeat;
 
@@ -313,12 +313,12 @@
 :root[data-theme="nightcity"] .ui-punchcard circle { fill-opacity: 1; stroke: var(--border-strong); stroke-width: 1px; }
 :root[data-theme="nightcity"] .ui-punchcard circle[fill="var(--border-default)"] { fill: var(--bg-surface); }
 
-/* Static means static in this foundation: NC-c owns entrance/ambient motion. */
+/* Disable inherited page fades; dedicated frame/data controllers own entrances. */
 :root[data-theme="nightcity"] *, :root[data-theme="nightcity"] *::before, :root[data-theme="nightcity"] *::after { animation: none; transition: none; }
 
 @media (max-width: 767px) {
   :root[data-theme="nightcity"], .theme-preview[data-theme="nightcity"] {
-    --wallpaper: linear-gradient(to bottom, #050b181a, #050b1899), linear-gradient(#050b18a8, #050b18a8), url("/wallpapers/nightcity/street-phone.webp");
+    --wallpaper: linear-gradient(to bottom, #050b1810, #050b184a), url("/wallpapers/nightcity/street-phone.webp");
     --nc-bracket-size: 8px;
     --home-panel-padding: 16px;
     --home-topbar-padding: 16px;
@@ -363,3 +363,126 @@
 :root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-other-"] { --nc-map-bg: var(--cat-other-bg); --nc-map-fg: var(--cat-other-fg); --nc-map-border: var(--cat-other-border); }
 
 :root[data-theme="nightcity"] .ui-sparkline > path:last-of-type { stroke-width: 2px; }
+
+.theme-preview[data-theme="nightcity"] { --header-art:url('/wallpapers/nightcity/city.svg'); }
+.theme-preview[data-theme="nightcity"] .theme-preview-window { border-top:2px solid var(--accent-primary); }
+.theme-preview[data-theme="nightcity"]::after { content:'電脳'; position:absolute; right:2px; bottom:12px; padding:3px 1px; color:#67e8f9; background:#071221; border:1px solid #3f8697; font:700 7px/1 var(--font-sign); writing-mode:vertical-rl; pointer-events:none; }
+
+/* The title is a window into the same city on every route. Text has its own
+   94% navy backing: worst case over pure white is #16202e, muted text 7.3:1.
+   The brighter right-hand skyline has no unbacked text. No additional photo. */
+:root[data-theme="nightcity"] :is(.page-header,.home-topbar) {
+  background-image: linear-gradient(90deg,#071221cc,transparent 65%),url('/wallpapers/nightcity/window.svg');
+  background-size: cover;
+  background-position: center;
+  min-height: 140px;
+  padding: 18px;
+  border: 1px solid var(--border-strong);
+  box-shadow: inset 0 -2px #67e8f955;
+}
+:root[data-theme="nightcity"] :is(.page-header-titles,.home-month-nav,.home-topbar-actions) {
+  background: #071221f0;
+  padding: 10px 12px;
+  border-left: 1px solid #67e8f966;
+}
+:root[data-theme="nightcity"] .page-header-actions { background: var(--bg-surface); padding: 6px; }
+:root[data-theme="nightcity"] .work-hero-card { background-image:url('/wallpapers/nightcity/window.svg'); background-position:center top; background-size:auto 108px; background-repeat:no-repeat; padding-top:60px; }
+:root[data-theme="nightcity"] .work-hero-card::before { content:''; position:absolute; inset:0 0 auto; height:44px; background:url('/wallpapers/nightcity/window.svg') center/cover; border-bottom:1px solid #385772; pointer-events:none; }
+:root[data-theme="nightcity"] .work-hero-body { background:var(--bg-surface); }
+:root[data-theme="nightcity"] .nc-city { background-color: #14304715; }
+:root[data-theme="nightcity"] .nc-city-sign { font-size: 22px; border-color: #67e8f9; color: #b6f5ff; text-shadow: 0 0 8px #23d8f3; box-shadow: 0 0 22px #23d8f377,inset 0 0 9px #23d8f340; }
+:root[data-theme="nightcity"] .nc-city-sign--future { color: #ffb1ee; border-color: #ff8de3; box-shadow: 0 0 24px #f467cf66; }
+:root[data-theme="nightcity"] .nc-city-sign--terminal { font-size: 18px; }
+:root[data-theme="nightcity"] .nc-rain { position:absolute; inset:0; pointer-events:none; }
+:root[data-theme="nightcity"] :is(.nc-power,.nc-map-scan,.nc-front-rain,.nc-window-rain) { overflow:hidden; pointer-events:none; }
+:root[data-theme="nightcity"][data-skin-dir="prev"] .nc-direction-rail { stroke:#ff8de3; }
+:root[data-theme="nightcity"][data-skin-dir="next"] .nc-direction-rail { stroke:#b6f5ff; }
+:root[data-theme="nightcity"] .nc-cursor-heel { position:absolute; width:6px; height:6px; border-radius:50%; background:#67e8f930; box-shadow:0 0 5px #23d8f344; pointer-events:none; }
+:root[data-theme="nightcity"] .nc-cursor-heel[hidden] { display:none; }
+:root[data-theme="nightcity"] .nc-bead { animation:nc-bead 1200ms steps(36,end) both; }
+:root[data-theme="nightcity"] .nc-splash { animation:nc-splash 160ms steps(4,end) both; }
+@keyframes nc-bead { from { transform:translateY(0); opacity:.8; } to { transform:translateY(var(--nc-run)); opacity:0; } }
+@keyframes nc-splash { 0%,70% { opacity:.65; } 100% { opacity:0; } }
+
+/* A reserved readout in the tall desktop day pane, after the real text. */
+@media (min-width:1024px) {
+  :root[data-theme="nightcity"] .home-day-overview::before {
+    content:'BLOCK 07   /   街   /   LINK ESTABLISHED';
+    display:block;
+    order:10;
+    margin-top:auto;
+    min-height:74px;
+    padding:12px 10px 8px;
+    font:400 9px/1.5 var(--font-mono);
+    letter-spacing:.08em;
+    color:#67e8f9;
+    border:1px solid #385772;
+    border-left:2px solid #67e8f9;
+    background:linear-gradient(90deg,#071221e8,transparent),url('/wallpapers/nightcity/window.svg') right bottom/auto 74px no-repeat,#102238;
+    pointer-events:none;
+  }
+}
+
+/* Native shapes survive motion reduction. Touch keeps platform cursors. */
+@media (pointer:fine) and (hover:hover) {
+  :root[data-theme="nightcity"] {
+    --cursor-default:url('/cursors/nightcity/default.svg') 3 2,auto;
+    --cursor-pointer:url('/cursors/nightcity/pointer.svg') 3 2,pointer;
+    --cursor-text:url('/cursors/nightcity/text.svg') 16 16,text;
+  }
+  :root[data-theme="nightcity"] :is(.ui-card--interactive,.ui-btn,.ui-icon-btn,.ui-tab,.sidebar-nav-link) { transition:box-shadow 140ms var(--ease-standard),border-color 140ms var(--ease-standard),color 140ms var(--ease-standard),background-size 160ms var(--ease-standard); }
+  :root[data-theme="nightcity"] .ui-btn { background-image:linear-gradient(var(--accent-primary),var(--accent-primary)); background-position:center calc(100% - 5px); background-size:0 1px; background-repeat:no-repeat; }
+  :root[data-theme="nightcity"] .ui-btn:hover { background-size:calc(100% - 16px) 1px; }
+  :root[data-theme="nightcity"] :is(.ui-btn,.ui-icon-btn):active { transition-duration:80ms; }
+}
+:root[data-theme="nightcity"] :is(.ui-btn,.ui-icon-btn):active { box-shadow:inset 0 -2px var(--accent-primary); }
+
+/* Whole ambient swept rectangles are allocated by ctx.ambient. Their contents
+   never leave those rectangles, and CSS steps cap movement at 30/20fps. */
+:root[data-theme="nightcity"] .nc-ambient { pointer-events:none; }
+:root[data-theme="nightcity"] .nc-sprite { position:absolute; display:block; pointer-events:none; animation-timing-function:steps(var(--nc-steps),end); animation-fill-mode:both; }
+:root[data-theme="nightcity"] .nc-ambient-sign { inset:1px; border:1px solid #67e8f9; background:#071221; color:#b6f5ff; font:700 12px/1.15 var(--font-sign); text-align:center; writing-mode:vertical-rl; padding:3px 0; box-shadow:inset 0 0 8px #23d8f355; }
+:root[data-theme="nightcity"] .nc-ambient--buzz .nc-sprite { animation-name:nc-buzz; animation-duration:1400ms; }
+:root[data-theme="nightcity"] .nc-ambient--online .nc-sprite { animation-name:nc-online; animation-duration:240ms; }
+:root[data-theme="nightcity"] .nc-ambient--ad .nc-sprite { animation-name:nc-ad; animation-duration:600ms; }
+:root[data-theme="nightcity"] .nc-drone { left:0; top:4px; width:30px; height:3px; display:flex; gap:4px; background:linear-gradient(90deg,transparent,#67e8f955); animation-name:nc-pass; animation-duration:3200ms; --nc-travel:130px; }
+:root[data-theme="nightcity"] .nc-drone i { display:block; width:3px; height:3px; background:#b6f5ff; }
+:root[data-theme="nightcity"] .nc-drone i:first-child { margin-left:20px; }
+:root[data-theme="nightcity"] .nc-train { left:0; top:2px; width:68px; height:8px; overflow:hidden; font:10px/8px var(--font-mono); color:#ffd178; letter-spacing:2px; animation-name:nc-pass; animation-duration:4000ms; --nc-travel:152px; }
+:root[data-theme="nightcity"] .nc-ripple { left:1px; top:1px; right:1px; bottom:1px; border:1px solid #67e8f9; border-radius:50%; animation-name:nc-ripple; animation-duration:1800ms; }
+:root[data-theme="nightcity"] .nc-ripple--second { animation-delay:240ms; animation-duration:1560ms; animation-timing-function:steps(46,end); }
+:root[data-theme="nightcity"] .nc-beacon { left:4px; top:4px; width:4px; height:4px; background:#67e8f9; border-radius:50%; animation-name:nc-beacon; animation-duration:2400ms; }
+@keyframes nc-buzz { 0%,100% { opacity:.85; } 24%,61% { opacity:.45; } 41%,80% { opacity:.85; } }
+@keyframes nc-online { from { opacity:.45; box-shadow:inset 0 0 16px #67e8f9; } to { opacity:1; } }
+@keyframes nc-ad { 0%,100% { clip-path:inset(0); } 35% { clip-path:polygon(0 0,100% 0,100% 28%,70% 28%,70% 31%,100% 31%,100% 64%,80% 64%,80% 68%,100% 68%,100% 100%,0 100%); transform:translateX(2px); } 65% { transform:translateX(-2px); } }
+@keyframes nc-pass { 0% { transform:translateX(0); opacity:0; } 15%,85% { opacity:.8; } 100% { transform:translateX(var(--nc-travel)); opacity:0; } }
+@keyframes nc-ripple { from { transform:scale(.18); opacity:.22; } to { transform:scale(1); opacity:0; } }
+@keyframes nc-beacon { 0%,100% { opacity:.2; } 50% { opacity:.65; } }
+
+@media (max-width:767px) {
+  :root[data-theme="nightcity"] :is(.page-header,.home-topbar) { min-height:100px; padding:12px; background-position:65% center; }
+  :root[data-theme="nightcity"] :is(.page-header-titles,.home-month-nav,.home-topbar-actions) { padding:8px; }
+  :root[data-theme="nightcity"] .home-topbar { flex-wrap:wrap; }
+  :root[data-theme="nightcity"] .home-month-nav { gap:6px; }
+  :root[data-theme="nightcity"] .home-month-title { font-size:2rem; }
+  :root[data-theme="nightcity"] .home-day-hero { padding-block:12px 8px; }
+  :root[data-theme="nightcity"] .page-header-actions { width:100%; }
+  :root[data-theme="nightcity"] .page-header .ui-tabs { display:flex; flex-wrap:wrap; }
+  :root[data-theme="nightcity"] .page-header .ui-tab { flex:1 1 auto; }
+  :root[data-theme="nightcity"] .library-page .page-header { gap:8px; }
+  :root[data-theme="nightcity"] .library-page .page-subtitle { font-size:12px; line-height:1.5; }
+  :root[data-theme="nightcity"] .library-page .ui-cat-chip { font-size:11px; padding-inline:8px; }
+  :root[data-theme="nightcity"] .nc-city-sign { font-size:12px; padding:4px 2px; }
+  :root[data-theme="nightcity"] .nc-city-sign--terminal { font-size:12px; }
+  :root[data-theme="nightcity"] .nc-ambient-sign { font-size:6px; padding:2px 0; }
+  :root[data-theme="nightcity"] .nc-drone { --nc-travel:66px; }
+  :root[data-theme="nightcity"] .nc-train { width:45px; letter-spacing:0; --nc-travel:55px; }
+  :root[data-theme="nightcity"] .nc-beacon { left:2px; top:2px; width:3px; height:3px; }
+  :root[data-theme="nightcity"] .nc-bead { animation-timing-function:steps(24,end); }
+  :root[data-theme="nightcity"] .nc-splash { animation-timing-function:steps(3,end); }
+  :root[data-theme="nightcity"] .nc-ripple--second { animation-timing-function:steps(31,end); }
+}
+@media (prefers-reduced-motion:reduce) {
+  :root[data-theme="nightcity"] *, :root[data-theme="nightcity"] *::before, :root[data-theme="nightcity"] *::after { animation:none !important; transition:none !important; }
+  :root[data-theme="nightcity"] :is(.nc-rain,.nc-window-rain,.nc-front-rain,.nc-power,.nc-map-scan,.nc-decode,.nc-ambient,.nc-cursor-heel) { display:none !important; }
+}
