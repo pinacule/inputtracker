@@ -173,7 +173,15 @@ Photo and font sources, authors and licences are in [wallpaper credits](web/publ
 
 ### Thinker
 
-_Filled in by task TH-d._
+A soot-dark chamber where pale marble and plaster sculptures catch warm firelight beside an unseen hearth.
+Cormorant Garamond headings, crisp Source Sans 3 figures and IBM Plex Mono dates give each card the presence of an engraved stone slab with mineral inlays.
+The immutable statue casts an oversized shadow that continuously breathes and sways across the cave wall, leaning in the direction of travel on date switches.
+Large time numerals ignite with a traveling warm glow mask on entry, and daily chart stacks rise smoothly from the stone baseline.
+A shared three-band noise driver flickers card bevels while rising ember bursts, walking cave figures, flame gusts, dust flecks, hearth flames and marble glints visit vacant wall space.
+An ember-tipped torch cursor leaves transient glowing motes in empty desktop gutters; phones keep the same effects without cursor trails.
+Reduced motion locks static lighting, steady stone bevels and fixed wall silhouettes; background tabs pause all timers and frames.
+The Settings tile is a static stone plinth miniature with bronze bevels, a warm rim glow, a pale Thinker sculpture crop and a thin mineral inlay strip.
+Photo and font sources, authors and licences are in [wallpaper credits](web/public/wallpapers/thinker/CREDITS.md) and [font licences](web/public/fonts/thinker/LICENSE.md).
 
 ## Install as a service
 

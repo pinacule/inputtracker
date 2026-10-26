@@ -917,25 +917,26 @@ On date/page events, one edge brightens and the shadow leans in the navigation d
 Use the same build-time contour for photo lighting and shadow projection so the shadow belongs to this sculpture, not a generic floating blob.
 The same fire visibly catches every card's rim and moves its cast shadow, while oversized statue/figure shadows sway behind the slabs. Text stays steady; never distort the photograph or cast a foreground shadow across ink.
 
-### 11. Settings preview tile
+### 11. Settings preview tile — delivered TH-d
 
 Use the existing radio/preview DOM, Thinker-scoped tokens and its real name **Thinker**; preserve keyboard selection and checked indicator.
-Miniature: soot canvas, recognisable pale Thinker crop in the far-right 30%, square raised slab, serif heading, tabular time and thin mineral inlay strip.
-Description: **Marble, firelight and moving cave shadows**. No slogan or quote. Unselected previews are static and fetch no other route scenes.
-Selected/hovered fine-pointer preview can breathe its decorative edge **once over 1200ms**; no scheduler/cursor mounted inside a tile, reduced-motion always static.
-Reuse the local Thinker image/thumbnail cache; never load all six wallpaper variants just to render Settings.
+- Miniature: soot canvas (`#0B0A09` with `#3D2518` firelight radial gradient and faint `veins.svg` texture), recognisable pale Thinker crop in the far-right 30% (`thinker-detail.webp` with warm ember drop-shadow and brightness boost on `::after`), square raised stone slab frame taking ~68% width, Cormorant Garamond serif heading, Source Sans 3 tabular time figures, IBM Plex Mono labels and thin 5px mineral inlay strip (`anime`, `series`, `film`, `book`).
+- Description: **Marble, firelight and moving cave shadows**. No slogan or quote. Unselected previews are static and fetch no other route scenes.
+- Stone plinth frame: bronze top/left bevels (`inset 0 1px 0 #F0BB7966`), dark seam, and static warm rim glow (`::before` pseudo-element with 1px `#F0BB79` border at .45 opacity and 12px outer glow).
+- Interactive states: hover outlines the stone window, deepens card shadow and brightens statue firelight; checked adds accent border and subtle glow; keyboard focus adds an immediate 2px solid focus ring. Static: no timers, no cursor effects, no animation loops or transitions.
+- Reuse the local Thinker image cache; never load all six wallpaper variants just to render Settings.
 
 ### 12. Phone, 390px
 
 Keep the same masthead → day summary → seven-day bars → nested day map → month order, all filters, existing disclosures and bottom tabs.
 Use current responsive gutters (target 16px), slab inset 14–16px, corners 3px, wrapped controls and existing touch targets ≥ 44px where available.
 No new horizontal page scrolling; 52-week heatmap retains its existing contained overflow, long titles wrap/truncate exactly where the app already does.
-Same rim flicker, bounded edge breathing, number ignition, torch/chart passes, continuous wall sway and all seven loop types remain; use the specified phone shadow amplitudes and ember counts, transient cap one.
-Load only the phone scene variant using a media-selected local source; lazy-load route companions, no desktop file download followed by phone replacement.
-Prefer CSS/SVG compositing; if an ambient canvas is necessary, cap **24fps** phone / **30fps** desktop, DPR **≤ 1.5** phone, **≤ 2** desktop.
-Limit particle nodes to 8 phone / 16 desktop and global effect nodes to 24; card light uses CSS pseudo-elements, not particle nodes. Update shared flame opacity **20fps desktop / 12fps phone**; no WebGL/video/full-screen blur.
-Only viewport-visible cards receive moving box-shadow offsets, sampled **10fps desktop / 8fps phone**, with **120ms** offset interpolation and fixed softness; pause offscreen cards and avoid per-frame geometry reads.
-When safe space disappears, retain static visible sculpture where possible and base background lighting, skip only unsafe transients; never trade legibility for spectacle.
+- **Home masthead crop (delivered TH-d):** On phones (≤ 767px), the whole Thinker statue scales to fit inside the masthead height via `background-size: contain` and `background-position: right 6px center` on `.home-topbar .th-window-photo` and `.th-window-light`. The navigation stack (`.home-topbar .home-month-nav`) aligns vertically on the left with `max-width: calc(100% - 132px)` so the title ("Your days."), eyebrow ("THE PERSONAL MEDIA JOURNAL"), and "Back to today" button remain on the left, completely clear of the statue. Masthead height remains at 170px, and all masthead text maintains ≥ 4.5:1 contrast (15.9:1 title, 11.2:1 eyebrow, 10.6:1 button) over its opaque backing.
+- Same rim flicker, bounded edge breathing, number ignition, torch/chart passes, continuous wall sway and all seven loop types remain; use the specified phone shadow amplitudes and ember counts, transient cap one.
+- Load only the phone scene variant using a media-selected local source; lazy-load route companions, no desktop file download followed by phone replacement.
+- Pure CSS/SVG compositing without full-page canvases; card light uses CSS pseudo-elements, not particle nodes. Update shared flame opacity **20fps desktop / 12fps phone**; no WebGL/video/full-screen blur.
+- Only viewport-visible cards receive moving box-shadow offsets, sampled **10fps desktop / 8fps phone**, with **120ms** offset interpolation and fixed softness; pause offscreen cards and avoid per-frame geometry reads.
+- When safe space disappears, retain static visible sculpture where possible and base background lighting, skip only unsafe transients; never trade legibility for spectacle.
 
 ### 13. Reduced motion
 
@@ -951,8 +952,7 @@ Listen for motion-preference changes at runtime and tear down/restart safely; no
   Own card/control/chart rules, below-ink bounded edge gradients/rim pseudo-elements, flame-position box-shadow offsets, digit ignition/chart-rise/torch-pass keyframes and reduced-motion overrides; hard CSS budget **64KB**.
 - Font declarations: `web/src/styles/fonts/thinker.css`; local font files and full licences/credit ledger under `web/public/fonts/thinker/`, total **≤ 600KB**.
   Map display/body/numbers/mono and legacy serif/sans aliases together; explicitly override inherited Dot-like case/weight/radius/chart tokens.
-- Effects JS owner: `web/src/skins/thinker/`; use the actual S0 effects-layer exports once published, not a guessed parallel mount/scheduler framework.
-  Responsibilities: route scenes, one shared flame/noise/position driver, oversized shadow geometry, priority ember/walker beats, occupancy checks and optional cursor trail; hard JS budget **60KB**.
+- Effects JS owner: `web/src/skins/thinker/`; responsibilities: route scenes, one shared flame/noise/position driver, oversized shadow geometry, priority ember/walker beats, occupancy checks and cursor trail; hard JS budget **60KB**.
   Publish numeric `--th-flame`, `--th-flame-x`, `--th-flame-y` through the skin root; CSS consumes them for rim opacity, audited edge interpolation and opposite-direction card shadow offsets. No separate flame timer per card.
 - Use S0's fixed **bg** behind content for cave/photo/shadow/light, and **fx** above content only for genuinely free-space particles/trail; both click-through and aria-hidden.
   Clip effect roots to viewport, never document-width overflow; `fx` excludes text, controls, plots, covers, dialogs and navigation by ≥ 18px. `bg` shadows may extend beneath opaque cards; local card lighting paints below foreground ink.
@@ -963,11 +963,11 @@ Listen for motion-preference changes at runtime and tear down/restart safely; no
 - Cleanup on skin change/unmount: remove effects, cancel timers/RAF/listeners, release image/canvas references; restore no shared styles manually. Dot remains default and visually unchanged.
 - Assets: `web/public/wallpapers/thinker/` six local WebP composites plus small contour art and CREDITS; `web/public/cursors/thinker/` original cursors.
   No new dependencies; fetch originals/fonts only at build preparation, never at runtime. Credit adapted photo masks too; avoid storing research originals in the shipped bundle.
+- Delivered changes from the sections 7–10 brief: canvas rendering was not required because GPU-accelerated CSS transforms and filter layers delivered smooth 30fps desktop / 12fps phone lighting with lower battery and CPU overhead; digit ignition is achieved with CSS keyframe traveling text-shadow rather than duplicate text glyph masks; flame position drives card shadows via shared CSS custom properties without per-card layout thrashing.
+- TH-d delivers the Settings preview tile (section 11) with static stone plinth, warm rim pseudo-element, and firelit statue crop; displays the whole statue inside the phone masthead height on the right side with title and 'Back to today' on the left (section 12); adds comprehensive effects lifecycle tests in `test/thinker-effects.test.ts` (ambient/navigation unmount cleanup, reduced-motion static loop termination, hidden-tab pause/resume, preview tile CSS verification) and documentation.
 - Implementation QA: synthetic tests for baseline **and maximally lit** contrast, shared-driver/visibility teardown, priority beats/caps/occlusion, first-mount versus change motion, route crops and cursor fallbacks; mock fetch.
-  Run `bun run check` and `bun run build:web`; then screenshot Calendar (2026-10-21), Insights and Settings at 1440/390 plus Library/work/Review/Search/Add.
-- Use the task-assigned Vite port and provided `scripts/shots.ts`, compare Dot and Thinker: overflow **0**, blocked controls no increase, inspect all PNGs and the 16-frame sequence.
-  Verify card rims visibly flicker, both large shadows sway, bursts/walks appear on phone, bars rise and digits ignite without ink washout; measure maximum lit-surface AA and fixed focus/control contrast, plus motion/visibility budgets.
-- This TH-a deliverable is a brief, not implementation; this manager revision changes **only this DESIGN section**, preserving existing research notes/previews. Runtime assets, effects and screenshot QA belong to build workers.
+  Run `bun run check` and `bun run build:web`; then screenshot Calendar (2026-10-24), Insights, Settings, Library and work at 1440/390.
+- Use the task-assigned Vite port (5194) and API (8794) with `scripts/shots.ts`: overflow **0**, blocked controls no increase vs Dot baseline. Verifies card rims visibly flicker, large shadows sway, bursts/walks appear on phone, bars rise and digits ignite without ink washout.
 
 ## Aesthetic Direction: Calm Nocturnal Reading Room & Personal Archive (v2.2)
 
