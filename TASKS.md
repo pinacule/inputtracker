@@ -150,4 +150,4 @@ Skin ids: `nightcity`, `rewind`, `thinker`.
 | TH-a | Thinker design brief | OC | — | As NC-a | DONE (opencode gpt-6.1-sol#high, 1 send-back: firelight on cards, big moving shadows, lively data motion) |
 | TH-b | Thinker wallpapers, fonts, base tokens | CX/OC | S0, TH-a | As NC-b | DONE (opencode gpt-6.1-sol#high, attempt 1, 1 AgentRouter restart; drama/firelight moved to TH-c) |
 | TH-c | Thinker components, firelight flicker + moving shadows, ambient loops, cursor | CX/OC | TH-b | Review checklist above | DONE (opencode gpt-6.1-sol#high, attempt 1, 1 AgentRouter restart; drama/firelight moved to TH-c) |
-| TH-d | Thinker Settings tile, tests, docs | AG/any | TH-c | As NC-d | RUNNING (opencode) |
+| TH-d | Thinker Settings tile, tests, docs | AG/any | TH-c | As NC-d | DONE (opencode gpt-6.1-sol#high, 1 send-back, 5 AgentRouter stops; after the 3rd stop in a row (Codex limited) Antigravity finished the Home masthead) |
