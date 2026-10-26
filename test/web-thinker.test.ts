@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { ALL_THEME_REGISTRY, contrastRatio, relativeLuminance } from "../web/src/lib/theme.ts";
 import { parseAppRoute, type AppRoute } from "../web/src/lib/router.ts";
-import { headingWindow, sceneForRoute, type ThinkerScene } from "../web/src/skins/thinker/scene.ts";
+import { headingBackdrop, headingWindow, sceneForRoute, type ThinkerScene } from "../web/src/skins/thinker/scene.ts";
 import type { SkinEvents } from "../web/src/skins/events.ts";
+import { LIT_SURFACES, litSurface, sampleFlame } from "../web/src/skins/thinker/flame.ts";
 
 const root = new URL("../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, root), "utf8");
@@ -82,15 +83,48 @@ describe("Thinker static foundation", () => {
     expect(headingWindow({ ...phone, height: 45 }, [], true)).toBeNull();
   });
 
+  test("decorative header backdrops fit the existing card without adding height", () => {
+    for (const phone of [true, false]) for (const height of [64, 96, 144, 240]) {
+      const bounds = { left: 16, top: 80, width: phone ? 358 : 900, height };
+      const spot = headingBackdrop(bounds, phone)!;
+      expect(spot.left + spot.width).toBe(bounds.left + bounds.width);
+      expect(spot.top).toBeGreaterThanOrEqual(bounds.top);
+      expect(spot.top + spot.height).toBeLessThanOrEqual(bounds.top + height);
+      expect(spot.height).toBeLessThanOrEqual(phone ? 200 : 204);
+    }
+    expect(headingBackdrop({ left: 0, top: 0, width: 100, height: 24 }, true)).toBeNull();
+    expect(css).not.toMatch(/min-height:\s*(256|300)px|padding-bottom:\s*196px/);
+    expect(css).toContain('position: relative; isolation: isolate; min-height: 0');
+    expect(css).toContain('position: absolute; z-index: -1');
+    expect(css).toContain('.th-ink-scrim');
+    expect(css).toContain('pointer-events: none; background: var(--bg-surface)');
+    // Photo filters must not also brighten the AA-safe scrims.
+    expect(css.slice(css.indexOf('.th-scene-window {'), css.indexOf('.th-window-photo {'))).not.toContain('filter:');
+    const implementation = read('web/src/skins/thinker/index.ts');
+    expect(implementation).toContain('const backdrop = !header.matches(".work-hero-card")');
+    expect(implementation).toContain('const protectedRects = protectedHeaderRects(header)');
+    expect(implementation).toContain('for (const scrim of crop.querySelectorAll(".th-ink-scrim")) scrim.remove()');
+  });
+
+  test("rebuilt sculptures use intact original contours and restrained firelight", () => {
+    const credits = read('web/public/wallpapers/thinker/CREDITS.md');
+    expect(credits).toContain('full-resolution original');
+    expect(credits).toContain('3925 × 5887');
+    expect(credits).toContain('`plato-detail.webp` is unchanged');
+    expect(read('web/public/wallpapers/thinker/thinker-contour.svg')).toContain('C160 25 181 20 198 24');
+    expect(css).toContain(':not([data-thinker-scene="plato"]) :is(.th-statue-light, .th-window-light)');
+    expect(css).toContain('filter: brightness(1.18)');
+  });
+
   test("lookup input yields space to its readable Search button", () => {
     expect(css).toContain('.add-lookup-form .add-lookup-input-wrap > .ui-input { flex: 1; min-width: 0; }');
     expect(css).toContain('.add-lookup-form .add-lookup-input-wrap > .ui-btn { flex-shrink: 0; white-space: nowrap; }');
   });
 
-  test("six media-selected, credited WebPs and local upright font subsets fit tighter budgets", () => {
+  test("responsive scenes, shared isolated details and upright fonts fit tighter budgets", () => {
     const directory = "web/public/wallpapers/thinker/";
     const names = readdirSync(new URL(directory, root));
-    expect(names.filter((name) => name.endsWith(".webp")).length).toBe(6);
+    expect(names.filter((name) => name.endsWith(".webp")).length).toBe(13);
     for (const name of names.filter((name) => name.endsWith(".webp"))) {
       const bytes = statSync(new URL(directory + name, root)).size;
       expect(bytes).toBeLessThanOrEqual(name.includes("phone") ? 150_000 : 280_000);
@@ -125,19 +159,30 @@ describe("Thinker static foundation", () => {
       addEventListener: (key: string, fn: unknown) => { listeners.set(key, fn); },
       removeEventListener: (key: string) => { listeners.delete(key); },
     };
+    const style = { setProperty() {}, removeProperty() {} };
+    const fakeNode = () => ({ style, append() {}, remove() {} });
     try {
       replace("window", { location: { hash: "#/library?work=synthetic-work" }, ...listenerHost });
       replace("document", {
-        documentElement: { dataset: attrs, removeAttribute: () => { delete attrs.thinkerScene; } },
+        documentElement: { dataset: attrs, style, removeAttribute: (name: string) => {
+          delete attrs[name.replace(/^data-/, "").replace(/-([a-z])/g, (_m: string, char: string) => char.toUpperCase())];
+        } },
+        createElement: fakeNode,
         getElementById: () => ({}), querySelectorAll: () => [], fonts: listenerHost, hidden: false,
       });
       replace("ResizeObserver", class { observe() {} unobserve() {} disconnect() { disconnected++; } });
       replace("MutationObserver", class { observe() {} disconnect() { disconnected++; } });
+      replace("IntersectionObserver", class { observe() {} unobserve() {} disconnect() { disconnected++; } });
       replace("requestAnimationFrame", () => 7);
       replace("cancelAnimationFrame", (id: number) => { cancelled = id; });
       const ctx = {
-        signal: new AbortController().signal, isPhone: false,
-        on: (_type: string, fn: typeof pageListener) => { pageListener = fn; return () => { pageListener = undefined; }; },
+        signal: new AbortController().signal, isPhone: false, reducedMotion: false, finePointer: false,
+        bg: fakeNode(), ambient: { add: () => () => {}, start() {}, stop() {} },
+        on: (type: string, fn: typeof pageListener) => {
+          if (type === "page-change") pageListener = fn;
+          return () => { if (type === "page-change") pageListener = undefined; };
+        },
+        onMotionChange: () => () => {},
         onVisibility: (fn: typeof visibilityListener) => { visibilityListener = fn; return () => { visibilityListener = undefined; }; },
       };
       const cleanup = effects.mount(ctx);
@@ -150,7 +195,7 @@ describe("Thinker static foundation", () => {
       expect(attrs.thinkerScene).toBeUndefined();
       expect(pageListener).toBeUndefined();
       expect(visibilityListener).toBeUndefined();
-      expect(disconnected).toBe(2);
+      expect(disconnected).toBe(3);
       expect(listeners.size).toBe(0);
     } finally {
       for (const [key, descriptor] of original) {
@@ -158,5 +203,49 @@ describe("Thinker static foundation", () => {
         else Reflect.deleteProperty(globalThis, key);
       }
     }
+  });
+});
+
+describe("Thinker live flame", () => {
+  test("three noise bands stay continuous, bounded and reproducible without a clock", () => {
+    let low = 1, high = 0;
+    for (let t = 0; t < 90_000; t += 20) {
+      const flame = sampleFlame(t);
+      low = Math.min(low, flame.intensity); high = Math.max(high, flame.intensity);
+      expect(flame).toEqual(sampleFlame(t));
+      expect(flame.intensity).toBeGreaterThanOrEqual(.24);
+      expect(flame.intensity).toBeLessThanOrEqual(.86);
+      expect(Math.abs(flame.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(flame.y)).toBeLessThanOrEqual(1);
+      expect(flame.stretch).toBeGreaterThanOrEqual(1);
+      expect(flame.stretch).toBeLessThanOrEqual(1.25);
+      expect(Math.abs(flame.intensity - sampleFlame(t + 20).intensity)).toBeLessThan(.025);
+    }
+    expect(high - low).toBeGreaterThan(.3);
+    expect(sampleFlame(1000, 41)).not.toEqual(sampleFlame(1000, 42));
+  });
+  test("all breathing / overlapping torch colours share an AA-safe, non-additive endpoint", () => {
+    for (const [base, lit] of LIT_SURFACES) for (let i = 0; i <= 100; i++) {
+      const rgb = litSurface(base, lit, i / 100).match(/\d+/g)!.map(Number);
+      const hex = "#" + rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("");
+      expect(relativeLuminance(hex) - relativeLuminance(base)).toBeLessThanOrEqual(.010);
+      expect(contrastRatio("#b6a895", hex)).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(litSurface("#171411", "#292018", -5)).toBe("rgb(23 20 17)");
+    expect(litSurface("#171411", "#292018", 5)).toBe("rgb(41 32 24)");
+  });
+  test("local native cursors have targeting hotspots and tiny redistribution-free payloads", () => {
+    let bytes = 0;
+    for (const file of ["default", "pointer", "text"]) {
+      const cursor = read(`web/public/cursors/thinker/${file}.svg`);
+      bytes += Buffer.byteLength(cursor);
+      expect(cursor).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
+      expect(cursor).not.toMatch(/https?:\/\/(?!www.w3.org)|<script/);
+      expect(css).toContain(`/cursors/thinker/${file}.svg`);
+    }
+    expect(bytes).toBeLessThan(8000);
+    expect(css).toContain('4 3, pointer');
+    expect(css).toContain('12 14, text');
+    expect(css).not.toContain('cursor: none');
   });
 });

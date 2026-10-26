@@ -1,6 +1,5 @@
-/* Thinker — soot chamber, carved stone and mineral inlays. Static foundation.
-   All reading substrates are opaque; warm edge endpoints stay under ΔY .010.
-   Flame/position tokens are reserved for the single TH-c driver, not timers here. */
+/* Thinker — soot chamber, pale sculpture and flame-lit mineral inlays.
+   All reading substrates are opaque; ALL light shares baked ΔY <= .010 endpoints. */
 :root[data-theme="thinker"],
 .theme-preview[data-theme="thinker"] {
   color-scheme: dark;
@@ -64,11 +63,11 @@
   --th-raised-lit: #32261c;
   --th-subtle-lit: #382b20;
   --th-muted-lit: #3d2e23;
-  --th-edge: linear-gradient(125deg, var(--th-surface-lit), var(--bg-surface) 24px);
+  --th-edge: linear-gradient(125deg, color-mix(in srgb, var(--bg-surface), var(--th-edge-lit, var(--th-surface-lit)) calc(100% * var(--th-arrival, 1))), var(--bg-surface) 32px);
   --th-bevel: inset 0 1px 0 #f0bb7966, inset 1px 0 0 #f0bb7933, inset -1px -1px 0 #000000a6;
   --card-border: var(--border-default);
-  --card-shadow: var(--th-bevel), 0 12px 30px #00000080;
-  --card-shadow-raised: var(--th-bevel), 0 18px 40px #000000a6;
+  --card-shadow: var(--th-bevel), var(--th-shadow-x, 0px) var(--th-shadow-y, 12px) 30px #00000080;
+  --card-shadow-raised: var(--th-bevel), var(--th-shadow-x, 0px) var(--th-shadow-y, 18px) 40px #000000a6;
   --card-title-bg: #211c17;
   --card-title-color: #f4eee4;
   --card-title-padding: 12px 16px;
@@ -114,6 +113,8 @@
   /* Only one responsive scene variable is consumed by the wallpaper / windows.
      No desktop URL is painted on phones, even on first mount. */
   --th-scene: url("/wallpapers/thinker/thinker-desktop.webp");
+  --th-statue: url("/wallpapers/thinker/thinker-detail.webp");
+  --th-projection: url("/wallpapers/thinker/thinker-shadow.webp");
   --wallpaper: var(--th-scene);
   --wallpaper-size: cover;
   --wallpaper-position: right top;
@@ -224,13 +225,13 @@
   --cat-other-tile-end: var(--bg-surface);
 }
 
-:root[data-theme="thinker"][data-thinker-scene="hugo"] { --th-scene: url("/wallpapers/thinker/hugo-desktop.webp"); }
-:root[data-theme="thinker"][data-thinker-scene="plato"] { --th-scene: url("/wallpapers/thinker/plato-desktop.webp"); }
+:root[data-theme="thinker"][data-thinker-scene="hugo"] { --th-scene: url("/wallpapers/thinker/hugo-desktop.webp"); --th-statue: url("/wallpapers/thinker/hugo-detail.webp"); --th-projection: url("/wallpapers/thinker/hugo-shadow.webp"); }
+:root[data-theme="thinker"][data-thinker-scene="plato"] { --th-scene: url("/wallpapers/thinker/plato-desktop.webp"); --th-statue: url("/wallpapers/thinker/plato-detail.webp"); --th-projection: url("/wallpapers/thinker/plato-shadow.webp"); }
 :root[data-theme="thinker"] body { background-image: none; }
 /* Paint on S0's viewport-sized bg, not the document-height body: cover must not
    enlarge a portrait to the height of a long Library/Settings page. */
 :root[data-theme="thinker"] [data-skin-layer="bg"][data-skin="thinker"] {
-  background: var(--th-scene) right top / cover no-repeat;
+  background: radial-gradient(ellipse at 65% 70%, #523323, #302018 46%, #0b0a09 90%);
 }
 
 /* Outer page is a gutter, not one enormous opaque wrapper over the statue.
@@ -240,12 +241,13 @@
   border-color: transparent;
   box-shadow: none;
 }
-:root[data-theme="thinker"] .page-container:not(.home-page) > :not(.library-works-grid):not(.insights-two-col):not(.library-work-two-col):not(.settings-sources-stack):not(.add-sheet-container):not(.ui-card) {
+:root[data-theme="thinker"] .page-container:not(.home-page) > :not(.library-works-grid):not(.insights-two-col):not(.library-work-two-col):not(.settings-sources-stack):not(.add-sheet-container):not(.ui-card):not(.page-header) {
   background-color: var(--bg-surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--card-shadow);
   padding: 16px;
 }
+:root[data-theme="thinker"] .page-header { background-color: var(--bg-surface); border-radius: var(--radius-lg); box-shadow: var(--card-shadow); padding: 16px; }
 :root[data-theme="thinker"] :is(.ui-card, .home-topbar, .home-category-index, .home-day-overview, .home-day-entries, .home-week-card, .home-rhythm-card, .library-work-card, .insights-goal-item, .insights-otd-card, .yt-topic-card, .add-lookup-hit) {
   background-color: var(--bg-surface);
   background-image: var(--th-edge);
@@ -255,12 +257,12 @@
 }
 :root[data-theme="thinker"] .ui-card--elevated {
   background-color: var(--bg-surface-raised);
-  background-image: linear-gradient(125deg, var(--th-raised-lit), var(--bg-surface-raised) 24px);
+  background-image: linear-gradient(125deg, var(--th-raised-edge, var(--th-raised-lit)), var(--bg-surface-raised) 32px);
   box-shadow: var(--card-shadow-raised);
 }
 :root[data-theme="thinker"] .ui-card--subtle {
   background-color: var(--bg-subtle);
-  background-image: linear-gradient(125deg, var(--th-subtle-lit), var(--bg-subtle) 24px);
+  background-image: linear-gradient(125deg, var(--th-subtle-edge, var(--th-subtle-lit)), var(--bg-subtle) 32px);
 }
 :root[data-theme="thinker"] :is(.ui-card-header, .ui-sheet-header) { background-color: var(--bg-surface-raised); }
 :root[data-theme="thinker"] .ui-card-title { font-size: 1.4rem; }
@@ -280,8 +282,11 @@
 :root[data-theme="thinker"] .home-time-unit { font-size: 0.3em; letter-spacing: 0; }
 :root[data-theme="thinker"] .home-day-panel { padding-top: 16px; }
 :root[data-theme="thinker"] .home-rhythm-card { margin-top: 16px; }
-:root[data-theme="thinker"] .home-topbar { flex-wrap: wrap; }
-:root[data-theme="thinker"] :is(.home-topbar, .page-header) { position: relative; min-height: 172px; }
+:root[data-theme="thinker"] .home-topbar { flex-wrap: wrap; min-height: 156px; }
+:root[data-theme="thinker"] :is(.home-topbar, .page-header) {
+  position: relative; isolation: isolate; min-height: 0;
+  gap: 16px;
+}
 :root[data-theme="thinker"] .home-category-index { padding-top: 0; padding-bottom: 0; }
 :root[data-theme="thinker"] .home-day-hero { padding-bottom: 12px; }
 :root[data-theme="thinker"] .home-day-map { display: block; }
@@ -370,20 +375,41 @@
 :root[data-theme="thinker"] :is(.home-week-bar-stack, .home-skyline-stack, .ui-progress-fill, .ui-btn, .ui-card--interactive) { transition: none; }
 :root[data-theme="thinker"] .ui-btn:active:not(:disabled) { transform: none; }
 
-/* S0-safe decorative scene windows: JS measures free rectangles, CSS reuses the
-   active image (same crop/family); no image lives above protected reading ink. */
+/* Compact background statues don't reserve layout space. Measured opaque
+   scrims sit above photos but BELOW real ink; work covers use free slots only. */
 :root[data-theme="thinker"] .th-scene-window {
-  position: absolute;
+  position: absolute; z-index: -1;
   pointer-events: none;
-  background-image: var(--th-scene);
-  background-size: auto 200%;
-  background-position: right 48%;
-  background-repeat: no-repeat;
-  mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent), linear-gradient(0deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
-  mask-composite: intersect;
   contain: strict;
+  border-radius: inherit;
 }
-:root[data-theme="thinker"][data-thinker-scene="thinker"] .th-scene-window { background-position: right 34%; }
+:root[data-theme="thinker"] .work-hero-card { isolation: isolate; }
+:root[data-theme="thinker"] .th-window-photo {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: var(--th-statue);
+  background-size: contain;
+  background-position: calc(100% + 18px) top;
+  background-repeat: no-repeat;
+  filter: brightness(var(--th-photo-light, 1.15));
+}
+:root[data-theme="thinker"] .home-topbar .th-window-photo {
+  background-size: auto 190%;
+  background-position: calc(100% + 24px) 0%;
+}
+:root[data-theme="thinker"] .home-topbar .th-window-light {
+  background-size: auto 190%;
+  background-position: calc(100% + 24px) 0%;
+  mask-position: calc(100% + 24px) 0%, center;
+  background-image: linear-gradient(28deg, #ff99434d, transparent 64%), var(--th-statue);
+  filter: brightness(1.8);
+}
+:root[data-theme="thinker"] .home-topbar .th-window-photo::after {
+  content: none;
+}
+:root[data-theme="thinker"] .th-ink-scrim {
+  position: absolute; pointer-events: none; background: var(--bg-surface);
+  box-shadow: 0 0 9px 5px var(--bg-surface); border-radius: 3px;
+}
 
 @media (max-width: 767px) {
   :root[data-theme="thinker"], .theme-preview[data-theme="thinker"] { --th-scene: url("/wallpapers/thinker/thinker-phone.webp"); }
@@ -396,8 +422,10 @@
   }
   :root[data-theme="thinker"] .page-container { width: 100%; margin: 0; padding: 16px; }
   :root[data-theme="thinker"] .home-time--hero { font-size: 3rem; }
-  :root[data-theme="thinker"] .page-header { min-height: 144px; }
-  :root[data-theme="thinker"] .home-topbar { min-height: 112px; }
+  :root[data-theme="thinker"] :is(.page-header, .home-topbar) {
+    min-height: 0; padding: 16px;
+  }
+  :root[data-theme="thinker"] .home-topbar { min-height: 170px; }
   :root[data-theme="thinker"] .library-page { gap: 20px; }
   :root[data-theme="thinker"] .home-day-hero { padding: 20px 0; }
   :root[data-theme="thinker"] .home-time--month { padding-left: 14px; font-size: 2.5rem; }
@@ -405,9 +433,163 @@
   :root[data-theme="thinker"] .home-skyline-tick { font-size: 0.75rem; }
   :root[data-theme="thinker"] :is(.ui-btn--sm, .ui-btn--md, .ui-tab, .mp-seg, .ui-cat-chip, .sidebar-search-input) { min-height: 44px; }
   :root[data-theme="thinker"] .ui-cat-chip { padding-inline: 6px; gap: 4px; min-width: 44px; }
-  :root[data-theme="thinker"] .th-scene-window { background-size: auto 220%; background-position: 84% 25%; }
-  :root[data-theme="thinker"][data-thinker-scene="thinker"] .th-scene-window { background-position: 84% 10%; }
 }
+
+@property --th-arrival { syntax: "<number>"; initial-value: 1; inherits: true; }
+
+/* Immutable photographs and contour-matched projections. Localized filters on
+   sculpture sprites only: no viewport filter, blur, video or animated texture. */
+:root[data-theme="thinker"] :is(.th-statue, .th-statue-light, .th-statue-shadow, .th-figure-shadow, .th-wall-light, .th-marble-glint) {
+  position: absolute; display: block; pointer-events: none;
+}
+:root[data-theme="thinker"] .th-wall-light {
+  inset: -4% -3%;
+  background: linear-gradient(var(--th-fire-angle, 64deg), #a4654070 8%, transparent 62%),
+    radial-gradient(ellipse at 87% 85%, #c072357d, transparent 60%),
+    radial-gradient(ellipse at 20% 100%, #7e3e224d, transparent 50%),
+    url("/wallpapers/thinker/veins.svg") center / cover;
+}
+:root[data-theme="thinker"] :is(.th-statue, .th-statue-light, .th-marble-glint) {
+  width: min(32vw, 460px); height: 82vh; right: -30px; bottom: -2vh;
+  background: var(--th-statue) center bottom / contain no-repeat;
+}
+:root[data-theme="thinker"] .th-statue {
+  filter: brightness(var(--th-photo-light, 1.15));
+  mask: var(--th-statue) center bottom / contain no-repeat;
+  background-image: linear-gradient(100deg, transparent 28%, #03080e90 98%), var(--th-statue);
+}
+:root[data-theme="thinker"] :is(.th-statue-light, .th-window-light) {
+  background-image: linear-gradient(28deg, #ff99434d, transparent 64%), var(--th-statue);
+  background-size: contain; background-position: center bottom; background-repeat: no-repeat;
+  mask-image: var(--th-statue), linear-gradient(var(--th-fire-angle, 36deg), #000 24%, #000 53%, transparent 66%);
+  mask-size: contain, 100% 100%; mask-position: center bottom, center; mask-repeat: no-repeat;
+  mask-composite: intersect;
+  filter: brightness(1.8);
+  opacity: calc(var(--th-warmth, .3) + var(--th-gust, 0));
+}
+:root[data-theme="thinker"]:not([data-thinker-scene="plato"]) :is(.th-statue-light, .th-window-light) {
+  filter: brightness(1.18);
+  background-image: linear-gradient(28deg, #ff8a3328, transparent 64%), var(--th-statue);
+}
+:root[data-theme="thinker"] .th-window-light { position: absolute; inset: 0; pointer-events: none; mask-position: calc(100% + 18px) top, center; background-position: calc(100% + 18px) top; }
+:root[data-theme="thinker"] .th-marble-glint {
+  background-image: linear-gradient(105deg, transparent calc(var(--th-glint-position, 0%) - 1px), #ffe0aa var(--th-glint-position, 0%), transparent calc(var(--th-glint-position, 0%) + 1px));
+  mask: var(--th-statue) center bottom / contain no-repeat; opacity: 0;
+}
+:root[data-theme="thinker"] .th-window-photo::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(95deg, transparent 40%, #02070c8c);
+  mask: var(--th-statue) calc(100% + 18px) top / contain no-repeat;
+}
+:root[data-theme="thinker"] .th-statue-shadow {
+  width: min(54vw, 780px); height: 94vh; right: 5vw; bottom: -3vh;
+  background: #030201; mask: var(--th-projection) center bottom / contain no-repeat;
+  opacity: .58; transform-origin: 80% 100%;
+}
+:root[data-theme="thinker"] .th-figure-shadow {
+  width: 32vw; height: 86vh; left: 22%; bottom: -4vh;
+  background: #020201; mask: url("/wallpapers/thinker/figure-shadow.webp") center bottom / contain no-repeat;
+  opacity: .52; transform-origin: 50% 100%;
+}
+/* Rim-only mask. Nothing painted above ink: 1px border and outside 18px glow.
+   Background breathing and torch band use ONE audited opaque colour endpoint. */
+:root[data-theme="thinker"] :is(.ui-card,.home-topbar,.home-category-index,.home-day-overview,.home-day-entries,.home-week-card,.home-rhythm-card,.library-work-card,.insights-goal-item,.insights-otd-card,.yt-topic-card) {
+  position: relative;
+  --th-stone-base: var(--bg-surface); --th-stone-lit: var(--th-surface-lit);
+  transition: box-shadow 120ms linear;
+}
+:root[data-theme="thinker"] .ui-card--elevated { --th-stone-base: var(--bg-surface-raised); --th-stone-lit: var(--th-raised-lit); }
+:root[data-theme="thinker"] .ui-card--subtle { --th-stone-base: var(--bg-subtle); --th-stone-lit: var(--th-subtle-lit); }
+:root[data-theme="thinker"] :is(.ui-card,.home-topbar,.home-category-index,.home-day-overview,.home-day-entries,.home-week-card,.home-rhythm-card,.library-work-card,.insights-goal-item,.insights-otd-card,.yt-topic-card)::before {
+  content: ""; position: absolute; inset: 0; border: 1px solid #f0bb79;
+  border-radius: inherit; pointer-events: none; opacity: calc(var(--th-rim, .45) * var(--th-arrival, 1));
+  box-shadow: -3px 1px 18px #f09a4930;
+}
+:root[data-theme="thinker"] :is(.home-week-bars,.home-skyline,.ui-chart-svg-wrap) {
+  position: relative;
+  background-image: linear-gradient(90deg, transparent 48%, var(--th-surface-lit) 50%, transparent 52%);
+  background-size: 300% 100%; background-position: 0% 0;
+}
+:root[data-theme="thinker"] :is(.home-week-bars,.home-skyline)::before {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  pointer-events: none; background: linear-gradient(90deg, transparent, #ffd298, transparent);
+  transform-origin: left center; animation: th-baseline-light 1260ms ease-out both;
+}
+@keyframes th-baseline-light {
+  0% { scale: 0 1; opacity: 0; }
+  30% { opacity: .8; }
+  100% { scale: 1 1; opacity: 0; }
+}
+/* Narrow torch passes beneath the text plane. The band cannot add to the
+   breathing colour: it REPLACES that background with the same ΔY <= .010 range. */
+:root[data-theme="thinker"][data-thinker-torch="lit"][data-skin-event="day-change"] :is(.home-day-overview,.home-day-entries),
+:root[data-theme="thinker"][data-thinker-torch="lit"][data-skin-event="week-change"] .home-week-card,
+:root[data-theme="thinker"][data-thinker-torch="lit"][data-skin-event="month-change"] .home-rhythm-card {
+  background-image: linear-gradient(90deg, var(--th-stone-base) 48%, var(--th-stone-lit) 50%, var(--th-stone-base) 52%);
+  background-size: 300% 100%;
+  animation: th-torch-next 650ms cubic-bezier(.4,0,.2,1);
+}
+:root[data-theme="thinker"][data-skin-dir="prev"][data-skin-event] :is(.home-day-overview,.home-day-entries,.home-week-card,.home-rhythm-card) { animation-direction: reverse; }
+@keyframes th-torch-next { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+:root[data-theme="thinker"] .ui-skeleton { animation: th-skeleton 1800ms ease-in-out infinite; }
+@keyframes th-skeleton { 50% { background-color: #33281e; } }
+
+/* Free-space transients live inside S0's clipped, obstacle-checked slots. */
+:root[data-theme="thinker"] .th-ambient { position: absolute; display: block; pointer-events: none; }
+:root[data-theme="thinker"] .th-embers {
+  width: 2px; height: 3px; bottom: 2px; background: #ffd39a; border-radius: 50%;
+  box-shadow: 0 0 5px #ff7725; opacity: 0;
+  animation: th-ember-rise 4s ease-out calc(var(--i) * 75ms) both;
+}
+@keyframes th-ember-rise {
+  10% { opacity: .72; }
+  75% { opacity: .5; }
+  100% { transform: translate(var(--drift), -254px); opacity: 0; }
+}
+:root[data-theme="thinker"] .th-hearth {
+  width: 6px; height: 30px; bottom: 0; background: linear-gradient(0deg, #ffad59, #ed6529, transparent);
+  border-radius: 90% 10% 65% 35%; transform-origin: bottom;
+  animation: th-hearth-tongue 2800ms ease-in-out both;
+}
+@keyframes th-hearth-tongue { 0%,100% { scale: 1 .1; opacity: 0; } 35% { scale: 1 1; rotate: 12deg; opacity: .75; } 65% { scale: 1 .7; rotate: -8deg; opacity: .5; } }
+:root[data-theme="thinker"] .th-dust {
+  width: 1px; height: 1px; top: calc(25px + var(--i) * 20px); background: #f4eee4;
+  animation: th-dust-drift 6s ease-in-out both;
+}
+@keyframes th-dust-drift { 0%,100% { opacity: 0; } 25%,75% { opacity: .18; } 100% { transform: translate(4px, 44px); } }
+:root[data-theme="thinker"] .th-soot {
+  width: 9px; height: 160px; bottom: 0; border-left: 2px solid #bca58c20; border-radius: 50%;
+  animation: th-soot-curl 5s ease-in-out both;
+}
+@keyframes th-soot-curl { 0%,100% { opacity: 0; } 50% { opacity: .5; transform: translateY(-40px) skewY(8deg); } }
+:root[data-theme="thinker"] .th-glint {
+  width: 2px; height: 38px; top: 15%; background: linear-gradient(transparent, #ffe0aa, transparent);
+  animation: th-glint-pass 2s ease-in-out both;
+}
+@keyframes th-glint-pass { 0%,100% { opacity: 0; } 50% { opacity: .55; transform: translateY(60px); } }
+:root[data-theme="thinker"] .th-cursor-ember {
+  position: absolute; width: 2px; height: 2px; background: #f0a557; border-radius: 50%;
+  pointer-events: none; animation: th-cursor-fade 320ms linear both;
+}
+@keyframes th-cursor-fade { from { opacity: .22; } to { opacity: 0; transform: translateY(-2px); } }
+@media (hover: hover) and (pointer: fine) {
+  :root[data-theme="thinker"] {
+    --cursor-default: url("/cursors/thinker/default.svg") 4 3, default;
+    --cursor-pointer: url("/cursors/thinker/pointer.svg") 4 3, pointer;
+    --cursor-text: url("/cursors/thinker/text.svg") 12 14, text;
+  }
+}
+@media (max-width: 767px) {
+  :root[data-theme="thinker"] .page-container > .page-header { padding: 16px; }
+  :root[data-theme="thinker"] :is(.th-statue,.th-statue-light,.th-marble-glint) { width: 64vw; height: 56vh; right: -10vw; bottom: 0; }
+  :root[data-theme="thinker"] .th-statue-shadow { width: 84vw; height: 70vh; right: 6vw; }
+  :root[data-theme="thinker"] .th-figure-shadow { width: 46vw; height: 68vh; left: 12%; }
+  :root[data-theme="thinker"] .th-embers { animation-name: th-phone-ember; }
+  @keyframes th-phone-ember { 10% { opacity: .72; } 75% { opacity: .5; } 100% { transform: translate(var(--drift), -168px); opacity: 0; } }
+}
+:root[data-theme="thinker"][data-thinker-paused="true"] *,
+:root[data-theme="thinker"][data-thinker-paused="true"] *::before,
+:root[data-theme="thinker"][data-thinker-paused="true"] *::after { animation-play-state: paused !important; }
 @media (prefers-reduced-motion: reduce) {
   :root[data-theme="thinker"] *, :root[data-theme="thinker"] *::before, :root[data-theme="thinker"] *::after { animation: none; transition: none; }
 }
