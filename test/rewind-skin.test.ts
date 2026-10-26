@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 // Keep the browser-only DOM types out of the server tsconfig's ES-only lib.
 const browserModuleUrl = new URL("../web/src/skins/rewind/index.ts", import.meta.url).href;
-const { default: effects } = await import(browserModuleUrl) as {
-  default: { mount(ctx: { bg: { classList: unknown }; fx: { classList: unknown } }): () => void };
+const { foundation: effects } = await import(browserModuleUrl) as {
+  foundation: { mount(ctx: { bg: { classList: unknown }; fx: { classList: unknown } }): () => void };
 };
 import { contrastRatio } from "../web/src/lib/theme.ts";
 

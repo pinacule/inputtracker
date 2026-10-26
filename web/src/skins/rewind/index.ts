@@ -1,6 +1,8 @@
 import type { SkinEffects } from "../types.ts";
+import { mountLive } from "./live.ts";
 
-const effects: SkinEffects = {
+/** The static foundation is also exercised independently of browser motion APIs. */
+export const foundation: SkinEffects = {
   mount(ctx) {
     const root = document.documentElement;
     const connection = (globalThis.navigator as Navigator & { connection?: { saveData?: boolean } } | undefined)?.connection;
@@ -28,4 +30,11 @@ const effects: SkinEffects = {
   },
 };
 
+const effects: SkinEffects = {
+  mount(ctx) {
+    const staticCleanup = foundation.mount(ctx);
+    const liveCleanup = mountLive(ctx);
+    return () => { liveCleanup(); staticCleanup(); };
+  },
+};
 export default effects;
