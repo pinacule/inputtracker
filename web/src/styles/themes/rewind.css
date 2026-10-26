@@ -186,6 +186,104 @@
   --status-info-border: #569daf;
 }
 
+/* A static, self-contained CRT miniature: no photo request or live effects. */
+.theme-preview[data-theme="rewind"] {
+  padding: 9px 12px 19px;
+  border: 1px solid #536389;
+  border-radius: 6px;
+  background: radial-gradient(ellipse at 50% 25%, #35415d, #111725 80%);
+  box-shadow: inset 0 2px 1px #75809b, inset 0 -3px 2px #050914;
+  color: var(--text-primary);
+}
+.theme-preview[data-theme="rewind"]::before {
+  inset: auto 42% 6px 12px;
+  height: 5px;
+  opacity: 1;
+  background: repeating-linear-gradient(90deg, #050914 0 2px, transparent 2px 4px);
+  pointer-events: none;
+}
+.theme-preview[data-theme="rewind"]::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  bottom: 6px;
+  width: 18px;
+  height: 5px;
+  border-left: 4px solid var(--accent-primary);
+  background: #050914;
+  pointer-events: none;
+}
+.theme-preview[data-theme="rewind"] .theme-preview-window {
+  position: relative;
+  height: 112px;
+  padding: 8px 9px 23px;
+  gap: 8px;
+  border: 3px solid #050914;
+  border-radius: 9px / 12px;
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 1px var(--border-default), inset 0 0 0 1px #537fff,
+    -2px 0 5px #ff6c9e30, 2px 0 5px #77ffad24;
+}
+.theme-preview[data-theme="rewind"] .theme-preview-window::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: repeating-linear-gradient(0deg, rgb(0 0 0 / var(--rw-scan-alpha)) 0 1px, transparent 1px var(--rw-scan-period));
+  pointer-events: none;
+}
+.theme-preview[data-theme="rewind"] .theme-preview-window::after {
+  content: "SP  0:02:48" / "";
+  position: absolute;
+  left: 9px;
+  bottom: 6px;
+  font: 400 10px/1 var(--font-numbers);
+  letter-spacing: .04em;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.theme-preview[data-theme="rewind"] .theme-preview-titlebar {
+  padding: 2px 5px;
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+  box-shadow: none;
+}
+.theme-preview[data-theme="rewind"] .theme-preview-heading { font-size: 19px; }
+.theme-preview[data-theme="rewind"] .theme-preview-window-button {
+  width: auto;
+  height: auto;
+  border: 0;
+  font-size: 0;
+  box-shadow: none;
+}
+.theme-preview[data-theme="rewind"] .theme-preview-window-button::before {
+  content: "PLAY ▶" / "";
+  font: 400 15px/1 var(--font-display);
+}
+.theme-preview[data-theme="rewind"] .theme-preview-data { gap: 3px; font-size: 10px; }
+.theme-preview[data-theme="rewind"] .theme-preview-label::after {
+  content: "REC ●" / "";
+  position: absolute;
+  right: 9px;
+  bottom: 6px;
+  color: #ffb5ad;
+  font: 400 10px/1 var(--font-mono);
+  pointer-events: none;
+}
+.theme-preview[data-theme="rewind"] .theme-preview-bars { flex-shrink: 0; height: 6px; border-radius: 0; }
+.theme-preview[data-theme="rewind"] .theme-preview-bars > span { background-image: none; box-shadow: none; }
+.theme-tile:hover .theme-preview[data-theme="rewind"] .theme-preview-window {
+  outline: 1px solid var(--border-strong);
+}
+.theme-tile-radio:checked + .theme-tile-body .theme-preview[data-theme="rewind"] {
+  border-color: var(--accent-primary);
+}
+.theme-tile-radio:focus-visible + .theme-tile-body .theme-preview[data-theme="rewind"] {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 /* Blue television wall remains visible only around opaque screen compartments. */
 :root[data-theme="rewind"] body { background-image: none; }
 :root[data-theme="rewind"] .rewind-room {
@@ -315,6 +413,8 @@
 :root[data-theme="rewind"] :is(.library-work-card, .library-work-list-row) { border-left: 3px solid var(--border-strong); }
 :root[data-theme="rewind"] :is(.ui-cover, .library-work-poster, .review-poster, .home-work-thumb) { border-radius: 2px; box-shadow: none; }
 :root[data-theme="rewind"] .search-hit-mark { background: var(--bg-subtle); color: var(--accent-primary); }
+:root[data-theme="rewind"] .add-lookup-form .add-lookup-input-wrap > .ui-input { flex: 1; min-width: 0; }
+:root[data-theme="rewind"] .add-lookup-form .add-lookup-input-wrap > .ui-btn { flex-shrink: 0; white-space: nowrap; }
 :root[data-theme="rewind"] :is(.ui-stat, .library-work-stats-row, .library-history-min) { font-variant-numeric: tabular-nums; }
 :root[data-theme="rewind"] .ui-tab--active { background: var(--accent-primary); color: var(--text-on-accent); }
 :root[data-theme="rewind"] :is(.home-map-time, .home-time) { text-shadow: none; }

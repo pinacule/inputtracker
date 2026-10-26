@@ -161,7 +161,15 @@ _Filled in by task NC-d._
 
 ### Rewind
 
-_Filled in by task RW-d._
+Blue VCR menus, yellow selection strips and square frames sit over a wall of old televisions.
+VT323 headings and Share Tech Mono counters give it the look of a tape deck; body text uses IBM Plex Sans.
+Changing day, week or month briefly slips the wallpaper and safe slices of changed cards, then locks TRACKING into PLAY.
+Large time digits roll into their exact values, and frames acquire a signal when they first appear.
+A slow scan band and a decorative Home REC lamp accompany occasional tracking marks, dropouts, seams, streaks and corner glints.
+The stepped arrow and play-notch pointer leave tiny phosphor beads in empty desktop gutters; phones keep the same screen effects without a cursor.
+Reduced motion keeps static scanlines, frames and steady OSD marks; background tabs pause the effects.
+The Settings tile is a static CRT miniature with its own yellow menu strip and tape counter.
+Photo and font sources, authors and licences are in [wallpaper credits](web/public/wallpapers/rewind/CREDITS.md) and [font licences](web/public/fonts/rewind/LICENSE.md).
 
 ### Thinker
 
