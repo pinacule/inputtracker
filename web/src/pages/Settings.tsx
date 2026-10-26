@@ -316,7 +316,7 @@ export function Settings({
       <Card
         padding="md"
         title="Appearance"
-        subtitle="Dot is the only skin for now; the older ones are archived."
+        subtitle="Choose an app skin. Dot is the default; older skins are archived."
       >
         <ThemePicker value={localTheme} onChange={handleThemeSelect} />
       </Card>

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { CATEGORIES } from "../web/src/lib/categories.ts";
 import {
@@ -10,7 +10,15 @@ import {
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const tokens = read("web/src/styles/tokens.css");
-const skinIds = ["hermes", "workbench", "cwm", "signal", "dot"];
+const newSkinIds = ["nightcity", "rewind", "thinker"];
+const skinIds = ["hermes", "workbench", "cwm", "signal", "dot", ...newSkinIds];
+const root = new URL("../", import.meta.url);
+function files(path: string): string[] {
+  if (!existsSync(new URL(path, root))) return [];
+  return readdirSync(new URL(path, root), { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? files(`${path}/${entry.name}`) : [`${path}/${entry.name}`]);
+}
+const bytes = (path: string) => statSync(new URL(path, root)).size;
 function properties(css: string): Record<string, string> {
   return Object.fromEntries([...css.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)]
     .map((m) => [m[1]!, m[2]!.trim()]));
@@ -102,11 +110,12 @@ describe("app skins", () => {
   });
 
   test("each skin has scoped typography, geometry and local artwork under budget", () => {
-    let bytes = 0;
     for (const id of skinIds) {
       const css = read(`web/src/styles/themes/${id}.css`);
       const props = themeProperties(id);
-      bytes += Buffer.byteLength(css);
+      const ownedCSS = [`web/src/styles/themes/${id}.css`, ...files(`web/src/styles/themes/${id}`)];
+      expect(ownedCSS.reduce((sum, path) => sum + bytes(path), 0), id).toBeLessThanOrEqual(64 * 1024);
+      for (const path of ownedCSS) expect(read(path)).not.toMatch(/url\(["']?https?:|@font-face|@import/);
       expect(css).toContain(`:root[data-theme="${id}"]`);
       expect(css).toContain(`.theme-preview[data-theme="${id}"]`);
       expect(css).not.toMatch(/url\(["']?https?:|@font-face|@import/);
@@ -115,12 +124,38 @@ describe("app skins", () => {
       }
       expect(props["--wallpaper"]).not.toBe("none");
     }
-    expect(bytes).toBeLessThan(60 * 1024);
     const picker = read("web/src/ui/ThemePicker.tsx");
     expect(picker).toContain('type="radio"');
     expect(picker).toContain("THEMES.map");
     expect(picker).toContain("data-theme={theme.id}");
     expect(read("web/src/styles/base.css")).toContain("prefers-reduced-motion: reduce");
+  });
+
+  test("new skins own local assets and effects within download/source budgets", () => {
+    for (const id of newSkinIds) {
+      const wallpapers = files(`web/public/wallpapers/${id}`);
+      let imageCount = 0;
+      for (const path of wallpapers) {
+        expect(path).toMatch(/(?:\.(avif|webp|jpg|svg|md)|\.gitkeep)$/i);
+        if (/\.(avif|webp|jpg|svg)$/i.test(path)) {
+          imageCount++;
+          expect(bytes(path), path).toBeLessThanOrEqual(400 * 1024);
+        }
+      }
+      expect(wallpapers.reduce((sum, path) => sum + bytes(path), 0)).toBeLessThanOrEqual(1.5 * 1024 * 1024);
+      if (imageCount) expect(wallpapers).toContain(`web/public/wallpapers/${id}/CREDITS.md`);
+      const fonts = files(`web/public/fonts/${id}`);
+      for (const path of fonts) expect(path).toMatch(/(?:\.woff2|\/(?:LICENSE|LICENCE|OFL|COPYING)(?:[.-][^/]*)?|\/\.gitkeep)$/i);
+      expect(fonts.reduce((sum, path) => sum + bytes(path), 0)).toBeLessThanOrEqual(600 * 1024);
+      if (fonts.some((path) => path.endsWith(".woff2"))) {
+        expect(fonts.some((path) => /\/(LICENSE|LICENCE|OFL|COPYING)(?:[.-][^/]*)?$/i.test(path))).toBe(true);
+      }
+      for (const path of files(`web/public/cursors/${id}`)) {
+        expect(path).toMatch(/(?:\.(svg|png|cur)|\.gitkeep)$/i);
+        expect(bytes(path), path).toBeLessThanOrEqual(16 * 1024);
+      }
+      expect(files(`web/src/skins/${id}`).reduce((sum, path) => sum + bytes(path), 0)).toBeLessThanOrEqual(60 * 1024);
+    }
   });
 
   test("CWM category colours are unique ANSI colours and all other interface tokens are monochrome", () => {
@@ -188,7 +223,8 @@ describe("app skins", () => {
 
   test("bundled families serve live skins and their previews without scaled fallback headings", () => {
     const fonts = read("web/src/styles/fonts.css");
-    for (const id of skinIds) expect(fonts).toContain(`.theme-preview[data-theme="${id}"]`);
+    for (const id of skinIds.filter((id) => !newSkinIds.includes(id))) expect(fonts).toContain(`.theme-preview[data-theme="${id}"]`);
+    for (const id of newSkinIds) expect(read("web/src/styles/index.css")).toContain(`@import "./fonts/${id}.css"`);
     for (const name of ["Instrument Serif", "Inter", "Oswald", "Roboto Condensed", "IBM Plex Mono", "Courier Prime", "Pixelify Sans"]) {
       expect(fonts).toContain(`font-family: "${name}"`);
     }

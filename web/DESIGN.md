@@ -36,7 +36,122 @@ layout as the other skins; only presentation changes (`styles/themes/dot.css`).
 
 ## Skin effects layer (S0)
 
-_Filled in by task S0: how skins add wallpapers, ambient loops, cursors and transitions._
+`SkinLayer` is mounted once in `App.tsx`. Dot has no effects loader, layers or extra
+stacking context. Night City (`nightcity`), Rewind (`rewind`) and Thinker (`thinker`)
+are active, dark stub skins, dynamically imported as separate effects chunks. Choose
+one in Settings › Appearance, or set `localStorage["inputtracker.theme"]="nightcity"`
+(and reload; substitute `rewind`, `thinker` or `dot`). Dot remains the default.
+
+Each `web/src/skins/<id>/index.ts` exports a `SkinEffects` object with
+`mount(ctx: SkinContext): () => void`. The cleanup must stop any skin-owned timers,
+RAF, listeners and animations. The host guards stale async imports, aborts
+`ctx.signal`, stops ambient work, removes both layers, and unsubscribes all callbacks
+registered through the context on every theme switch. Use `ctx.signal` for extra
+DOM listeners. Custom RAF loops must check visibility/motion, cap ambient work at
+30 fps and cap phone canvas DPR at 1.5.
+
+- `ctx.bg` and `ctx.fx` are fixed viewport elements appended to `body`, marked
+  `aria-hidden="true"`, `data-skin-layer="bg|fx"` and `data-skin="<id>"`. They use
+  strict containment and hidden overflow. All descendants and pseudo-elements
+  have `pointer-events: none !important`. Never put controls or text in them.
+- Effect-enabled skins isolate the body stack: wallpaper/body background, `bg`
+  at −1, regular content at auto/0, `fx` at 20, inline popovers at 30, mobile tab bar
+  at 80, sheets at 100, toasts at 120 and context menus at 150. No stacking context
+  is added to app content, so menus remain above the effects.
+- `ctx.reducedMotion`, `ctx.finePointer` and `ctx.isPhone` are live media-query
+  getters. `ctx.onVisibility(cb)` passes `true` for visible, `false` for hidden;
+  `ctx.onMotionChange(cb)` passes the new reduced-motion preference. These subscribe
+  to changes; read the getters/document visibility for initial state.
+- `ctx.obstacles(): DOMRect[]` recomputes visible text ranges, controls, cards,
+  navigation, sidebar and header bounds in viewport coordinates. Always check it
+  at run time, including for event-driven effects. Full-layer background effects
+  must stay behind opaque reading surfaces. Effects must never obscure text or
+  controls, including after scroll/resize during their lifetime.
+- `ctx.on(type, cb)` subscribes to typed `page-change` (`from/to` route IDs),
+  `day-change` (`from/to` ISO date strings, `direction: -1|1`), `week-change` and
+  `month-change` (both `direction`). Same-day selections emit nothing. Week arrows
+  emit from WeekGraph; month changes are tracked in Calendar because MonthRhythmCard
+  remounts while data loads. Initial render emits no navigation events.
+  Each event also sets `html[data-skin-event]`, with `data-skin-dir="next|prev"`
+  when directional, for a restartable 700 ms. Theme disposal clears the hint.
+  CSS reactions must include reduced-motion overrides (shared CSS disables motion).
+
+`ctx.ambient` is a scheduler bound to `ctx.fx`, current viewport, obstacles,
+visibility and motion. `add()` returns a removal callback; `start()` and `stop()`
+are idempotent. Stop removes active DOM and timers; start can reuse registrations.
+Every registration waits a random `minDelay..maxDelay` before each attempt,
+rechecks obstacles, and skips occupied space. Delays restart on visibility/motion
+resume; active nodes are removed on pause. One effect runs across the skin by
+default; `maxConcurrent: 2` permits two (hard cap), only when all active effects
+also allow two. Numeric `run()` results are lifetimes in ms; promises live until
+settled, including rejection. Each run receives a positioned, size-constrained,
+clipped child layer; append inside it, not directly to `ctx.fx`. Keep effects
+within the requested size. The scheduler removes that layer on completion or
+stop; skin-owned work inside a promise must still obey `ctx.signal`/cleanup.
+
+```ts
+import type { SkinEffects } from "../types.ts";
+const effects: SkinEffects = {
+  mount(ctx) {
+    ctx.ambient.add({
+      id: "glint", minDelay: 4000, maxDelay: 9000,
+      size: { width: 24, height: 24 }, prefer: "edges", margin: 12,
+      run(_spot, layer) {
+        const glint = document.createElement("i");
+        glint.className = "my-skin-glint"; // keyframes in this skin's CSS
+        layer.append(glint);
+        return 800;
+      },
+    });
+    ctx.ambient.start();
+    const off = ctx.on("day-change", ({ direction }) => {
+      if (ctx.reducedMotion || document.hidden) return;
+      // React without an overlay: a scoped CSS rule can style this attribute.
+      ctx.bg.dataset.direction = direction === 1 ? "next" : "prev";
+    });
+    return () => { off(); ctx.ambient.stop(); };
+  },
+};
+export default effects;
+```
+
+`findFreeSpot({ viewport: {x,y,width,height}, obstacles, size, margin, rng,
+prefer: "edges" | "anywhere" })` is DOM-free, returns a rect with `left/top/right/bottom`
+or `null`, keeps margin from both obstacles and viewport edges, and tries the
+perimeter first for `edges`. `rng` is injectable for deterministic tests.
+`createAmbientScheduler({ clock?, rng?, ... })` supports an injected clock and
+geometry/visibility/layer providers for network-free unit tests; skins normally
+use the bound context scheduler instead.
+
+Stable entrance selectors (scope to `:root[data-theme="<id>"]`): `.home-topbar`,
+`.home-category-index`, `.home-day-overview`, `.home-day-entries`, `.home-week-card`,
+`.home-rhythm-card`, `.ui-card` (Insights, Review and Settings sections),
+`.insights-goal-item`, `.insights-otd-card`, `.library-work-card`,
+`.library-work-list-row`, `.yt-topic-card`, `.review-poster`, and `.theme-tile`.
+These existing hooks require no visual/DOM changes. Avoid animating layout
+properties or adding a transform to a common ancestor of fixed dialogs.
+
+Each skin worker owns only `styles/themes/<id>.css` and `styles/themes/<id>/`,
+`styles/fonts/<id>.css`, `skins/<id>/`, `public/wallpapers/<id>/`,
+`public/fonts/<id>/`, `public/cursors/<id>/`, its registry entry in `lib/theme.ts`
+and its design section below. Font files are already imported after shared
+`fonts.css`: add local `@font-face` and root/preview font stacks there. Theme CSS
+uses the full Dot token structure and matching `.theme-preview[data-theme="<id>"]`
+scopes; it contains no imports, font faces or remote URLs. Category tokens must
+match the registry: ten distinct category solids, AA text on actual surfaces.
+Set `--wallpaper` to local artwork/gradients. Cursor tokens `--cursor-default`,
+`--cursor-pointer`, `--cursor-text` include their CSS fallback, e.g.
+`url("/cursors/nightcity/default.svg") 3 3, auto`; Dot defines none.
+
+Budgets enforced by `test/web-themes.test.ts`: each skin's theme CSS plus its
+nested directory ≤64 KiB; each effects directory ≤60 KiB source. Each new skin's
+wallpaper directory accepts AVIF/WebP/JPG/SVG/Markdown/`.gitkeep`, each image
+≤400 KiB and total ≤1.5 MiB, with `CREDITS.md` when images exist. Production
+wallpapers should be ≤350 KiB/2400 px desktop and ≤200 KiB/900–1200 px phone.
+Fonts are local WOFF2 plus licence/`.gitkeep`, total ≤600 KiB, with a licence
+when fonts exist. Cursors accept SVG/PNG/CUR/`.gitkeep`, each ≤16 KiB.
+Downloaded images/fonts require source URL, author and redistribution licence in
+`CREDITS.md`/`LICENSE.md`. S0 downloads no assets and adds no dependencies.
 
 ## Skin: Night City (NC)
 

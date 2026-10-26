@@ -21,6 +21,7 @@ html {
 }
 
 body {
+  cursor: var(--cursor-default, auto);
   margin: 0;
   min-height: 100vh;
   min-height: 100dvh;
@@ -111,7 +112,7 @@ textarea {
 }
 
 button {
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
   background: none;
   border: none;
   padding: 0;
@@ -198,7 +199,7 @@ button:disabled {
 }
 
 /* Class-styled headings on existing pages still receive skin typography. */
-:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"], [data-theme="dot"]) :is(h1, h2, h3, h4) {
+:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"], [data-theme="dot"], [data-theme="nightcity"], [data-theme="rewind"], [data-theme="thinker"]) :is(h1, h2, h3, h4) {
   font-family: var(--font-display);
   font-weight: var(--display-weight);
   font-stretch: var(--display-stretch);
@@ -230,7 +231,7 @@ button:disabled {
   text-transform: var(--label-case);
   letter-spacing: var(--label-tracking);
 }
-:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"], [data-theme="dot"]) .sidebar-search-input:focus-visible {
+:root:is([data-theme="hermes"], [data-theme="workbench"], [data-theme="cwm"], [data-theme="signal"], [data-theme="dot"], [data-theme="nightcity"], [data-theme="rewind"], [data-theme="thinker"]) .sidebar-search-input:focus-visible {
   outline: var(--focus-width) var(--focus-style) var(--focus-ring);
   outline-offset: var(--focus-offset);
 }
@@ -251,3 +252,27 @@ button:disabled {
     scroll-behavior: auto !important;
   }
 }
+
+/* Skin cursor tokens inherit into existing controls and tiles. */
+:is(a, button, [role="button"], [role="tab"], label, summary, select, .theme-tile, .library-work-card) {
+  cursor: var(--cursor-pointer, pointer);
+}
+:is(input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="password"], input[type="number"], input[type="tel"], textarea, [contenteditable]:not([contenteditable="false"])) {
+  cursor: var(--cursor-text, text);
+}
+
+/* Only effect-enabled skins opt into this stacking order; Dot's tree is untouched.
+   Do not isolate the content: its menus must participate in the root stack. */
+html[data-skin-effects] body { isolation: isolate; }
+html[data-skin-effects] #app { z-index: auto; }
+[data-skin-layer] {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none !important;
+}
+[data-skin-layer="bg"] { z-index: -1; }
+[data-skin-layer="fx"] { z-index: 20; }
+[data-skin-layer] *, [data-skin-layer]::before, [data-skin-layer]::after,
+[data-skin-layer] *::before, [data-skin-layer] *::after { pointer-events: none !important; }

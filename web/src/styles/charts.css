@@ -115,7 +115,7 @@
 }
 
 .ui-chart-bar-group {
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
   outline: none;
 }
 
@@ -226,7 +226,7 @@ button.ui-cat-pill:hover {
 }
 
 .ui-cat-donut-segment {
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
   transition: stroke-width var(--duration-fast) var(--ease-standard);
 }
 
@@ -359,7 +359,7 @@ button.ui-cat-pill:hover {
 
 .ui-heatmap-cell {
   rx: var(--chart-cell-radius);
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
   transition: stroke var(--duration-fast) var(--ease-standard);
 }
 

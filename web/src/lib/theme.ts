@@ -21,7 +21,10 @@ export type ThemeId =
   | "workbench"
   | "cwm"
   | "signal"
-  | "dot";
+  | "dot"
+  | "nightcity"
+  | "rewind"
+  | "thinker";
 
 /** Compatibility aliases for existing callers (CWM is a light skin). */
 export type DarkThemeId = ThemeId;
@@ -266,6 +269,54 @@ export const ALL_THEMES: ReadonlyArray<ThemeDefinition> = [
       canvas: "#000000", surface: "#111111", surfaceRaised: "#191919",
       subtle: "#1f1f1f", textPrimary: "#f4f4f4", textSecondary: "#ababab",
       accent: "#ff4a4a", border: "#2c2c2c",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+  {
+    id: "nightcity",
+    label: "Night City",
+    description: "Neon rain over a city at night",
+    swatches: {
+      canvas: "#080e1c",
+      surface: "#101b2c",
+      surfaceRaised: "#17243a",
+      subtle: "#1c2d43",
+      textPrimary: "#edfaff",
+      textSecondary: "#b3c9da",
+      accent: "#55e5f5",
+      border: "#31475f",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+  {
+    id: "rewind",
+    label: "Rewind",
+    description: "VHS tape, scanlines and on-screen display",
+    swatches: {
+      canvas: "#080a10",
+      surface: "#111620",
+      surfaceRaised: "#191f2c",
+      subtle: "#20293a",
+      textPrimary: "#f3f6ff",
+      textSecondary: "#bbc9e4",
+      accent: "#92b8ff",
+      border: "#394a66",
+    },
+    categories: SHARED_DARK_CATEGORIES,
+  },
+  {
+    id: "thinker",
+    label: "Thinker",
+    description: "Marble statues in firelight",
+    swatches: {
+      canvas: "#100d0b",
+      surface: "#1c1713",
+      surfaceRaised: "#261e19",
+      subtle: "#2e251f",
+      textPrimary: "#f6eee4",
+      textSecondary: "#d0bdac",
+      accent: "#ffae78",
+      border: "#504035",
     },
     categories: SHARED_DARK_CATEGORIES,
   },

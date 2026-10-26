@@ -1,3 +1,5 @@
+import { SkinLayer } from "./skins/SkinLayer";
+import { clearSkinEventHint, emitSkinEvent } from "./skins/events.ts";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { loadArchiveContext, type OpenArchiveOptions } from "./lib/archive-form";
 import { getDefaultStore, subscribeQueue } from "./lib/offline-queue";
@@ -94,6 +96,15 @@ export function App() {
     null
   );
   const [toasts, setToasts] = useState<readonly AppToast[]>([]);
+
+  const previousRoute = useRef(loc.route);
+  useEffect(() => {
+    if (previousRoute.current !== loc.route) {
+      emitSkinEvent("page-change", { from: previousRoute.current, to: loc.route });
+      previousRoute.current = loc.route;
+    }
+  }, [loc.route]);
+  useEffect(() => clearSkinEventHint, []);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -264,6 +275,7 @@ export function App() {
       class={["espresso", "midnight", "forest", "obsidian", "plum"].includes(theme)
         ? "app-shell app-shell--editorial" : "app-shell"}
     >
+      <SkinLayer theme={theme} />
       {/* Desktop Left Sidebar */}
       <aside class="app-sidebar" aria-label="Sidebar">
         <a href="#/calendar" class="sidebar-brand">

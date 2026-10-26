@@ -1612,7 +1612,7 @@
   background: none;
   border: 0;
   border-radius: calc(var(--radius-md) - 2px);
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
 }
 .mp-seg:hover { color: var(--text-primary); }
 .mp-seg--on {
