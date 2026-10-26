@@ -84,10 +84,10 @@ opencode)
        || grep -Eq "$LIMIT_RE" "$T/oc.err" 2>/dev/null; then r=limit
   # A finished run ends with a step whose reason is "stop"; a run cut off mid-way (dropped
   # connection) can exit 0 after a "tool-calls" step and must not count as ok.
-  # Some providers (OpenAI Responses via AgentRouter) emit no step_finish events: there a run is
-  # finished when its last event is the final text.
+  # AgentRouter (OpenAI Responses) emits no step_finish for the final text step (seen 2026-10-26
+  # after earlier tool-call steps did have one): a run whose last event is text is finished.
   elif [ $rc -eq 0 ] && { [ "$(jq -rs '[.[] | select(.type=="step_finish")] | last | .part.reason // ""' "$out" 2>/dev/null)" = stop ] \
-       || { ! grep -q '"type":"step_finish"' "$out" && [ "$(jq -rs 'last | .type // ""' "$out" 2>/dev/null)" = text ]; }; }; then r=ok
+       || [ "$(jq -rs 'last | .type // ""' "$out" 2>/dev/null)" = text ]; }; then r=ok
   else r=error; fi
   ;;
 *) echo "unknown worker $WORKER" >&2; exit 2 ;;
