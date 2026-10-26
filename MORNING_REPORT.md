@@ -133,7 +133,7 @@ dates. No quotes anywhere.
 
 | worker | model | hit at | recovered at | message |
 |---|---|---|---|---|
-| codex | gpt-6.1-sol high | 2026-10-26 03:42 (NC-c revision, RW-d) | (reset 06:51) | `You've hit your usage limit … try again at 6:51 AM.` RW-d moved to Antigravity with the partial work kept; NC-c revision waits for the reset (same session). Not counted as attempts. |
+| codex | gpt-6.1-sol high | 2026-10-26 03:42 (NC-c revision, RW-d) | 06:52 (probe OK) | `You've hit your usage limit … try again at 6:51 AM.` RW-d moved to Antigravity with the partial work kept; NC-c revision waits for the reset (same session). Not counted as attempts. |
 | opencode | agentrouter-responses/gpt-6.1-sol#high | 2026-10-26 02:20–02:27 (RW-b, 3 retries 90 s apart) | — | `rate_limit_exceeded: … gpt-6.1-sol in eastus2 have exceeded token rate limit` (no reset time given). Probe at 02:42 OK. RW-b moved to Codex before any work was done; not counted as an attempt. |
 
 ## Decisions needed
