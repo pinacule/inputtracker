@@ -39,3 +39,14 @@ subset, licensed under SIL OFL 1.1; see `/fonts/nightcity/LICENSE.md`.
 Both photos are local; media-query selection fetches only the phone image below
 768px, including the Settings miniature. If a photo is unavailable, the navy
 gradient, SVG skyline, windows and signs remain. No runtime external assets.
+
+`window.svg` is an original code-drawn skyline panorama (InputTracker project
+artwork, distributed under the project licence). It adds no downloaded asset.
+NC-c brightened the original `city.svg` silhouette/window colours; the licensed
+photo files and their attribution above are unchanged. The three SVG cursor
+shapes are also original project artwork.
+
+NC-c review: `window.svg` signs now use actual `夜の街` and `電脳` glyph outlines
+from the existing Noto Sans JP 700 subset by the Noto Project Authors, SIL OFL 1.1.
+Source and full licence: `/fonts/nightcity/LICENSE.md`. No additional font or image download.
+The skyline is original project artwork; the extracted letter outlines retain that font attribution.

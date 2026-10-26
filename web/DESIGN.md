@@ -368,9 +368,9 @@ All decoration is silent and click-through. **Continuous rain is the constant at
 draw it in `bg` behind the opaque cards, spread across the full viewport so every gutter/card edge sees falling rain.
 Use **30–60 simultaneous streaks desktop at 30fps / 15–25 phone at 20fps**, 1px wide, 12–28px long, falling 10°,
 opacity .12–.24 and 900–1400ms travel. Keep light rain running throughout visible/non-reduced-motion use.
-Every random **20–40s**, a heavier **6s burst** raises counts to 75–90 desktop / 30–40 phone and opacity ≤.32,
+Every random **20–40s**, a heavier **6s burst** raises counts to 540 desktop / 180 phone and opacity ≤.60,
 then returns to light rain; no rain-free interval. Opaque cards naturally occlude all background streaks.
-Front rain detail: every 10–18s pick one visible card, bead 1–3 drops (phone 1–2) on its frame and run them
+Front rain detail: every 2.4–4.4s pick one visible card, bead 1–3 drops (phone 1–2) on its frame and run them
 20–60px down its border over 900–1400ms; add 2–3 tiny 2px splash ticks on its top frame edge for 160ms.
 Render these in `fx`, clipped to an explicit 1–2px frame-stroke mask (not the card interior or padding),
 subtract focus outlines and controls touching the border; skip if a clean frame segment is unavailable.
@@ -490,8 +490,33 @@ and its three aria-hidden signs via `skins/nightcity/city.ts`; cleanup removes t
 The gradient, silhouettes and signs survive photo failure and reduced motion. NC-b contains no
 timers or animations; NC-c can add controllers alongside this static scene and replace the scoped
 animation/transition suppression. Tokens, opaque controls, rectangular navigation, category day-map
-cells and inset frame brackets already cover all routes. Motion, rain, cursor and preview polish
-remain the later NC-c/NC-d tasks.
+cells and inset frame brackets already cover all routes.
+
+NC-c adds independent rain, motion, ambient and cursor controllers under `skins/nightcity/`.
+One background canvas draws 360/120 light streaks and 540/180 burst streaks (desktop/phone),
+at 30/20fps with DPR capped at 2/1.5. Burst starts are 20–40s apart. Front beads and
+splashes use an explicit 2px frame-stroke mask with control/glyph clearance removed.
+Measured SVG padding/map scans subtract glyph bounds plus 8px; scroll, resize, focus or
+changed reading content cancels stale decorations. WAAPI entrances leave real card fills
+opaque; exact accessible HUD values remain in place beneath 280ms aria-hidden copies.
+Concurrent week/day/month events are batched so each changed frame retains its rail.
+The six ambient street loops and one-shot arrival sign all use S0 slot accounting,
+20px/12px obstacle clearance and 2/1 concurrency. Narrow vertical signs fit real gutters;
+larger effects, including puddles, skip a page when their whole swept bounds cannot fit.
+Route/range changes replay card, HUD, sparkline and bar effects, including Insights SVG stacks.
+Unrelated DOM mutations validate only stale measured overlays; they never cancel native chart
+timelines. Real static corner strokes flicker via a pseudo-element animation. Header-window
+signs use real outlines from the bundled Noto Sans JP subset.
+Visibility/motion changes clear clocks, copies and sprites; hidden updates are remembered
+without replaying a backlog. Skin teardown returns listeners to the Dot baseline.
+
+The gutter photo scrim is lighter, original city windows/signs brighter, and the original
+`window.svg` panorama appears behind every page header (including the work hero strip).
+Header text uses a local #071221f0 backing: even over white the resulting #16202e gives
+primary/secondary/muted text 15.13:1 / 10.58:1 / 7.34:1. The tall desktop day pane has a
+static block readout, and the Settings miniature has skyline foreground, top rail and sign.
+Three original 32×32 SVG cursors have native fallbacks, with a protected fine-pointer heel.
+No downloaded assets, dependencies, data behavior or shared page styles were added by NC-c.
 
 ## Skin: Rewind (RW)
 
