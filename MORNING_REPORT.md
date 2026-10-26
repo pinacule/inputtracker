@@ -13,8 +13,9 @@ every page (checked by screenshot diff; only Settings changed, because it now sh
 - Each skin has its own wallpapers (freely licensed photos, credited), fonts, card shapes, chart
   styling, cursor, entrance/switch animations, random ambient loops in free space, and a reduced-motion
   static version. Effects load only for the chosen skin (own JS chunk, 13–19 KB) and never block clicks.
-- **Not on your phone yet:** the app runs on the VM, which only updates when you deploy. One command:
-  `scripts/deploy-vm.sh input-tracker` (see "Decisions needed").
+- **Deployed** to the VM `server` at your request (relayed by another session): commit `ff5ae37`,
+  server healthy, all three skin chunks and wallpapers served. Choose a skin in Settings › Appearance
+  on each device.
 - Every screenshot in this report uses **synthetic demo data** (new `scripts/demo-server.ts`), not your history.
 - Extra fix found on the way: the Insights "+ Add Goal" button was squeezed to one letter per line on
   phones in every skin, Dot included (X1).
@@ -210,9 +211,9 @@ None.
 
 ## Decisions needed
 
-1. **Deploy to the VM to see the skins on your phone:** `scripts/deploy-vm.sh input-tracker`
-   (builds the web app here and restarts the server there; nothing was deployed tonight).
-   Then Settings › Appearance on the phone. The choice is per device.
+1. ~~Deploy to the VM~~ — done: `scripts/deploy-vm.sh server` deployed `ff5ae37` (the live VM is
+   `server`). Rollback if ever needed: deploy commit `b2d23f1` (yesterday's build) from a detached
+   worktree with the same script.
 2. **Image licences:** two wallpapers are CC BY-SA (Hong Kong skyline 3.0, Plato bust 4.0). Their
    edited versions are therefore also CC BY-SA, with credit in the CREDITS.md files. Fine for a
    private app; if you ever publish the repo, keep those credit files.
