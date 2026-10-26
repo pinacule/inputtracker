@@ -24,6 +24,49 @@ Review tool: `scripts/shots.ts` (headless Chromium over CDP): screenshots per pa
 390 px @2x, an animation frame sequence + animated WebP, and two automatic checks: sideways overflow
 and controls whose centre is covered by another element (compared with a Dot baseline).
 
+## Skin: Night City (`nightcity`) — DONE
+
+![Home desktop](docs/skins/nightcity/calendar-desktop.webp)
+
+| Home (phone) | Insights (phone) | Settings (phone) |
+|---|---|---|
+| ![](docs/skins/nightcity/calendar-phone.webp) | ![](docs/skins/nightcity/insights-phone.webp) | ![](docs/skins/nightcity/settings-phone.webp) |
+
+Desktop: [Insights](docs/skins/nightcity/insights-desktop.webp) · [Settings](docs/skins/nightcity/settings-desktop.webp) · [Add](docs/skins/nightcity/add-desktop.webp)
+
+A rain-soaked city after midnight: deep navy, neon cyan with a few pink signs, holographic HUD
+cards with cyan corner brackets and cut corners, Rajdhani headings, Barlow body, IBM Plex Mono
+readouts. Every page header is a "window" onto the skyline with lit towers and neon signs;
+Japanese text (夜の街, 電脳, 未来 …) is decoration only, every real label is English.
+
+- **Signature effect — the city terminal comes online:** on every page change the card frames
+  flicker on like holograms with a scanline sweep, bars and the month skyline grow up from the
+  baseline with a cyan scan, sparklines draw in, and big numbers HUD-decode (glyph scramble ending
+  on the exact value, on a decorative copy; the real number stays in the page for screen readers)
+  ([frames 70 ms apart](docs/skins/nightcity/entrance-frames.webp)). Day/week/month switches sweep a
+  rail across the changed card in the direction of travel ([day switch](docs/skins/nightcity/day-switch-frames.webp)).
+- **Rain past the cards, always:** continuous rain behind the cards (visible in the gutters, the gaps
+  and the header city windows) with heavier bursts every 20–40 s, drops beading and running down the
+  card frames and tiny splashes on their top edges — never over text
+  ([rain close-up](docs/skins/nightcity/rain-detail.webp) · [animation](docs/skins/nightcity/rain.webp) · [phone](docs/skins/nightcity/rain-phone.webp)).
+- **Ambient loops** (free space only, max 2 at once / 1 on phone): a neon sign buzzing on, a drone's
+  lights passing along an edge, a train's lit windows gliding by, a puddle ripple, a hologram ad
+  glitching, a rooftop beacon breathing.
+- **Cursor:** a cyan-outlined dark arrow (normal), the same with HUD brackets at the heel (pointer), a
+  cyan I-beam (text), with a small heel glow on desktop.
+- **Wallpapers:** Hong Kong night skyline (Base64, CC BY-SA 3.0 — derivative shared under the same
+  licence) for desktop, "Alone in Tokyo III" (Romain Guy, CC0) for phones, both graded toward an anime
+  night background (logos replaced), plus code-drawn SVG skyline silhouettes and signs. I chose freely
+  licensed photos graded to an anime look over anime screenshots, which can't be redistributed.
+  Credits: `web/public/wallpapers/nightcity/CREDITS.md`.
+- **Workers:** brief NC-a Codex (1 send-back: constant rain, livelier motion, a skyline wallpaper);
+  base NC-b Codex; animations NC-c Codex (1 send-back: rain invisible, entrances not visible, gibberish
+  sign glyphs; the revision was paused by the Codex usage limit 03:42–06:52 and resumed in the same
+  session); Settings tile/tests/docs NC-d Codex (1 send-back: the NC-c effects code was written in a dense
+  minified-looking style; reformatted to the repo's normal style, behaviour unchanged).
+- Checks: overflow 0 everywhere; covered controls only items under the phone tab bar; rain changes
+  ~2,000–3,400 pixels per frame, none over text or controls.
+
 ## Skin: Rewind (`rewind`) — DONE
 
 ![Home desktop](docs/skins/rewind/calendar-desktop.webp)
