@@ -37,4 +37,8 @@ and controls whose centre is covered by another element (compared with a Dot bas
 
 ## Limit pauses
 
+| worker | model | hit at | recovered at | message |
+|---|---|---|---|---|
+| opencode | agentrouter-responses/gpt-6.1-sol#high | 2026-10-26 02:20–02:27 (RW-b, 3 retries 90 s apart) | — | `rate_limit_exceeded: … gpt-6.1-sol in eastus2 have exceeded token rate limit` (no reset time given). RW-b moved to Codex before any work was done; not counted as an attempt. |
+
 ## Decisions needed
