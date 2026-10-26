@@ -106,6 +106,19 @@ describe("Thinker static foundation", () => {
     expect(implementation).toContain('for (const scrim of crop.querySelectorAll(".th-ink-scrim")) scrim.remove()');
   });
 
+  test("desktop page-header busts are fully visible without overlapping text or controls", () => {
+    expect(css).toContain('@media (min-width: 1024px)');
+    expect(css).toContain(':root[data-theme="thinker"] :is(.page-header, .work-hero-card) .th-window-photo');
+    expect(css).toContain('background-position: right 48px center');
+    expect(css).toContain(':root[data-theme="thinker"] .page-header-titles');
+    expect(css).toContain('max-width: calc(100% - 240px)');
+    expect(css).toContain(':root[data-theme="thinker"] .page-header-actions');
+    expect(css).toContain(':root[data-theme="thinker"] .work-hero-card .work-hero-body');
+    // Ensure title and subtitle retain high contrast over the dark reading surface
+    expect(contrastRatio("#f4eee4", "#171411")).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio("#d5c8b7", "#171411")).toBeGreaterThanOrEqual(4.5);
+  });
+
   test("rebuilt sculptures use intact original contours and restrained firelight", () => {
     const credits = read('web/public/wallpapers/thinker/CREDITS.md');
     expect(credits).toContain('full-resolution original');

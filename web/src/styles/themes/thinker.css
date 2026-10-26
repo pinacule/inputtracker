@@ -636,6 +636,37 @@
   background: linear-gradient(95deg, transparent 40%, #02070c8c);
   mask: var(--th-statue) calc(100% + 18px) top / contain no-repeat;
 }
+
+@media (min-width: 1024px) {
+  :root[data-theme="thinker"] .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    min-height: 160px;
+    padding: 16px 20px;
+    gap: 8px;
+  }
+  :root[data-theme="thinker"] .page-header-titles {
+    max-width: calc(100% - 240px);
+    gap: 2px;
+  }
+  :root[data-theme="thinker"] .page-header-actions {
+    max-width: calc(100% - 240px);
+  }
+  :root[data-theme="thinker"] .work-hero-card .work-hero-body {
+    max-width: min(600px, calc(100% - 280px));
+  }
+  :root[data-theme="thinker"] :is(.page-header, .work-hero-card) .th-window-photo {
+    background-position: right 48px center;
+  }
+  :root[data-theme="thinker"] :is(.page-header, .work-hero-card) .th-window-light {
+    background-position: right 48px center;
+    mask-position: right 48px center, center;
+  }
+  :root[data-theme="thinker"] :is(.page-header, .work-hero-card) .th-window-photo::after {
+    mask: var(--th-statue) right 48px center / contain no-repeat;
+  }
+}
 :root[data-theme="thinker"] .th-statue-shadow {
   width: min(54vw, 780px); height: 94vh; right: 5vw; bottom: -3vh;
   background: #030201; mask: var(--th-projection) center bottom / contain no-repeat;
