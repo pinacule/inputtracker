@@ -122,6 +122,28 @@ bun run check   # tsc for src/ and web/, then bun test
 bun run smoke   # end-to-end run against fake Audiobookshelf, Simkl and YouTube servers (temp dirs, no outside network)
 ```
 
+## Demo server
+
+Workers building app skins can run the real server on a throw-away database filled with realistic synthetic data:
+
+```sh
+bun scripts/demo-server.ts
+```
+
+This starts the server on `http://127.0.0.1:8790` and populates a temporary database with ~120 days of synthetic data across every category (anime, series, films, books, audiobooks, YouTube, podcasts, music, shortform, other) with finished, in-progress, and planned works, plus ratings.
+
+Options:
+- `--port <port>`: HTTP port (default `8790`).
+- `--dir <path>`: temporary working directory (default `.task/demo` if `.task/` exists in cwd, else a new dir under OS tmpdir).
+- `--today <YYYY-MM-DD>`: reference anchor date for the ~120-day window (default: today).
+
+To run the Vite frontend against the demo server:
+
+```sh
+INPUTTRACKER_API=http://127.0.0.1:8790 bun run dev:web
+```
+(or `INPUTTRACKER_API=http://127.0.0.1:8790 bunx vite --config web/vite.config.ts`).
+
 ## Install as a service
 
 `scripts/install.sh` renders the templates in `deploy/` into your systemd
