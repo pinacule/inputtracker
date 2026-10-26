@@ -1,45 +1,45 @@
-/* Night City: provisional tokens, ready for the skin worker. */
+/* Night City — static city terminal foundation. All reading fills are opaque. */
 :root[data-theme="nightcity"],
 .theme-preview[data-theme="nightcity"] {
   color-scheme: dark;
   --font-body: var(--font-sans);
   --font-display: var(--font-serif);
-  --font-numbers: var(--font-serif);
-  --display-case: uppercase;
-  --display-tracking: 0.02em;
-  --display-weight: 900;
+  --font-numbers: var(--font-mono);
+  --display-case: none;
+  --display-tracking: 0.01em;
+  --display-weight: 700;
   --display-color: var(--text-primary);
   --label-case: uppercase;
-  --label-tracking: 0.1em;
-  --radius-xs: 6px;
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 24px;
-  --radius-full: 9999px;
+  --label-tracking: 0.04em;
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 3px;
+  --radius-lg: 2px;
+  --radius-xl: 3px;
+  --radius-full: 3px;
 
-  --bg-canvas: #080e1c;
-  --bg-surface: #101b2c;
-  --bg-surface-raised: #17243a;
-  --bg-subtle: #1c2d43;
-  --bg-muted: #1c2d43;
+  --bg-canvas: #050b18;
+  --bg-surface: #0b172a;
+  --bg-surface-raised: #122138;
+  --bg-subtle: #182b43;
+  --bg-muted: #182b43;
   --bg-overlay: rgba(0, 0, 0, 0.82);
-  --text-primary: #edfaff;
-  --text-secondary: #b3c9da;
-  --text-muted: #b3c9da;
-  --text-on-accent: #080e1c;
-  --accent-primary: #55e5f5;
-  --accent-primary-hover: #55e5f5;
-  --accent-primary-subtle: #1c2d43;
-  --accent-primary-border: #31475f;
-  --border-subtle: #31475f;
-  --border-default: #31475f;
-  --border-strong: #31475f;
-  --focus-ring: #55e5f5;
+  --text-primary: #eaf8ff;
+  --text-secondary: #b9d3e8;
+  --text-muted: #94b1c9;
+  --text-on-accent: #050b18;
+  --accent-primary: #67e8f9;
+  --accent-primary-hover: #9df2ff;
+  --accent-primary-subtle: #102d36;
+  --accent-primary-border: #3f8697;
+  --border-subtle: #263d58;
+  --border-default: #385772;
+  --border-strong: #6d94b4;
+  --focus-ring: #9df2ff;
 
   --card-border: var(--border-default);
-  --card-shadow: none;
-  --card-shadow-raised: none;
+  --card-shadow: 0 12px 32px #02061199, 0 0 14px #23d8f326;
+  --card-shadow-raised: 0 16px 36px #020611bb, 0 0 14px #23d8f326;
   --shadow-xs: none;
   --shadow-sm: none;
   --shadow-md: 0 12px 32px #000000aa;
@@ -47,42 +47,42 @@
   --shadow-cover: none;
   --cover-sheen: none;
   --control-shadow: none;
-  --nav-active-bg: #edfaff;
-  --nav-active-color: #080e1c;
+  --nav-active-bg: #182b43;
+  --nav-active-color: #67e8f9;
   --focus-width: 2px;
-  --focus-offset: 2px;
+  --focus-offset: 3px;
   --icon-stroke: 2.2;
-  --chart-radius: 4px;
-  --chart-svg-radius: 4px;
-  --chart-svg-inner-radius: 2px;
-  --chart-cell-radius: 3px;
-  --chart-linecap: round;
-  --scrollbar-thumb: #31475f;
+  --chart-radius: 1px;
+  --chart-svg-radius: 1px;
+  --chart-svg-inner-radius: 1px;
+  --chart-cell-radius: 2px;
+  --chart-linecap: butt;
+  --scrollbar-thumb: #6d94b4;
 
-  --heat-0: var(--bg-surface);
-  --heat-1: #2a1414;
-  --heat-2: #4d1c1c;
-  --heat-3: #8a2a2a;
-  --heat-4: #55e5f5;
-  --heat-border-1: #3a1c1c;
-  --heat-border-2: #5c2424;
-  --heat-border-3: #9c3434;
-  --heat-border-4: #55e5f5;
+  --heat-0: #122138;
+  --heat-1: #174353;
+  --heat-2: #216a79;
+  --heat-3: #3198a6;
+  --heat-4: #67e8f9;
+  --heat-border-1: #6d94b4;
+  --heat-border-2: #6d94b4;
+  --heat-border-3: #6d94b4;
+  --heat-border-4: #67e8f9;
 
-  /* Provisional local wallpaper; owned by this skin. */
-  --wallpaper: linear-gradient(145deg, #080e1c, #17243a);
+  /* Only the winning media-query URL is resolved, including Settings previews. */
+  --wallpaper: linear-gradient(to bottom, #050b181a, #050b1899), linear-gradient(#050b1894, #050b1894), url("/wallpapers/nightcity/skyline-desktop.webp");
   --wallpaper-size: cover;
-  --wallpaper-repeat: repeat;
+  --wallpaper-repeat: no-repeat;
 
   --reading-gutter: 12px;
   --page-reading-bg: var(--bg-surface);
   --page-reading-border: 1px solid var(--card-border);
-  --page-reading-shadow: none;
+  --page-reading-shadow: var(--card-shadow);
   --home-page-bg: transparent;
   --home-panel-bg: var(--bg-surface);
   --home-panel-border: 1px solid var(--card-border);
   --home-panel-radius: var(--radius-lg);
-  --home-panel-shadow: none;
+  --home-panel-shadow: var(--card-shadow);
   --home-panel-padding: 22px;
   --home-group-display: flex;
   --home-group-gap: 14px;
@@ -103,51 +103,263 @@
   --home-number-tracking: 0em;
   --home-number-margin: 0px;
   --home-week-value-wrap: normal;
-  --shell-brand-size: 1.125rem;
+  --shell-brand-size: 1.5rem;
   --shell-brand-weight: var(--display-weight);
   --shell-brand-tracking: 0.04em;
   --shell-brand-bg: var(--accent-primary);
   --mobile-nav-active-bg: var(--nav-active-bg);
   --mobile-nav-marker: var(--nav-active-color);
   --mobile-nav-shadow: var(--nav-shadow);
-  --cat-anime-fg: #c2beff;
-  --cat-anime-bg: #1e1c38;
-  --cat-anime-border: #3a356e;
-  --cat-anime-solid: #8278f5;
-  --cat-series-fg: #8ee0ee;
-  --cat-series-bg: #142a30;
-  --cat-series-border: #25505c;
-  --cat-series-solid: #3cb8cc;
-  --cat-film-fg: #f6c982;
-  --cat-film-bg: #302312;
-  --cat-film-border: #5c421f;
-  --cat-film-solid: #e29a38;
-  --cat-book-fg: #8fdcb8;
-  --cat-book-bg: #172b22;
-  --cat-book-border: #2a5441;
-  --cat-book-solid: #4cb888;
-  --cat-audiobook-fg: #d5bcf9;
-  --cat-audiobook-bg: #271d35;
-  --cat-audiobook-border: #4a3566;
-  --cat-audiobook-solid: #a37bf0;
-  --cat-youtube-fg: #f8b4ac;
-  --cat-youtube-bg: #331c19;
-  --cat-youtube-border: #61312b;
-  --cat-youtube-solid: #e46356;
-  --cat-podcast-fg: #f7bc97;
-  --cat-podcast-bg: #301f15;
-  --cat-podcast-border: #5e3b26;
-  --cat-podcast-solid: #e07b42;
-  --cat-music-fg: #f7b2d3;
-  --cat-music-bg: #301925;
-  --cat-music-border: #5e2e46;
-  --cat-music-solid: #de5d97;
-  --cat-other-fg: #d2c9bb;
-  --cat-other-bg: #28241f;
-  --cat-other-border: #474037;
-  --cat-other-solid: #9c9080;
-  --cat-shortform-fg: #b1d3ff;
-  --cat-shortform-bg: #192638;
-  --cat-shortform-border: #354f70;
-  --cat-shortform-solid: #6194cf;
+  --nc-bracket-size: 12px;
+  --accent-secondary: #ff8de3;
+  --glow-cyan: #23d8f3;
+  --glow-pink: #f467cf;
+  --glow-ice: #b6f5ff;
+  --frame-glow-hover: 0 0 20px #23d8f33d;
+  --status-success-fg: #a5e79a;
+  --status-success-bg: #1b2d25;
+  --status-success-border: #648c66;
+  --status-warning-fg: #ffd178;
+  --status-warning-bg: #302818;
+  --status-warning-border: #a18546;
+  --status-danger-fg: #ffaaa1;
+  --status-danger-bg: #341f28;
+  --status-danger-border: #a86f70;
+  --card-title-bg: #122138;
+  --card-title-color: #eaf8ff;
+  --card-title-padding: 10px 12px;
+  --card-title-border: 1px;
+  --card-title-shadow: inset 2px 0 var(--accent-primary);
+  --home-title-bg: var(--bg-surface-raised);
+  --home-title-color: var(--text-primary);
+  --home-title-label-color: var(--text-secondary);
+  --scrollbar-radius: 1px;
+  --wallpaper-position: center center;
+  --ease-standard: cubic-bezier(.2, 0, .2, 1);
+  --cat-anime-fg: #c7b5ff;
+  --cat-anime-bg: #211b38;
+  --cat-anime-border: #7967a8;
+  --cat-anime-solid: #b69aff;
+  --cat-series-fg: #78e5f5;
+  --cat-series-bg: #102d36;
+  --cat-series-border: #3f8697;
+  --cat-series-solid: #42cadd;
+  --cat-film-fg: #ffd37c;
+  --cat-film-bg: #302818;
+  --cat-film-border: #a18546;
+  --cat-film-solid: #e9b846;
+  --cat-book-fg: #a5e79a;
+  --cat-book-bg: #1b2d25;
+  --cat-book-border: #648c66;
+  --cat-book-solid: #7ccb72;
+  --cat-audiobook-fg: #b3c6ff;
+  --cat-audiobook-bg: #1d263d;
+  --cat-audiobook-border: #687db6;
+  --cat-audiobook-solid: #8fa8f5;
+  --cat-youtube-fg: #ffaaa1;
+  --cat-youtube-bg: #341f28;
+  --cat-youtube-border: #a86f70;
+  --cat-youtube-solid: #f57f79;
+  --cat-podcast-fg: #ffc18a;
+  --cat-podcast-bg: #33251e;
+  --cat-podcast-border: #a9815d;
+  --cat-podcast-solid: #f4a25e;
+  --cat-music-fg: #ff9acd;
+  --cat-music-bg: #321f35;
+  --cat-music-border: #a96892;
+  --cat-music-solid: #ed74b8;
+  --cat-shortform-fg: #d5e87d;
+  --cat-shortform-bg: #292e1b;
+  --cat-shortform-border: #899754;
+  --cat-shortform-solid: #bcd45b;
+  --cat-other-fg: #c7d0db;
+  --cat-other-bg: #242a34;
+  --cat-other-border: #7d8998;
+  --cat-other-solid: #9eadbf;
 }
+
+/* The viewport-sized, click-through S0 background keeps the crop stable on long pages.
+   A gradient remains when the local photo cannot be decoded. No parallax. */
+:root[data-theme="nightcity"] body { background-attachment: fixed; }
+:root[data-theme="nightcity"] [data-skin="nightcity"][data-skin-layer="bg"] {
+  background-color: var(--bg-canvas);
+  background-image: var(--wallpaper), linear-gradient(145deg, #102238, #050b18);
+  background-size: cover;
+  background-position: center;
+}
+:root[data-theme="nightcity"] .nc-city { position: absolute; inset: 0; pointer-events: none; background: url("/wallpapers/nightcity/city.svg") center / 100% 100% no-repeat; }
+:root[data-theme="nightcity"] .nc-city-sign {
+  position: absolute;
+  padding: 6px 4px;
+  font: 700 16px/1.3 var(--font-sign);
+  color: var(--accent-primary);
+  background: #071221;
+  border: 1px solid #3f8697;
+  box-shadow: 0 0 14px #23d8f326, inset 0 0 7px #23d8f326;
+  writing-mode: vertical-rl;
+}
+:root[data-theme="nightcity"] .nc-city-sign--street { right: 10px; bottom: 27vh; }
+:root[data-theme="nightcity"] .nc-city-sign--future { left: 12px; bottom: 32vh; color: var(--accent-secondary); border-color: #a96892; }
+:root[data-theme="nightcity"] .nc-city-sign--terminal { right: 6vw; bottom: 8vh; writing-mode: horizontal-tb; font-size: 12px; }
+
+/* The same font and palette tokens drive the miniature; the phone media query
+   below also overrides its wallpaper, preventing a hidden desktop request. */
+:root[data-theme="nightcity"] { font-synthesis: none; }
+:root[data-theme="nightcity"] :is(h1, h2, h3, .home-month-title, .home-day-title, .home-rhythm-title) {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: .01em;
+  line-height: 1.12;
+}
+:root[data-theme="nightcity"] :is(.page-header h1, .home-month-title) { font-size: clamp(1.75rem, 3.2vw, 2.75rem); }
+:root[data-theme="nightcity"] :is(.home-day-title, .home-rhythm-title) { font-weight: 600; }
+:root[data-theme="nightcity"] :is(.home-kicker, .page-eyebrow, .ui-stat-label, .ui-card-subtitle, .home-week-day-name, .home-skyline-tick, .home-ledger-number, .home-section-link) {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: .04em;
+}
+:root[data-theme="nightcity"] :is(.home-time, .ui-stat-value, .home-map-time) { font-family: var(--font-numbers); font-weight: 500; font-variant-numeric: tabular-nums; }
+:root[data-theme="nightcity"] .home-time--hero { font-size: clamp(3.5rem, 6vw, 5.5rem); }
+:root[data-theme="nightcity"] .home-time--week { font-size: clamp(2.5rem, 4vw, 4rem); }
+:root[data-theme="nightcity"] .home-time--month { font-size: clamp(2.75rem, 5vw, 4rem); }
+:root[data-theme="nightcity"] .home-time-unit { font-family: var(--font-mono); font-size: .25em; letter-spacing: 0; }
+:root[data-theme="nightcity"] :is(strong, b, .home-week-day-num) { font-weight: 600; }
+:root[data-theme="nightcity"] .tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* Thin inset brackets and diagonal frame cuts stay in padding; they never clip
+   interactive content or an outside keyboard-focus outline. No stacking context. */
+:root[data-theme="nightcity"] :is(.ui-card, .home-topbar, .home-category-index, .home-day-overview, .home-day-entries, .home-week-card, .home-rhythm-card) { position: relative; }
+:root[data-theme="nightcity"] :is(.ui-card, .home-topbar, .home-category-index, .home-day-overview, .home-day-entries, .home-week-card, .home-rhythm-card)::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--accent-primary), var(--accent-primary)) left top / var(--nc-bracket-size) 1px no-repeat,
+    linear-gradient(var(--accent-primary), var(--accent-primary)) left top / 1px var(--nc-bracket-size) no-repeat,
+    linear-gradient(var(--accent-primary), var(--accent-primary)) right bottom / var(--nc-bracket-size) 1px no-repeat,
+    linear-gradient(var(--accent-primary), var(--accent-primary)) right bottom / 1px var(--nc-bracket-size) no-repeat,
+    linear-gradient(45deg, transparent 44%, #6d94b4 46% 54%, transparent 56%) right top / 8px 8px no-repeat,
+    linear-gradient(45deg, transparent 44%, #6d94b4 46% 54%, transparent 56%) left bottom / 8px 8px no-repeat;
+}
+:root[data-theme="nightcity"] .home-day-panel { padding-top: var(--home-group-gap); }
+:root[data-theme="nightcity"] .home-rhythm-card { margin-top: var(--home-group-gap); }
+:root[data-theme="nightcity"] .page-header { border-bottom: 1px solid var(--border-default); padding-bottom: 20px; }
+:root[data-theme="nightcity"] .home-day-header { border-left: 2px solid var(--accent-primary); padding-left: 10px; }
+:root[data-theme="nightcity"] :is(.ui-card--interactive:hover, .ui-btn:active:not(:disabled)) { transform: none; }
+:root[data-theme="nightcity"] .ui-card--interactive:hover { box-shadow: 0 12px 32px #02061199, var(--frame-glow-hover); }
+
+/* Opaque control states, including errors and hover, retain the verified pairs. */
+:root[data-theme="nightcity"] :is(.ui-btn, .ui-icon-btn) { border-radius: 3px; }
+:root[data-theme="nightcity"] .ui-btn { font-weight: 600; }
+:root[data-theme="nightcity"] .ui-btn--secondary { background: var(--bg-surface-raised); border-color: var(--border-strong); }
+:root[data-theme="nightcity"] .ui-btn--danger:hover:not(:disabled) { background: var(--status-danger-bg); border-color: var(--status-danger-fg); }
+:root[data-theme="nightcity"] .ui-btn--primary:hover:not(:disabled) { box-shadow: var(--frame-glow-hover); }
+:root[data-theme="nightcity"] .ui-btn--primary:active:not(:disabled) { background: var(--accent-primary); box-shadow: inset 0 -3px var(--border-strong); }
+:root[data-theme="nightcity"] :is(.ui-input, .ui-select, .sidebar-search-input) { background-color: var(--bg-surface); border-color: var(--border-strong); border-radius: 3px; }
+:root[data-theme="nightcity"] :is(input, textarea)::placeholder { color: var(--text-muted); opacity: 1; }
+:root[data-theme="nightcity"] :is(.ui-input, .ui-select, .sidebar-search-input):focus { outline: 2px solid var(--focus-ring); outline-offset: 3px; box-shadow: none; }
+:root[data-theme="nightcity"] .ui-tabs { background: var(--bg-surface-raised); border-color: var(--border-default); border-radius: 3px; }
+:root[data-theme="nightcity"] .ui-tab { border-radius: 2px; }
+:root[data-theme="nightcity"] .ui-tab--active { background: var(--bg-subtle); color: var(--text-primary); box-shadow: inset 0 -2px var(--accent-primary); }
+:root[data-theme="nightcity"] .ui-cat-chip--active { box-shadow: inset 0 -2px currentColor; }
+:root[data-theme="nightcity"] mark { background: var(--accent-primary); color: var(--text-on-accent); }
+:root[data-theme="nightcity"] .add-lookup-input-wrap { min-width: 0; }
+:root[data-theme="nightcity"] .add-lookup-form .ui-btn { flex-shrink: 0; white-space: nowrap; }
+:root[data-theme="nightcity"] .app-sidebar { border-right-color: var(--border-strong); }
+:root[data-theme="nightcity"] :is(.sidebar-nav-link, .sidebar-settings-link) { border-radius: 2px; }
+:root[data-theme="nightcity"] :is(.sidebar-nav-link--active, .sidebar-settings-link--active) { box-shadow: inset 3px 0 var(--accent-primary); }
+:root[data-theme="nightcity"] :is(.mobile-topbar, .mobile-tabbar) { background: var(--bg-surface); border-color: var(--border-strong); }
+:root[data-theme="nightcity"] .mobile-tab--active { color: var(--accent-primary); }
+:root[data-theme="nightcity"] .mobile-tab--active::before { height: 2px; border-radius: 0; }
+:root[data-theme="nightcity"] .mobile-tabbar { box-shadow: 0 -8px 24px #02061199; }
+
+/* Preserve natural cover colours; titles and badges have their own opaque bands. */
+:root[data-theme="nightcity"] :is(.library-work-card, .library-work-list-row, .yt-topic-card) { border-radius: 2px; background-color: var(--bg-surface); }
+:root[data-theme="nightcity"] .library-work-list-row:hover { background-color: var(--bg-surface-raised); }
+:root[data-theme="nightcity"] :is(.ui-cover, .review-poster) { border-radius: 2px; border: 1px solid var(--border-default); }
+:root[data-theme="nightcity"] .review-poster { border-bottom: 2px solid var(--accent-primary); }
+:root[data-theme="nightcity"] :is(.review-poster-rating, .review-poster-duration) { background: var(--bg-surface); border-radius: 2px; }
+:root[data-theme="nightcity"] .work-hero-body { border: 1px solid var(--border-subtle); }
+:root[data-theme="nightcity"] :is(.work-metric-value, .work-score-labels, .mp-rank, .mp-duration) { font-family: var(--font-mono); }
+
+/* Day-map geometry is untouched. Each cell uses opaque category bg, never a
+   translucent solid. CSS reads the existing category token on the tile. */
+:root[data-theme="nightcity"] .home-day-map { display: block; }
+:root[data-theme="nightcity"] :is(.home-day-list, .home-day-cat-strip) { display: none; }
+:root[data-theme="nightcity"] .home-map-tile-inner { background: var(--nc-map-bg); border-color: var(--nc-map-border); border-radius: 2px; box-shadow: inset 2px 0 var(--map-cat); }
+:root[data-theme="nightcity"] .home-map-cell { color: var(--nc-map-fg); }
+:root[data-theme="nightcity"] .home-map-fill { background: var(--nc-map-bg); border: 1px solid var(--nc-map-border); border-radius: 1px; opacity: 1; }
+:root[data-theme="nightcity"] :is(.home-map-cell:hover, .home-map-cell:focus-visible) .home-map-fill { opacity: 1; border-color: var(--accent-primary); }
+:root[data-theme="nightcity"] .home-map-label { color: var(--nc-map-fg); }
+:root[data-theme="nightcity"] .home-map-dot { border-radius: 1px; }
+:root[data-theme="nightcity"] .home-map-time { line-height: 1.1; }
+:root[data-theme="nightcity"] .home-map-tip { background: var(--bg-surface-raised); }
+
+/* Square light towers and exact chart fills, without glow on data. */
+:root[data-theme="nightcity"] :is(.home-week-bar-stack, .home-skyline-stack) { gap: 1px; background: var(--bg-canvas); border-radius: 1px; }
+:root[data-theme="nightcity"] .home-skyline-stack { width: min(70%, 10px); }
+:root[data-theme="nightcity"] .home-skyline-dot { width: 3px; height: 1px; }
+:root[data-theme="nightcity"] .home-skyline-col--selected::after { width: 8px; height: 2px; bottom: 1px; }
+:root[data-theme="nightcity"] .home-skyline-col--future { opacity: 1; }
+:root[data-theme="nightcity"] .home-skyline-col--future .home-skyline-dot { background: var(--border-subtle); }
+:root[data-theme="nightcity"] .home-week-day--selected { background: var(--bg-surface-raised); box-shadow: inset 1px 0 var(--accent-primary), inset -1px 0 var(--accent-primary); }
+:root[data-theme="nightcity"] :is(.home-week-norm-marker, .home-skyline-well) { border-color: var(--border-strong); }
+:root[data-theme="nightcity"] .home-week-norm-marker { background: var(--border-strong); }
+:root[data-theme="nightcity"] :is(.home-share-bar, .home-ledger-track) { height: 4px; }
+:root[data-theme="nightcity"] :is(.home-share-bar-seg, .home-ledger-track > span, .ui-cat-share-fill, .mp-bar, .yt-bar-fill) { border-radius: 1px; }
+:root[data-theme="nightcity"] .ui-chart-axis-text { opacity: 1; font-weight: 400; }
+:root[data-theme="nightcity"] .ui-chart-bar-group > rect:not(:first-child) { stroke: var(--bg-canvas); stroke-width: 1px; }
+:root[data-theme="nightcity"] .ui-punchcard circle { fill-opacity: 1; stroke: var(--border-strong); stroke-width: 1px; }
+:root[data-theme="nightcity"] .ui-punchcard circle[fill="var(--border-default)"] { fill: var(--bg-surface); }
+
+/* Static means static in this foundation: NC-c owns entrance/ambient motion. */
+:root[data-theme="nightcity"] *, :root[data-theme="nightcity"] *::before, :root[data-theme="nightcity"] *::after { animation: none; transition: none; }
+
+@media (max-width: 767px) {
+  :root[data-theme="nightcity"], .theme-preview[data-theme="nightcity"] {
+    --wallpaper: linear-gradient(to bottom, #050b181a, #050b1899), linear-gradient(#050b18a8, #050b18a8), url("/wallpapers/nightcity/street-phone.webp");
+    --nc-bracket-size: 8px;
+    --home-panel-padding: 16px;
+    --home-topbar-padding: 16px;
+    --home-week-padding: 16px;
+    --home-month-padding: 16px;
+  }
+  :root[data-theme="nightcity"] :is(.page-header h1, .home-month-title) { font-size: 2rem; }
+  :root[data-theme="nightcity"] .home-time--hero { font-size: clamp(2.75rem, 12vw, 3.5rem); }
+  :root[data-theme="nightcity"] .home-time--week { font-size: 2.75rem; }
+  :root[data-theme="nightcity"] .home-time--month { font-size: 2.75rem; }
+  :root[data-theme="nightcity"] .home-category-index { padding-block: 8px; }
+  :root[data-theme="nightcity"] .home-day-heading-group { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  :root[data-theme="nightcity"] .home-day-step-btns { grid-column: 2; grid-row: 1; }
+  :root[data-theme="nightcity"] .home-day-title { grid-column: 1; grid-row: 1; }
+  :root[data-theme="nightcity"] .home-day-hero { padding-block: 16px 20px; }
+  :root[data-theme="nightcity"] .nc-city-sign { padding: 3px 2px; font-size: 10px; }
+  :root[data-theme="nightcity"] .nc-city-sign--street { right: 3px; bottom: 26vh; }
+  :root[data-theme="nightcity"] .nc-city-sign--future { left: 3px; bottom: 34vh; }
+  :root[data-theme="nightcity"] .nc-city-sign--terminal { right: 10px; bottom: 12vh; }
+  :root[data-theme="nightcity"] :is(.ui-btn, .ui-icon-btn, .ui-tab, .ui-cat-chip, .ui-input, .ui-select) { min-height: 44px; }
+  :root[data-theme="nightcity"] .ui-icon-btn { min-width: 44px; }
+}
+
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-anime-"] { --nc-map-bg: var(--cat-anime-bg); --nc-map-fg: var(--cat-anime-fg); --nc-map-border: var(--cat-anime-border); }
+
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-series-"] { --nc-map-bg: var(--cat-series-bg); --nc-map-fg: var(--cat-series-fg); --nc-map-border: var(--cat-series-border); }
+
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-film-"] { --nc-map-bg: var(--cat-film-bg); --nc-map-fg: var(--cat-film-fg); --nc-map-border: var(--cat-film-border); }
+
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-book-"] { --nc-map-bg: var(--cat-book-bg); --nc-map-fg: var(--cat-book-fg); --nc-map-border: var(--cat-book-border); }
+
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-audiobook-"] { --nc-map-bg: var(--cat-audiobook-bg); --nc-map-fg: var(--cat-audiobook-fg); --nc-map-border: var(--cat-audiobook-border); }
+
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-youtube-"] { --nc-map-bg: var(--cat-youtube-bg); --nc-map-fg: var(--cat-youtube-fg); --nc-map-border: var(--cat-youtube-border); }
+
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-podcast-"] { --nc-map-bg: var(--cat-podcast-bg); --nc-map-fg: var(--cat-podcast-fg); --nc-map-border: var(--cat-podcast-border); }
+
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-music-"] { --nc-map-bg: var(--cat-music-bg); --nc-map-fg: var(--cat-music-fg); --nc-map-border: var(--cat-music-border); }
+
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-shortform-"] { --nc-map-bg: var(--cat-shortform-bg); --nc-map-fg: var(--cat-shortform-fg); --nc-map-border: var(--cat-shortform-border); }
+
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-other-"] { --nc-map-bg: var(--cat-other-bg); --nc-map-fg: var(--cat-other-fg); --nc-map-border: var(--cat-other-border); }
+
+:root[data-theme="nightcity"] .ui-sparkline > path:last-of-type { stroke-width: 2px; }

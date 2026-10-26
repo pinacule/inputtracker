@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="none" aria-hidden="true">
+  <!-- Original InputTracker cel-style scenery; no copied architecture or logos. -->
+  <style>@media(max-width:767px){.nc-city-desktop-roof{display:none}.side-left{width:86px}.side-right{x:1354px;width:86px}}</style>
+<svg x="0" y="738" width="1440" height="162" viewBox="0 0 1440 180" preserveAspectRatio="none" focusable="false" aria-hidden="true">
+    <defs>
+      <linearGradient id="nc-city-haze" x2="0" y2="1">
+        <stop stop-color="#102238" stop-opacity="0"/>
+        <stop offset="1" stop-color="#102238" stop-opacity=".8"/>
+      </linearGradient>
+      <pattern id="nc-city-windows" width="29" height="23" patternUnits="userSpaceOnUse">
+        <path d="M5 3h2v4H5z M19 15h2v4h-2z" fill="#67e8f9" opacity=".48"/>
+        <path d="M5 15h2v4H5z" fill="#ffd178" opacity=".35"/>
+      </pattern>
+    </defs>
+    <g fill="#102238">
+      <path d="M0 180V52h38V31h28v21h39v128z"/>
+      <path class="nc-city-desktop-roof" d="M140 180V89h18V67h44v22h29v91z"/>
+      <path class="nc-city-desktop-roof" d="M311 180V73h44V49h2v24h25v107z"/>
+      <path d="M688 180V56h27V42h37v14h31v124z"/>
+      <path class="nc-city-desktop-roof" d="M867 180V91h34V67h2v24h43v89z"/>
+      <path d="M1083 180V74h28V57h41v17h26v106z"/>
+      <path d="M1285 180V95h32V33h3v62h45V75h35v105z"/>
+    </g>
+    <path fill="url(#nc-city-haze)" d="M0 60h1440v120H0z"/>
+    <g class="nc-city-desktop-roof" fill="#071221">
+      <path d="M0 180V108h68V85h32v95z"/>
+      <path d="M206 180V125h19v-18h58v73z"/>
+      <path d="M1334 180V104h36V86h40v18h30v76z"/>
+    </g>
+    <path fill="url(#nc-city-windows)" d="M7 114h55v66H7z M226 130h46v50h-46z M695 75h75v90h-75z M1090 88h75v75h-75z M1376 110h58v70h-58z"/>
+  </svg>
+<svg class="side-left" x="0" y="486" width="120" height="342" viewBox="0 0 90 360" preserveAspectRatio="none" focusable="false" aria-hidden="true">
+    <path fill="#102238" d="M0 360V0h23v42h30v318z"/>
+    <path fill="#071221" d="M0 360V106h17V81h2v25h54v254z"/>
+    <path fill="#67e8f9" opacity=".45" d="M30 125h2v4h-2z M42 148h2v4h-2z M30 171h2v4h-2z M55 194h2v4h-2z"/>
+  </svg>
+<svg class="side-right" x="1320" y="486" width="120" height="342" viewBox="0 0 90 360" preserveAspectRatio="none" focusable="false" aria-hidden="true">
+    <path fill="#102238" d="M90 360V0H58v40H35v320z"/>
+    <path fill="#071221" d="M90 360V99H65V78H43v21H17v261z"/>
+    <path fill="#ffd178" opacity=".5" d="M53 123h2v4h-2z M66 146h2v4h-2z M53 169h2v4h-2z M41 192h2v4h-2z"/>
+  </svg>
+</svg>
