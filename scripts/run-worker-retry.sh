@@ -12,12 +12,15 @@ Your run was cut off by a provider rate limit. Continue exactly where you were (
 is in .task/prompt.md; re-read it if needed). Finish only when `bun run check` passes (and
 `bun run build:web` if you touched web/). Do not spawn subagents. Do not commit. End with the summary.
 MSG
+NEXT_SET=
 for attempt in $(seq 0 "${RETRY_MAX:-8}"); do
-  if [ "$attempt" -gt 0 ]; then
+  # A handler below may already have chosen the next prompt/session (fresh restart); keep it.
+  if [ "$attempt" -gt 0 ] && [ -z "$NEXT_SET" ]; then
     [ -f "$T/oc.jsonl" ] && mv "$T/oc.jsonl" "$T/oc.limit$attempt.jsonl"
     rm -f "$T/result"; sleep "${RETRY_WAIT:-90}"
     PROMPT="$CONT"; SESSION="$(cat "$T/session" 2>/dev/null)"
   fi
+  NEXT_SET=
   r=$("$REPO/scripts/run-worker.sh" "$TASK" "$WORKER" "$MODEL" "$PROMPT" ${SESSION:+"$SESSION"} | tail -1)
   if [ "$r" = error ] && grep -qE "different Azure OpenAI resource|encrypted content for item .* could not be verified" "$T/oc.jsonl" 2>/dev/null; then
     # AgentRouter moved the session to another Azure resource; its stored response items are gone
@@ -27,7 +30,27 @@ for attempt in $(seq 0 "${RETRY_MAX:-8}"); do
     rm -f "$T/result" "$T/session"; sleep 20
     PROMPT_FRESH="$T/continue-fresh.md"
     { cat "$T/prompt.md"; printf '\n\n## Note\nA previous run of this task was cut off. Some of the work may already be in this folder (check `git status` and `git diff`); continue from there instead of starting over.\n'; } > "$PROMPT_FRESH"
-    PROMPT="$PROMPT_FRESH"; SESSION=""
+    PROMPT="$PROMPT_FRESH"; SESSION=""; NEXT_SET=1
+    continue
+  fi
+  if [ "$r" = error ] && grep -q '"provider.invalid-request"' "$T/oc.jsonl" 2>/dev/null \
+     && grep -q 'Upstream rejected the request as invalid' "$T/oc.jsonl" 2>/dev/null; then
+    # AgentRouter stop (seen 2026-10-26). First try the same session; if the session itself is
+    # rejected straight away (no tool step before the error), its history is unusable: go fresh.
+    if [ "$(grep -c '"type":"tool_use"' "$T/oc.jsonl")" -gt 0 ]; then
+      echo "[$TASK] upstream rejected the request (attempt $attempt), continuing the session" >&2
+      [ -f "$T/oc.jsonl" ] && mv "$T/oc.jsonl" "$T/oc.rejected$attempt.jsonl"
+      rm -f "$T/result"; sleep 20
+      PROMPT="$CONT"; SESSION="$(cat "$T/session" 2>/dev/null)"
+      r=$("$REPO/scripts/run-worker.sh" "$TASK" "$WORKER" "$MODEL" "$PROMPT" ${SESSION:+"$SESSION"} | tail -1)
+      [ "$r" != error ] && { [ "$r" != limit ] && { echo "$r"; exit 0; }; continue; }
+    fi
+    echo "[$TASK] session rejected (attempt $attempt), restarting fresh from the files on disk" >&2
+    [ -f "$T/oc.jsonl" ] && mv "$T/oc.jsonl" "$T/oc.rejected-fresh$attempt.jsonl"
+    rm -f "$T/result" "$T/session"; sleep 20
+    PROMPT_FRESH="$T/continue-fresh.md"
+    { cat "$T/prompt.md"; printf '\n\n## Note\nA previous run of this task was cut off. Some of the work may already be in this folder (check `git status` and `git diff`); continue from there instead of starting over.\n'; } > "$PROMPT_FRESH"
+    PROMPT="$PROMPT_FRESH"; SESSION=""; NEXT_SET=1
     continue
   fi
   if [ "$r" = error ] && grep -qE '"provider\.(transport|internal)"' "$T/oc.jsonl" 2>/dev/null; then

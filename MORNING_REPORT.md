@@ -70,6 +70,10 @@ the frames and a dark vignette. (The worker had recommended B.)
 
 ## Failed / sent back
 
+- NC-a, RW-a, TH-a (briefs): each sent back once for livelier motion; all accepted on the revision.
+- NC-c attempt 1: rain practically invisible (≈20 px changed per second), no visible entrances on route change, gibberish neon glyphs. Revision cut by the Codex usage limit (03:42); resumes after 06:51.
+- TH-c attempt 1: Thinker cut-out flat and unlit, phone headers inflated to ~600 px by the statues. Sent back to the same opencode session.
+
 ## BLOCKED
 
 ## AgentRouter restarts
@@ -78,6 +82,10 @@ the frames and a dark vignette. (The worker had recommended B.)
 |---|---|---|---|
 | TH-b | 03:07 | opencode exited with "different Azure OpenAI resource" (router moved the session; stored items gone) | `run-worker-retry.sh` restarted fresh with the same prompt + "continue from the files on disk"; finished 03:22, not counted as an attempt |
 | TH-c | 03:48 | opencode stopped mid-task: `provider.invalid-request` "Upstream rejected the request as invalid" (after a tool-calls step) | continued the same session with "continue where you stopped" (restart 1) |
+| TH-c | 03:58 | opencode exited with "different Azure OpenAI resource" right after the continue | restarted fresh with the prompt + "continue from the files on disk" (restart 2); finished 04:13 |
+| TH-c | 04:28 | revision run stopped mid-way: `provider.invalid-request` "Upstream rejected the request as invalid" | continued the same session (restart 3 overall; first in a row since the 04:13 finish) |
+| TH-c | 04:30 | the continue was rejected immediately (`Upstream rejected the request as invalid`, session history unusable) | fresh opencode session with the prompt + review + "continue from the files on disk" (2nd stop in a row) |
+| TH-c | 04:40 | fresh session lost again (router switched Azure resource), then `rate_limit_exceeded` on gpt-6.1-sol — **3rd stop in a row** | by the rule this goes to Codex, but Codex is limited until 06:51 and opencode is rate-limited: the small remaining step (Home masthead statue) went to Antigravity with a note of what is done |
 
 ## Limit pauses
 
