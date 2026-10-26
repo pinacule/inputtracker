@@ -63,6 +63,47 @@ the frames and a dark vignette. (The worker had recommended B.)
 - Checks: overflow 0 on all pages at 1440 and 390 px; no control covered beyond Dot's own (the
   phone tab bar over list items); `bun run check` green.
 
+## Skin: Thinker (`thinker`) — DONE
+
+![Home desktop](docs/skins/thinker/calendar-desktop.webp)
+
+| Home (phone) | Insights (phone) | Settings (phone) |
+|---|---|---|
+| ![](docs/skins/thinker/calendar-phone.webp) | ![](docs/skins/thinker/insights-phone.webp) | ![](docs/skins/thinker/settings-phone.webp) |
+
+Desktop: [Insights](docs/skins/thinker/insights-desktop.webp) · [Settings](docs/skins/thinker/settings-desktop.webp)
+
+A soot-dark cave: pale marble and plaster statues (Rodin's The Thinker, Plato, Victor Hugo) lit
+warmly from one low side by an unseen fire; each page family has its own statue (Home = Thinker,
+Library/work/Review = Hugo, Insights/Settings/Search/Add = Plato). Cards are stone slabs with bronze
+bevels and mineral-inlay charts; Cormorant Garamond headings, Source Sans 3 numbers, IBM Plex Mono
+dates. No quotes anywhere.
+
+- **Signature effect — firelight and moving shadows:** one shared three-band flame model drives the
+  warm light on the statues, a flickering rim light on every card's bevel, the direction of the card
+  shadows and huge statue shadows that breathe and sway on the cave wall behind the content
+  ([animation, desktop](docs/skins/thinker/firelight.webp) · [phone](docs/skins/thinker/firelight-phone.webp)).
+  Switching day/week/month sends a torch pass across the changed card while the wall shadows lean
+  that way.
+- **Motion:** chart stacks rise from the stone baseline and big numbers "ignite" with a warm glow on
+  every page entry ([entrance frames, 70 ms apart](docs/skins/thinker/entrance-frames.webp)).
+- **Ambient loops** (only in empty wall space, one at a time): ember bursts rising from the bottom
+  edge, a shadow figure walking across the cave wall, a flame gust brightening one side, dust in a
+  light shaft, a hearth flame tongue, drifting soot, a marble glint.
+- **Cursor:** an ember-tipped torch (normal), a brighter torch (pointer), a carved I-beam (text);
+  small glowing motes trail it in empty gutters (desktop only).
+- **Images:** The Thinker (plaster cast, The Met, CC0), Victor Hugo bust (Musée Rodin, CC0, Jebulon),
+  Plato (CC BY-SA 4.0, Osama Amin — the derivative is shared under the same licence); cut out and
+  relit locally. Credits: `web/public/wallpapers/thinker/CREDITS.md`.
+- **Workers:** brief TH-a opencode (1 send-back for fire on the cards and bigger shadows); base TH-b
+  opencode (1 AgentRouter restart); firelight/motion TH-c opencode (1 send-back for a flat, unlit
+  Thinker cut-out and tall phone headers; 5 AgentRouter stops — after the 3rd in a row, with Codex
+  limited and opencode rate-limited, Antigravity finished the Home masthead); Settings tile/tests/docs
+  TH-d Antigravity (1 send-back: phone masthead crop, reverted an unneeded layout change).
+- Checks: overflow 0 everywhere; covered controls only the usual items under the phone tab bar;
+  `bun run check` green. Small open nit: on desktop Insights the Plato in the header is cropped to a
+  sliver (the large bust in the right gutter carries the page).
+
 ## Done
 
 | task | worker | model | attempts | commit |
