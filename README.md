@@ -157,7 +157,15 @@ Black blocks, dot-matrix numbers and a red accent. Static, no effects.
 
 ### Night City
 
-_Filled in by task NC-d._
+Navy city shadows, cyan window lights and pink Japanese signs surround opaque terminal panels.
+Rajdhani headings, Barlow body text and IBM Plex Mono numbers keep the readouts clear.
+Rain falls through the skyline and header windows, with occasional heavier bursts and drops along frame edges.
+Card frames power on with two brief flickers; numbers decode into exact values and chart bars rise into place.
+Quiet gaps can host a buzzing sign, drone lights, a passing train, puddle ripples, an ad glitch or a beacon.
+Three angular cyan cursor shapes have a faint trailing dot in empty desktop space; phones keep native cursors.
+Reduced motion keeps the city, signs and brackets still; background tabs pause all moving effects.
+The Settings tile shows a static lit skyline, pink neon sign, cyan HUD corners and a few rain streaks.
+Photo and font authors, sources and licences are in [wallpaper credits](web/public/wallpapers/nightcity/CREDITS.md) and [font licences](web/public/fonts/nightcity/LICENSE.md).
 
 ### Rewind
 

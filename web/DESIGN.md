@@ -173,13 +173,14 @@ Primary accent/link `#67E8F9`, hover `#9DF2FF`, secondary accent `#FF8DE3`, warn
 Accent-subtle background `#102D36`; primary buttons and selected solid controls use dark ink `#050B18`.
 Borders: subtle `#263D58`, default `#385772`, strong/control boundary `#6D94B4`.
 Focus ring `#9DF2FF`, 2px solid, 3px offset; reserve room so overflow cannot clip keyboard focus.
-Glow colours: cyan `#23D8F3`, pink `#F467CF`, ice `#B6F5FF`; decorative only, never text shadows.
+Glow colours: cyan `#23D8F3`, pink `#F467CF`, ice `#B6F5FF`; decorative only. Fictional neon signs use
+text shadows; English labels and data stay sharp without glow.
 Use `0 0 14px #23D8F326` for idle frame glow, `0 0 20px #23D8F33D` on hover.
 Success uses book fg/bg; errors use YouTube fg/bg plus English error text/icon, never colour alone.
 
 Contrast below is `(Llighter + .05)/(Ldarker + .05)`, with linearized sRGB luminance.
 Each vector is **canvas / surface / raised / subtle**, in that order, rounded to two decimals, `:1`.
-The reproducible calculation and assertions are in `.task/nightcity-contrast.py`.
+The reproducible assertions are in `test/web-themes.test.ts` and `test/nightcity-skin.test.ts`.
 
 - Primary `#EAF8FF`: **18.14 / 16.55 / 14.90 / 13.22**.
 - Secondary `#B9D3E8`: **12.69 / 11.58 / 10.42 / 9.24**.
@@ -231,8 +232,8 @@ Never dim an entire control or chart group with opacity when it contains text; d
   Never use condensed display type for paragraphs or tiny data, and never synthesize a missing 900 weight.
 - Decoration only: **Noto Sans JP 700**, Google/Adobe, SIL OFL 1.1.
   [Source and licence](https://github.com/google/fonts/tree/main/ofl/notosansjp).
-  Subset to the unique glyphs in `夜の街雨東京未来電脳営業中光空駅`; signs may read `夜の街`, `雨`, `東京`,
-  `未来`, `電脳`, `営業中`, `電光` or `空駅`, with `aria-hidden="true"`; these are fictional scenery only.
+  Delivered subset: exactly `夜の街電脳未来` (seven unique glyphs). Signs read `夜の街`, `未来` or `電脳`,
+  with `aria-hidden="true"`; the longer candidate sign vocabulary was dropped to keep the subset small.
   Real buttons, navigation, category names, axis labels and statuses remain English; no fake Japanese UI labels.
 - Ship local WOFF2: Latin + Latin-ext for the three Latin families, only the above Japanese glyphs for JP.
   Target Rajdhani 90KB, Barlow 180KB, Plex 140KB, JP 15KB; total target 425KB, hard cap 600KB.
@@ -251,7 +252,8 @@ Internal separators are 1px subtle rules; title bars use raised, a 2px cyan star
 Padded reading regions stay opaque to the edges; any frame texture belongs only in the empty frame gutter.
 Keep each card's content steady while its independent frame appears to power on; never blink real text.
 Primary button: cyan fill/dark ink, 3px corners, 1px cyan border; secondary: raised/primary/strong border.
-Destructive button uses error fg/bg; hover raises decorative glow, press changes fill to subtle, no layout movement.
+Destructive button uses error fg/bg; hover raises decorative glow. Changed from the brief: primary press retains
+its cyan fill and adds an inset rail instead of switching to subtle; no control moves.
 Chips: compact 3px rectangles, category fg/bg/border; selected adds a 2px underline/check without resizing.
 Inputs/selects: surface fill, primary value, muted placeholder, strong boundary; focus ring outside, no animated caret.
 Tabs: rectangular transparent segments over an opaque rail; active cyan underline and primary label, no capsule.
@@ -309,8 +311,10 @@ then replace signage locally; retain architectural edges/reflections instead of 
 Desktop crop: central 3200×2000 region (x≈735–3935), then resize to ≤2400×1500; keep the cloud bank at the top
 and the main tower group near 52% x/60% y; test at 1440×900 with the sidebar covering the left edge.
 Phone crop: 9:19.5 from the portrait, aim umbrella at 52% x/42% y, reflection along the bottom; export 1080×2340.
-Stack: canvas → local image → uniform `#050B18` scrim at .58 desktop/.66 phone → navy bottom vignette
-(.10 top to .60 bottom) → original flat SVG skyline/signs → continuous rain/ambient bg → opaque app surfaces → masked fx.
+Delivered stack: canvas → local image with a `#050B18` gradient (.03 top to .25 bottom desktop,
+.06 top to .29 bottom phone) → original flat SVG skyline/signs → continuous rain/ambient bg → opaque app surfaces → masked fx.
+Changed from the brief's .58/.66 uniform scrim and heavier vignette: the lighter gradient exposes more architecture;
+opaque reading panes and header backings provide text contrast independently of the photo.
 Code-drawn foreground: two parallax-free SVG silhouette planes, far `#102238` and near `#071221`, rooted at the
 bottom and side edges; flat stepped rooftops/antennae, 8–12 towers desktop / 4–6 phone, no perspective or outlines.
 Bottom roofs reach 8–18vh, side towers ≤10vw desktop/6vw phone; place 2×4px cyan/amber window rectangles in sparse
@@ -332,10 +336,11 @@ CC BY-SA 3.0, with the licence link and changes stated; phone image remains CC0.
 ### 7. Interaction and transition animation
 
 Shared ease-out `cubic-bezier(.16,1,.3,1)`, ease-standard `cubic-bezier(.2,0,.2,1)`; no spring overshoot.
-Page change: new panel translates 6px up to rest over 280ms ease-out; its opaque content is readable immediately.
+Changed from the brief: page content stays fixed instead of translating 6px on arrival; measured decorative
+frames, chart paint and HUD copies provide the entrance without moving the reading surface.
 Card entrance: frame-only 420ms power-on, 40ms stagger for at most six cards, all finished within 660ms.
-Make it a visible holographic flicker: frame stroke/segments brighten, dip to .15 at 80–120ms and 230–270ms,
-then settle to 1 by 420ms; two quick dips, 1px decorative segment offsets and cyan glow, confined to the thin frame.
+Delivered holographic flicker: frame stroke/segments brighten, dip to .08 around 84–122ms and 239–277ms,
+then settle to 1 by 420ms; two quick dips confined to the thin frame. Segment offsets were dropped.
 During the same 420ms, sweep a faint 2px scanline through empty card padding only, masking out text/controls
 and their 8px clearance; never sweep the reading body or flash the full card background.
 The actual card background, text and controls never inherit that opacity; below-fold frames enter once per mount.
@@ -347,27 +352,30 @@ decorative copy in the reserved number box; scramble digit positions only at 35m
 The real exact text stays in the DOM for screen readers, visually clipped only during the decode; copy ends on the
 exact value at 280ms, then is removed and real text restored. Do not add live-region announcements or change values.
 If copy placement cannot be measured safely, use a 280ms scanline wipe instead; never delay the exact accessible text.
-Other number changes retain the 220ms underline sweep. Draw sparklines with stroke-dashoffset over 420ms ease-out.
+Changed from the brief: later number changes reuse the 280ms decode, without a separate 220ms underline sweep.
+Draw sparklines with stroke-dashoffset over 420ms ease-out.
 First mount: week bar stacks and month skyline grow from `scaleY(0)` to `scaleY(1)`, bottom transform-origin,
 **380ms** ease-out with **30ms** per-column stagger (week ≤560ms; 31-day month ≤1280ms).
 Transform the bar stack only, not labels/totals/norm markers; reserve final chart dimensions, no layout shift.
 Keep outer date hit areas available and final hit geometry settled by animation end; never replay growth on hover.
 Day-map cells scan in with a cyan 2px sweep line traversing left-to-right over **500ms**, clipped to map tile fills
 and excluding label/number glyph bounds, focus rings and controls; exact areas/hit targets are present immediately.
-Use the decorative chart frame draw-in for 360ms alongside these; first-mount chart timelines run independently
+Changed from the brief: charts share the 420ms card-frame power-on instead of a separate 360ms frame draw-in;
+first-mount chart timelines run independently
 of S0's 700ms event attribute, so the full month stagger is not cut short. Later range changes use the rails below.
 Day/week/month switch: outgoing decoration clears in 100ms, new frame rails sweep 260ms in the supplied direction;
 data changes normally. `next` moves the rail left-to-right, `prev` right-to-left; no sliding page-width panels.
-Loading skeletons: opaque raised blocks, one low-contrast 1000ms sheen confined inside placeholders, no text shimmer.
-Stop loading decoration after data loads; continuous rain and occasional ambient effects continue. Retain current
+Changed from the brief: loading skeletons remain static opaque raised blocks; no separate sheen controller shipped.
+Continuous rain and occasional ambient effects continue after data loads. Retain current
 error/retry UI and keep dimensions reserved to prevent shifts.
 
 ### 8. Ambient loops and placement
 
 All decoration is silent and click-through. **Continuous rain is the constant atmosphere, outside ambient slots**:
 draw it in `bg` behind the opaque cards, spread across the full viewport so every gutter/card edge sees falling rain.
-Use **30–60 simultaneous streaks desktop at 30fps / 15–25 phone at 20fps**, 1px wide, 12–28px long, falling 10°,
-opacity .12–.24 and 900–1400ms travel. Keep light rain running throughout visible/non-reduced-motion use.
+Delivered rain was increased from the brief's sparse 30–60 / 15–25 streaks to **360 desktop / 120 phone**,
+at 30/20fps, 14–40px long, falling 10°, with a faint 4px cyan halo and 1px pale core at opacity .48.
+Travel takes 900–1400ms. It remains visible in narrow gutters and the exposed header windows.
 Every random **20–40s**, a heavier **6s burst** raises counts to 540 desktop / 180 phone and opacity ≤.60,
 then returns to light rain; no rain-free interval. Opaque cards naturally occlude all background streaks.
 Front rain detail: every 2.4–4.4s pick one visible card, bead 1–3 drops (phone 1–2) on its frame and run them
@@ -375,7 +383,7 @@ Front rain detail: every 2.4–4.4s pick one visible card, bead 1–3 drops (pho
 Render these in `fx`, clipped to an explicit 1–2px frame-stroke mask (not the card interior or padding),
 subtract focus outlines and controls touching the border; skip if a clean frame segment is unavailable.
 Rain/front detail share the rain controller, outside the slots, with at most one card carrying front drops at once.
-The ambient scheduler separately wakes every random 8–16s and enforces each effect's cooldown; at most
+Changed from the brief's separate 8–16s scheduler wake: each ambient type schedules its own random delay below; at most
 **two scheduled effects desktop, one phone**, in addition to rain. All six scheduled types below also run on phone.
 Validate each scheduled effect's entire swept bounds against text/controls/cards expanded by 20px (12px phone),
 plus header/sidebar/bottom navigation/dialogs; if no free rectangle fits, skip rather than draw over content.
@@ -412,18 +420,24 @@ Keep normal resize/drag/not-allowed system cursor states; no pointer lock or rep
 
 On page arrival, cyan bracket segments draw around the opaque cards while a fictional sign powers up in the
 nearest free gutter; the rain briefly catches the same light, making the panels feel suspended above a wet street.
-Sequence: 0–180ms corner rails extend; two frame dips and the padding scanline finish by 420ms;
+Delivered sequence: corner rails brighten rather than extend; two frame dips and the padding scanline finish by 420ms;
 420–660ms sign glow settles while the city behind it keeps raining and a frame-edge bead can catch the light.
 It reuses the entrance/scheduler/rain controllers, consumes a scheduled slot for the sign only and adds no new overlay.
 Content is readable and actionable throughout; if no gutter fits, the card-frame sequence alone is the signature.
 
-### 11. Settings › Appearance preview tile
+### 11. Settings › Appearance preview tile — delivered NC-d
 
 Use the existing native radio/label structure and `.theme-preview[data-theme="nightcity"]` token scope.
-Miniature shows the blue Hong Kong tower crop and flat SVG foreground behind a 2px-corner navy panel, cyan top rail, Rajdhani heading,
-Plex `2h 48m` readout and the existing four category bars; one tiny static Japanese sign at the image edge.
+Miniature reuses the small original `window.svg` panorama: stepped towers with cyan/amber windows above a
+2px-corner opaque navy terminal, cyan top rail and inset HUD corner brackets. Rajdhani heading, Plex
+`2h 48m` readout and the existing four category bars use its own font/palette tokens under every active skin.
+A pink vertical `夜の街` sign uses the bundled Noto Sans JP subset; five short CSS rain streaks stay in
+the exposed scenery. The shared span/radio markup is unchanged; pseudo-elements carry all new decoration.
+Changed from the brief's photo-led miniature: the original panorama makes the lit architecture clearer at
+tile size, with the existing responsive photo still behind it. No preview derivative or font was downloaded.
 Keep visible skin name **Night City** and description **Rain-lit skyline · neon HUD** in English.
-Selected state retains the actual radio/check and focus behavior; add cyan boundary, never rely on glow alone.
+Selected state retains the actual radio/check and adds a solid cyan inner boundary. Hover brightens the
+boundary; keyboard focus adds an immediate 2px ice outline with 3px offset. Outer tile chrome follows the app skin.
 The tile is static, loads no effects controller and uses no additional wallpaper download.
 
 ### 12. Phone at 390px
@@ -487,9 +501,9 @@ The CSS-only `Night City Plex Mono` alias avoids the shared 600 face’s weight 
 Noto Sans JP 700 contains exactly `夜の街電脳未来`. The new font payload is 198,824 bytes.
 `city.svg` contains the original static silhouette/window planes. S0's bg layer mounts `.nc-city`
 and its three aria-hidden signs via `skins/nightcity/city.ts`; cleanup removes the scenery.
-The gradient, silhouettes and signs survive photo failure and reduced motion. NC-b contains no
-timers or animations; NC-c can add controllers alongside this static scene and replace the scoped
-animation/transition suppression. Tokens, opaque controls, rectangular navigation, category day-map
+The gradient, silhouettes and signs survive photo failure and reduced motion. NC-b added no
+timers or animations; NC-c added controllers alongside this static scene and replaced the scoped
+animation/transition suppression where needed. Tokens, opaque controls, rectangular navigation, category day-map
 cells and inset frame brackets already cover all routes.
 
 NC-c adds independent rain, motion, ambient and cursor controllers under `skins/nightcity/`.
@@ -517,6 +531,14 @@ primary/secondary/muted text 15.13:1 / 10.58:1 / 7.34:1. The tall desktop day pa
 static block readout, and the Settings miniature has skyline foreground, top rail and sign.
 Three original 32×32 SVG cursors have native fallbacks, with a protected fine-pointer heel.
 No downloaded assets, dependencies, data behavior or shared page styles were added by NC-c.
+
+NC-d completes the static Settings miniature described in section 11. Tests now mount the full effects
+module against synthetic DOM nodes and a fake clock: teardown during frame/HUD entrances, active ambient
+signs and pending navigation removes nodes, temporary styles, animations, observers and subscriptions.
+Reduced motion starts with no queued frames/timers on desktop and phone; switching it on or hiding the tab
+cancels live work. A hidden route change now remembers exact values so returning does not replay a HUD decode.
+Registry/swatch checks and extended AA checks cover category/status/header text; strict image dimension/byte,
+font credit and preview CSS tests supplement the existing shared skin budget tests. No network is used.
 
 ## Skin: Rewind (RW)
 

@@ -1,8 +1,7 @@
 # Night City wallpaper credits
 
 These are licensed photographs graded toward an anime night-background palette,
-not anime illustrations or screenshots. Full-resolution originals and intermediate
-files are kept outside production in `.task/originals/`.
+not anime illustrations or screenshots. Production ships only the local exports below.
 
 ## Desktop — skyline-desktop.webp
 
@@ -50,3 +49,9 @@ NC-c review: `window.svg` signs now use actual `夜の街` and `電脳` glyph ou
 from the existing Noto Sans JP 700 subset by the Noto Project Authors, SIL OFL 1.1.
 Source and full licence: `/fonts/nightcity/LICENSE.md`. No additional font or image download.
 The skyline is original project artwork; the extracted letter outlines retain that font attribution.
+
+NC-d's static Settings miniature reuses `window.svg` (**9,931 bytes**) for its lit
+towers, plus the existing responsive photo behind it. Cyan HUD brackets and five
+rain streaks are CSS; the pink `夜の街` sign uses the existing **2,368-byte** Noto
+Sans JP subset (Noto Project Authors, SIL OFL 1.1). No new image, font or download
+was added. `city.svg` remains **2,578 bytes**; the image exports above are unchanged.

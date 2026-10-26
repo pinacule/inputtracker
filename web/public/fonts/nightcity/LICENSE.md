@@ -17,6 +17,12 @@ All fonts are redistributed under [SIL Open Font License 1.1](https://openfontli
 - `noto-sans-jp-signs-700.woff2`: Noto Sans JP 700, exactly `夜の街電脳未来`; [subset request](https://fonts.googleapis.com/css2?family=Noto+Sans+JP%3Awght%40700&text=%E5%A4%9C%E3%81%AE%E8%A1%97%E9%9B%BB%E8%84%B3%E6%9C%AA%E6%9D%A5&display=swap), [download](https://fonts.gstatic.com/l/font?kit=-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFPYk757Aw1e-FiUz_Vj670HQhbSU74TvapK7fA&skey=72472b0eb8793570&v=v57).
 - IBM Plex Mono 400 Latin + Latin-ext reuse `/fonts/ibm-plex-mono-latin-400.woff2` and `/fonts/ibm-plex-mono-latin-ext-400.woff2`; same IBM source and OFL below.
 
+The skin's WOFF2 files total **198,824 bytes**, including the **2,368-byte** Noto
+Sans JP sign subset. The Settings miniature reuses these same faces and the
+`夜の街` glyphs; it adds no font file. CSS family aliases leave the upstream font
+name tables unchanged. The linked family source sections below identify each
+author and include the complete redistributed licence text.
+
 ## rajdhani — Indian Type Foundry
 
 Source: https://github.com/google/fonts/tree/main/ofl/rajdhani
