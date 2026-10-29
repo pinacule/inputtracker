@@ -14,7 +14,7 @@
 import type { Database } from "bun:sqlite";
 import { getWorkKeyAliases, resolveWorkKeyIn, resolveWorkKey } from "../core/work-identity.ts";
 import { createHash } from "node:crypto";
-import { CATEGORIES, categoryOf, isCategory, type Category } from "../core/category.ts";
+import { CATEGORIES, categoryOf, groupCategory, isCategory, type Category } from "../core/category.ts";
 import type {
   MetaProvider,
   WorkDetails,
@@ -138,7 +138,7 @@ function parseCategoryList(
         `Invalid ${paramName}: '${trimmed}'`
       );
     }
-    set.add(trimmed);
+    set.add(groupCategory(trimmed));
   }
   return set.size > 0 ? set : undefined;
 }
@@ -160,7 +160,7 @@ export function parseCategoryFilter(
   return { include: inc, exclude: exc };
 }
 
-/** True when `category` passes the `include` and `exclude` sets of `filter`. */
+/** True when `category` passes the `include` and `exclude` sets of `filter` (audiobooks count as books). */
 export function matchesCategoryFilter(
   category: Category,
   filter?: CategoryFilter
@@ -168,6 +168,7 @@ export function matchesCategoryFilter(
   if (!filter) {
     return true;
   }
+  category = groupCategory(category);
   if (filter.include && filter.include.size > 0 && !filter.include.has(category)) {
     return false;
   }

@@ -13,6 +13,7 @@
 import {
   CATEGORIES,
   categoryOf,
+  groupCategory,
   isCategory,
   type Category,
 } from "../../../src/core/category";
@@ -20,7 +21,7 @@ import { formatLocalDay } from "./format-date";
 import { sourceLabel } from "./sources";
 import { formatMinutes } from "./stats";
 
-export { CATEGORIES, categoryOf, isCategory, type Category };
+export { CATEGORIES, categoryOf, groupCategory, isCategory, type Category };
 
 export interface CategoryMeta {
   readonly category: Category;

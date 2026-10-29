@@ -15,7 +15,7 @@
 
 import type { Database } from "bun:sqlite";
 import { isShortform } from "./shortform.ts";
-import { CATEGORIES, categoryOf, type Category } from "../core/category.ts";
+import { CATEGORIES, categoryOf, groupCategory, type Category } from "../core/category.ts";
 import type {
   CategoryTotal,
   LibraryWork,
@@ -162,7 +162,7 @@ export function getSeries(
       }
     }
 
-    const cat = categoryOf(ev);
+    const cat = groupCategory(categoryOf(ev));
     if (!matchesCategoryFilter(cat, filter)) {
       continue;
     }
@@ -337,8 +337,8 @@ function computeMonthReviewFromIndexed(
         dayEvents.push(ev);
         const dayEntry = dayPointsMap.get(local.date);
         if (dayEntry && dur > 0) {
-          dayEntry[item.work.category] =
-            (dayEntry[item.work.category] ?? 0) + dur / 60;
+          dayEntry[groupCategory(item.work.category)] =
+            (dayEntry[groupCategory(item.work.category)] ?? 0) + dur / 60;
         }
         if (!isTimeUncertain(ev)) {
           const wIdx = local.weekday - 1; // 0=Mon..6=Sun
@@ -346,10 +346,10 @@ function computeMonthReviewFromIndexed(
         }
       }
 
-      let cEntry = catAcc.get(item.work.category);
+      let cEntry = catAcc.get(groupCategory(item.work.category));
       if (!cEntry) {
         cEntry = { seconds: 0, workKeys: new Set(), units: 0 };
-        catAcc.set(item.work.category, cEntry);
+        catAcc.set(groupCategory(item.work.category), cEntry);
       }
       cEntry.seconds += dur;
       cEntry.workKeys.add(item.work.key);
@@ -529,10 +529,10 @@ export function getYearReviewV2(
         dayEventsInYear.push(ev);
       }
 
-      let cEntry = catAcc.get(item.work.category);
+      let cEntry = catAcc.get(groupCategory(item.work.category));
       if (!cEntry) {
         cEntry = { seconds: 0, workKeys: new Set(), units: 0 };
-        catAcc.set(item.work.category, cEntry);
+        catAcc.set(groupCategory(item.work.category), cEntry);
       }
       cEntry.seconds += dur;
       cEntry.workKeys.add(item.work.key);

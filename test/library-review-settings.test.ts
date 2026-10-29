@@ -432,8 +432,8 @@ describe("Reviews and Series (GET /api/series, GET /api/review/month, GET /api/r
     const seriesDay = (await seriesDayRes.json()) as SeriesResult;
     // Day series includes only day-precision events (not the 300m month-precision book)
     expect(seriesDay.points).toEqual([
-      { bucket: "2025-03-10", minutes_by_category: { audiobook: 60 } },
-      { bucket: "2025-03-11", minutes_by_category: { audiobook: 90 } },
+      { bucket: "2025-03-10", minutes_by_category: { book: 60 } },
+      { bucket: "2025-03-11", minutes_by_category: { book: 90 } },
       { bucket: "2025-03-12", minutes_by_category: {} },
     ]);
 
@@ -446,7 +446,7 @@ describe("Reviews and Series (GET /api/series, GET /api/review/month, GET /api/r
     expect(seriesMonth.points).toEqual([
       {
         bucket: "2025-03",
-        minutes_by_category: { audiobook: 150, book: 300 },
+        minutes_by_category: { book: 450 },
       },
       { bucket: "2025-04", minutes_by_category: {} },
     ]);

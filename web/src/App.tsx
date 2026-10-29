@@ -516,7 +516,7 @@ export function App() {
               ? `Add to Archive — ${addSheet.work.title}`
               : "Add to Archive"
         }
-        subtitle="Look up any anime, series, film, book, or audiobook to archive"
+        subtitle="Look up any anime, series, film, or book to archive"
       >
         <Add
           inSheet

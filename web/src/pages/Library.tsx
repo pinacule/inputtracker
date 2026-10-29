@@ -1193,7 +1193,7 @@ export function Library({
                         ).toLowerCase()} in your library yet`
                       : "No works match the current filters"
               }
-              description="Look up anime, series, films, books, or audiobooks to archive or add to your planned watchlist."
+              description="Look up anime, series, films, or books to archive or add to your planned watchlist."
               actions={
                 <Button
                   variant="primary"

@@ -31,6 +31,15 @@ export function isCategory(value: unknown): value is Category {
   return typeof value === "string" && CATEGORY_SET.has(value);
 }
 
+/**
+ * Category used for tabs, filters and totals. Audiobooks are a format of books:
+ * they keep their own `audiobook` category (work keys, media type) but group and
+ * filter under `book`.
+ */
+export function groupCategory(category: Category): Category {
+  return category === "audiobook" ? "book" : category;
+}
+
 const ANIME_ID_KEYS = ["mal", "anilist", "anidb", "kitsu"] as const;
 
 function asObject(value: unknown): Record<string, unknown> | null {

@@ -527,7 +527,7 @@ describe("v2.1 Section 8: Edit any work, overrides everywhere, hide/unhide, plan
     const libAfter = (await (await app.request("/api/library")).json()) as LibraryResult;
     expect(libAfter.categories).toEqual([
       { category: "anime", total_minutes: 60, works: 1, units: 2 },
-      { category: "audiobook", total_minutes: 30, works: 1, units: 1 },
+      { category: "book", total_minutes: 30, works: 1, units: 1 },
     ]);
     const showInLib = libAfter.works.find((w) => w.key === showKey)!;
     expect(showInLib.title).toBe("Overridden Anime Title");
@@ -552,7 +552,7 @@ describe("v2.1 Section 8: Edit any work, overrides everywhere, hide/unhide, plan
     expect(series.points).toEqual([
       {
         bucket: "2026-10-10",
-        minutes_by_category: { anime: 60, audiobook: 30 },
+        minutes_by_category: { anime: 60, book: 30 },
       },
     ]);
 
@@ -562,7 +562,7 @@ describe("v2.1 Section 8: Edit any work, overrides everywhere, hide/unhide, plan
     ).json()) as MonthReview;
     expect(mr.categories).toEqual([
       { category: "anime", total_minutes: 60, works: 1, units: 2 },
-      { category: "audiobook", total_minutes: 30, works: 1, units: 1 },
+      { category: "book", total_minutes: 30, works: 1, units: 1 },
     ]);
     expect(mr.top_works[0]?.title).toBe("Overridden Anime Title");
     expect(mr.top_works[0]?.category).toBe("anime");
@@ -575,7 +575,7 @@ describe("v2.1 Section 8: Edit any work, overrides everywhere, hide/unhide, plan
     ).json()) as YearReviewV2;
     expect(yr.categories).toEqual([
       { category: "anime", total_minutes: 60, works: 1, units: 2 },
-      { category: "audiobook", total_minutes: 30, works: 1, units: 1 },
+      { category: "book", total_minutes: 30, works: 1, units: 1 },
     ]);
 
     // 5. Stats & Search: top_items and search hits use overridden title & category
@@ -627,7 +627,7 @@ describe("v2.1 Section 8: Edit any work, overrides everywhere, hide/unhide, plan
     expect(seriesAfterClear.points).toEqual([
       {
         bucket: "2026-10-10",
-        minutes_by_category: { series: 60, audiobook: 30 },
+        minutes_by_category: { series: 60, book: 30 },
       },
     ]);
   });
@@ -1146,7 +1146,6 @@ describe("v2.1 Section 9: Multi-category and exclude filters on every endpoint",
       "anime",
       "film",
       "book",
-      "audiobook",
       "youtube",
     ]);
     expect(libMulti.works.map((w) => w.category).sort()).toEqual(["anime", "film"]);
@@ -1155,13 +1154,13 @@ describe("v2.1 Section 9: Multi-category and exclude filters on every endpoint",
     const libExclude = (await (
       await app.request("/api/library?exclude=youtube,book")
     ).json()) as LibraryResult;
-    expect(libExclude.categories).toHaveLength(5);
+    expect(libExclude.categories).toHaveLength(4);
+    // Audiobooks count as books, so excluding books excludes them too.
     expect(libExclude.works.map((w) => w.category).sort()).toEqual([
       "anime",
-      "audiobook",
       "film",
     ]);
-    expect(libExclude.total_minutes).toBe(50 + 120 + 60);
+    expect(libExclude.total_minutes).toBe(50 + 120);
 
     // 2. Series
     const seriesMulti = (await (
@@ -1175,8 +1174,8 @@ describe("v2.1 Section 9: Multi-category and exclude filters on every endpoint",
     const calExclude = (await (
       await app.request("/api/calendar?month=2026-10&exclude=youtube,book")
     ).json()) as CalendarResult;
-    expect(calExclude.days[0]?.minutes).toBe(50 + 120 + 60);
-    expect(calExclude.days[0]?.count).toBe(3);
+    expect(calExclude.days[0]?.minutes).toBe(50 + 120);
+    expect(calExclude.days[0]?.count).toBe(2);
 
     // 4. Heatmap Days & Hours
     const hmDays = (await (
@@ -1218,11 +1217,10 @@ describe("v2.1 Section 9: Multi-category and exclude filters on every endpoint",
     const mrFiltered = (await (
       await app.request("/api/review/month?month=2026-10&exclude=youtube,book")
     ).json()) as MonthReview;
-    expect(mrFiltered.total_minutes).toBe(50 + 120 + 60);
+    expect(mrFiltered.total_minutes).toBe(50 + 120);
     expect(mrFiltered.categories.map((c) => c.category)).toEqual([
       "anime",
       "film",
-      "audiobook",
     ]);
 
     const yrV2Filtered = (await (

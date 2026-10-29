@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { categoryOf, isCategory } from "../src/core/category.ts";
+import { categoryOf, groupCategory, isCategory } from "../src/core/category.ts";
+import { matchesCategoryFilter, parseCategoryFilter } from "../src/server/overrides.ts";
 
 describe("categoryOf", () => {
   test("explicit raw.category wins, as an object or a JSON string", () => {
@@ -32,5 +33,16 @@ describe("categoryOf", () => {
     expect(isCategory("anime")).toBe(true);
     expect(isCategory("Anime")).toBe(false);
     expect(isCategory(3)).toBe(false);
+  });
+});
+
+describe("groupCategory", () => {
+  test("audiobooks group and filter as books, keeping their own category", () => {
+    expect(categoryOf({ media_type: "audiobook" })).toBe("audiobook");
+    expect(groupCategory("audiobook")).toBe("book");
+    expect(groupCategory("film")).toBe("film");
+    expect(matchesCategoryFilter("audiobook", parseCategoryFilter("book"))).toBe(true);
+    expect(matchesCategoryFilter("audiobook", parseCategoryFilter(undefined, "book"))).toBe(false);
+    expect(matchesCategoryFilter("book", parseCategoryFilter("audiobook"))).toBe(true);
   });
 });
