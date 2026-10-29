@@ -93,6 +93,8 @@ function makeConfig(dbPath: string, overrides: Partial<Config> = {}): Config {
       tmdb_image_url: "https://image.tmdb.invalid/t/p",
       steam_url: "https://steam.invalid",
       steam_cdn_url: "https://steamcdn.invalid",
+      wikipedia_url: "https://wikipedia.invalid",
+      wikidata_url: "https://wikidata.invalid",
       tmdb_api_key: "",
     },
     notify: {

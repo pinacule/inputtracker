@@ -43,7 +43,7 @@ export function workPresentation(
       if (isMetaProvider(ext["meta_provider"]) && isValidProviderId(ext["meta_id"])) {
         targets.push({ provider: ext["meta_provider"], provider_id: ext["meta_id"] });
       }
-      for (const [key, provider] of [["anilist", "anilist"], ["tvmaze", "tvmaze"], ["imdb", "cinemeta"], ["openlibrary", "openlibrary"], ["itunes", "itunes"], ["tmdb", "tmdb"], ["steam", "steam"]] as const) {
+      for (const [key, provider] of [["anilist", "anilist"], ["tvmaze", "tvmaze"], ["imdb", "cinemeta"], ["openlibrary", "openlibrary"], ["itunes", "itunes"], ["tmdb", "tmdb"], ["steam", "steam"], ["wikidata", "wikipedia"]] as const) {
         const id = ext[key];
         if ((typeof id === "string" || typeof id === "number") && isValidProviderId(String(id))) {
           targets.push({ provider, provider_id: String(id) });

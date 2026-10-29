@@ -11,7 +11,7 @@ export type { Category } from "./category.ts";
 
 // --- metadata lookup (GET /api/lookup/...) ---------------------------------
 
-export type MetaProvider = "anilist" | "tvmaze" | "cinemeta" | "itunes" | "openlibrary" | "tmdb" | "steam";
+export type MetaProvider = "anilist" | "tvmaze" | "cinemeta" | "itunes" | "openlibrary" | "tmdb" | "steam" | "wikipedia";
 
 /** GET /api/meta-art/:provider/:id. URLs are local proxies, never provider URLs. */
 export interface WorkArtImage {

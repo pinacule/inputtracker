@@ -63,6 +63,8 @@ function makeConfig(dbPath: string, overrides: Partial<Config> = {}): Config {
       tmdb_image_url: "https://image.tmdb.invalid/t/p",
       steam_url: "https://steam.invalid",
       steam_cdn_url: "https://steamcdn.invalid",
+      wikipedia_url: "https://wikipedia.invalid",
+      wikidata_url: "https://wikidata.invalid",
       tmdb_api_key: "",
     },
     notify: {
@@ -107,6 +109,8 @@ describe("[metadata] config loading and redaction", () => {
       tmdb_image_url: "https://image.tmdb.org/t/p",
       steam_url: "https://store.steampowered.com",
       steam_cdn_url: "https://shared.akamai.steamstatic.com",
+      wikipedia_url: "https://en.wikipedia.org",
+      wikidata_url: "https://www.wikidata.org",
     } as Config["metadata"]);
     expect(cfg.metadata?.tmdb_api_key).toBe("");
   });
@@ -631,6 +635,7 @@ describe("Provider mappings and AniList season chain", () => {
       items: [
         { type: "app", name: "Synthetic Neon Runner", id: 4242 },
         { type: "sub", name: "Synthetic Bundle", id: 99 },
+        { type: "app", name: "Synthetic Neon Runner - Official Soundtrack", id: 4243 },
       ],
     };
     const detailsPayload = {
@@ -661,7 +666,7 @@ describe("Provider mappings and AniList season chain", () => {
       return new Response("Not found", { status: 404 });
     }) as typeof fetch;
 
-    expect(providersForCategory("game", config)).toEqual(["steam"]);
+    expect(providersForCategory("game", config)).toEqual(["steam", "wikipedia"]);
     const searchRes = await lookupSearch("Synthetic Neon Runner", "game", { config, fetch: mockFetch });
     expect(searchRes.results).toEqual([{
       provider: "steam",
@@ -687,6 +692,63 @@ describe("Provider mappings and AniList season chain", () => {
     expect(cover?.bytes).toEqual(new Uint8Array([7, 8, 9]));
     expect(fetchedUrls).toContain("GET https://steamcdn.invalid/store_item_assets/steam/apps/4242/library_600x900_2x.jpg");
     expect(fetchedUrls.every((u) => u.startsWith("GET "))).toBe(true);
+  });
+
+  test("Wikipedia: console games with box art, Wikidata details, and Steam duplicates merged", async () => {
+    const searchPayload = { query: { pages: [
+      { pageid: 2, index: 2, title: "Synthetic Quest (2017 video game)", description: "2017 video game",
+        pageprops: { wikibase_item: "Q900" }, thumbnail: { source: "https://upload.invalid/quest.jpg" } },
+      { pageid: 3, index: 3, title: "Synthetic Quest: Art Book", description: "Book by Synthetic Press",
+        pageprops: { wikibase_item: "Q901" } },
+      { pageid: 4, index: 1, title: "Synthetic Neon Runner", description: "2020 video game",
+        pageprops: { wikibase_item: "Q902" } },
+    ] } };
+    const entityPayload = { entities: { Q900: {
+      labels: { en: { value: "Synthetic Quest" } },
+      sitelinks: { enwiki: { title: "Synthetic Quest (2017 video game)" } },
+      claims: {
+        P178: [{ mainsnak: { datavalue: { value: { id: "Q10" } } } }],
+        P136: [{ mainsnak: { datavalue: { value: { id: "Q11" } } } }],
+        P577: [{ mainsnak: { datavalue: { value: { time: "+2017-03-03T00:00:00Z" } } } }],
+      },
+    } } };
+    const labelPayload = { entities: { Q10: { labels: { en: { value: "Synthetic Studio" } } },
+      Q11: { labels: { en: { value: "action-adventure game" } } } } };
+    const pagePayload = { query: { pages: [{ title: "Synthetic Quest (2017 video game)",
+      extract: "Synthetic Quest is a synthetic game.", thumbnail: { source: "https://upload.invalid/quest.jpg" } }] } };
+    const steamPayload = { items: [{ type: "app", name: "Synthetic Neon Runner", id: 4242 }] };
+    const fetched: string[] = [];
+    const mockFetch = (async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      fetched.push(`${init?.method ?? "GET"} ${url}`);
+      const params = new URL(url).searchParams;
+      if (url.startsWith("https://wikipedia.invalid/w/api.php") && params.get("generator") === "search") return Response.json(searchPayload);
+      if (url.startsWith("https://wikipedia.invalid/w/api.php")) return Response.json(pagePayload);
+      if (url.startsWith("https://wikidata.invalid/w/api.php") && params.get("ids") === "Q900") return Response.json(entityPayload);
+      if (url.startsWith("https://wikidata.invalid/w/api.php")) return Response.json(labelPayload);
+      if (url.startsWith("https://steam.invalid/api/storesearch/")) return Response.json(steamPayload);
+      if (url === "https://upload.invalid/quest.jpg") {
+        return new Response(new Uint8Array([4, 5, 6]), { status: 200, headers: { "content-type": "image/jpeg" } });
+      }
+      return new Response("Not found", { status: 404 });
+    }) as typeof fetch;
+
+    const searchRes = await lookupSearch("Synthetic", "game", { config, fetch: mockFetch });
+    // The book is dropped, and the game on both Steam and Wikipedia appears once (from Steam).
+    expect(searchRes.results.map((h) => [h.provider, h.title])).toEqual([
+      ["steam", "Synthetic Neon Runner"],
+      ["wikipedia", "Synthetic Quest"],
+    ]);
+    expect(searchRes.results[1]).toMatchObject({ provider_id: "Q900", year: 2017, subtitle: "2017 video game",
+      cover_url: "/api/meta-cover/wikipedia/Q900" });
+
+    const work = await lookupWork("wikipedia", "Q900", { config, fetch: mockFetch });
+    expect(work).toMatchObject({ category: "game", title: "Synthetic Quest", year: 2017, creators: ["Synthetic Studio"],
+      genres: ["Action-adventure game"], description: "Synthetic Quest is a synthetic game.", external_ids: { wikidata: "Q900" } });
+
+    const cover = await getMetaCover("wikipedia", "Q900", { config, fetch: mockFetch });
+    expect(cover?.bytes).toEqual(new Uint8Array([4, 5, 6]));
+    expect(fetched.every((u) => u.startsWith("GET "))).toBe(true);
   });
 
   test("Open Library: maps books and audiobooks, editions pages fallback, and ISBN", async () => {

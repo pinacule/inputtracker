@@ -18,6 +18,7 @@ export const META_PROVIDERS: readonly MetaProvider[] = [
   "openlibrary",
   "tmdb",
   "steam",
+  "wikipedia",
 ] as const;
 
 const META_PROVIDER_SET: ReadonlySet<string> = new Set(META_PROVIDERS);
@@ -123,6 +124,8 @@ export function resolveMetadataConfig(config: Config): MetadataConfig {
     tmdb_image_url: (m?.tmdb_image_url ?? "https://image.tmdb.org/t/p").trim().replace(/\/+$/, ""),
     steam_url: (m?.steam_url ?? "https://store.steampowered.com").trim().replace(/\/+$/, ""),
     steam_cdn_url: (m?.steam_cdn_url ?? "https://shared.akamai.steamstatic.com").trim().replace(/\/+$/, ""),
+    wikipedia_url: (m?.wikipedia_url ?? "https://en.wikipedia.org").trim().replace(/\/+$/, ""),
+    wikidata_url: (m?.wikidata_url ?? "https://www.wikidata.org").trim().replace(/\/+$/, ""),
     tmdb_api_key: typeof m?.tmdb_api_key === "string" ? m.tmdb_api_key.trim() : "",
   };
 }

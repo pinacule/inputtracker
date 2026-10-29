@@ -24,6 +24,7 @@ const PROVIDER_PRIORITY: Record<MetaProvider, number> = {
   itunes: 4,
   openlibrary: 5,
   steam: 6,
+  wikipedia: 7,
 };
 
 function singleTitleTier(titleNorm: string, queryNorm: string, queryWords: string[]): number {
@@ -70,6 +71,10 @@ export function computeMatchTier(candidate: RankedCandidate, queryNorm: string):
 }
 
 function extractImdbId(candidate: RankedCandidate): string | null {
+  // Games share no id across Steam and Wikipedia; the same title is the same game.
+  if (candidate.hit.category === "game") {
+    return `title:${normalizeForSearch(candidate.hit.title)}`;
+  }
   if (typeof candidate.imdbId === "string" && /^tt\d+$/i.test(candidate.imdbId.trim())) {
     return candidate.imdbId.trim().toLowerCase();
   }

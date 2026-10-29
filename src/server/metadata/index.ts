@@ -51,6 +51,7 @@ import {
 } from "./openlibrary.ts";
 import { computeMatchTier, MAX_LOOKUP_RESULTS, rankLookupHits } from "./rank.ts";
 import { fetchSteamCover, getSteamWork, searchSteam } from "./steam.ts";
+import { fetchWikipediaCover, getWikipediaWork, searchWikipediaGames } from "./wikipedia.ts";
 import { fetchTmdbCover, getTmdbWork, searchTmdb } from "./tmdb.ts";
 import { detectTvmazeSlotRuntime, fetchTvmazeCover, getTvmazeWork, searchTvmaze } from "./tvmaze.ts";
 import {
@@ -163,11 +164,11 @@ export function providersForCategory(
     case "audiobook":
       return ["openlibrary"];
     case "game":
-      return ["steam"];
+      return ["steam", "wikipedia"];
     case "any":
       return tmdbOn
-        ? ["anilist", "tmdb", "tvmaze", "cinemeta", "itunes", "openlibrary", "steam"]
-        : ["anilist", "tvmaze", "cinemeta", "itunes", "openlibrary", "steam"];
+        ? ["anilist", "tmdb", "tvmaze", "cinemeta", "itunes", "openlibrary", "steam", "wikipedia"]
+        : ["anilist", "tvmaze", "cinemeta", "itunes", "openlibrary", "steam", "wikipedia"];
     default:
       return [];
   }
@@ -225,6 +226,9 @@ async function runProviderSearch(
       break;
     case "steam":
       candidates = await searchSteam(query, ctx);
+      break;
+    case "wikipedia":
+      candidates = await searchWikipediaGames(query, ctx);
       break;
   }
 
@@ -333,6 +337,9 @@ export async function lookupWork(
       break;
     case "steam":
       fetched = await getSteamWork(id, ctx);
+      break;
+    case "wikipedia":
+      fetched = await getWikipediaWork(id, ctx);
       break;
   }
 
@@ -470,6 +477,9 @@ async function getMetaCoverInternal(
         break;
       case "steam":
         directImage = await fetchSteamCover(id, ctx);
+        break;
+      case "wikipedia":
+        directImage = await fetchWikipediaCover(id, ctx);
         break;
     }
 
