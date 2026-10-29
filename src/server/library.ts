@@ -17,7 +17,7 @@
 import { cachedUntilWrite } from "./db-version-cache.ts";
 import type { Database } from "bun:sqlite";
 import { isDeepStrictEqual } from "node:util";
-import { CATEGORIES, categoryOf, type Category } from "../core/category.ts";
+import { CATEGORIES, categoryOf, groupCategory, type Category } from "../core/category.ts";
 import type { Config } from "../core/config.ts";
 import { compareByProgress, compareByRating } from "../core/library-sort.ts";
 import type {
@@ -1009,7 +1009,7 @@ export function getLibrary(
     { total_minutes: number; works: number; units: number }
   >();
   for (const item of allWorks) {
-    const cat = item.work.category;
+    const cat = groupCategory(item.work.category);
     let entry = byCat.get(cat);
     if (!entry) {
       entry = { total_minutes: 0, works: 0, units: 0 };

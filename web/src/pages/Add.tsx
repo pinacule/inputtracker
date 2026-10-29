@@ -87,7 +87,11 @@ const LOOKUP_CATEGORIES: ReadonlyArray<TabOption<Category | "any">> = [
   { value: "series", label: "Series", category: "series" },
   { value: "film", label: "Films", category: "film" },
   { value: "book", label: "Books", category: "book" },
-  { value: "audiobook", label: "Audiobooks", category: "audiobook" },
+];
+
+const BOOK_FORMAT_TABS: ReadonlyArray<TabOption<"book" | "audiobook">> = [
+  { value: "book", label: "Book" },
+  { value: "audiobook", label: "Audiobook" },
 ];
 
 const PRECISION_TABS: ReadonlyArray<TabOption<DatePrecision>> = [
@@ -640,7 +644,7 @@ export function Add({
             <span class="page-eyebrow">Personal Archive</span>
             <h1>Add to Archive</h1>
             <p class="page-subtitle">
-              Look up anime, series, films, books, or audiobooks from the past —
+              Look up anime, series, films, or books from the past —
               or log a single offline-ready session.
             </p>
           </div>
@@ -945,7 +949,7 @@ export function Add({
                         }))
                       }
                     >
-                      {CATEGORIES.filter((cat) => cat !== "shortform").map((cat) => (
+                      {CATEGORIES.filter((cat) => cat !== "shortform" && cat !== "audiobook").map((cat) => (
                         <option key={cat} value={cat}>
                           {CATEGORY_META[cat].pluralLabel}
                         </option>
@@ -1428,6 +1432,20 @@ export function Add({
                   </div>
                 ) : (
                   <div class="ui-form-stack">
+                    {(selectedWork.category === "book" ||
+                      selectedWork.category === "audiobook") && (
+                      <div class="ui-form-field">
+                        <span class="ui-form-label">Format</span>
+                        <Tabs
+                          ariaLabel="Book format"
+                          options={BOOK_FORMAT_TABS}
+                          value={selectedWork.category}
+                          onChange={(v) =>
+                            setSelectedWork({ ...selectedWork, category: v })
+                          }
+                        />
+                      </div>
+                    )}
                     <div class="ui-form-field">
                       <label class="ui-form-label" for="archive-progress-range">
                         Progress ({Math.round((consumed.progress ?? 1) * 100)}%)

@@ -7,7 +7,7 @@
 
 import type { CalendarDay, CalendarItem, Category, CategoryTotal } from "../api";
 import { formatDuration, formatSeasonEpisode } from "./calendar";
-import { CATEGORIES, formatCategoryUnits, resolveItemCategory } from "./categories";
+import { CATEGORIES, formatCategoryUnits, groupCategory, resolveItemCategory } from "./categories";
 
 export {
   CATEGORIES,
@@ -679,7 +679,7 @@ export function summarizeDayCellV2(
   >();
 
   for (const item of items) {
-    const cat = resolveItemCategory(item);
+    const cat = groupCategory(resolveItemCategory(item));
     const durMin =
       item.duration_seconds !== null &&
       item.duration_seconds !== undefined &&
@@ -829,7 +829,7 @@ export function summarizeCalendarMonthV2(
     }
 
     for (const item of day.items ?? []) {
-      const cat = resolveItemCategory(item);
+      const cat = groupCategory(resolveItemCategory(item));
       const itemMin =
         item.duration_seconds !== null &&
         item.duration_seconds !== undefined &&
@@ -1004,7 +1004,7 @@ export function groupDayPanelItems(
   >();
 
   for (const item of items) {
-    const cat = resolveItemCategory(item);
+    const cat = groupCategory(resolveItemCategory(item));
     const sec =
       item.duration_seconds !== null &&
       item.duration_seconds !== undefined &&

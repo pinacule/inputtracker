@@ -30,6 +30,7 @@ import {
   CATEGORIES,
   categoryPluralLabel,
   formatCategoryUnits,
+  groupCategory,
   isCategory,
   resolveItemCategory,
 } from "./categories";
@@ -535,7 +536,7 @@ export function computeCategorySegmentsFromItems(
   let totalSeconds = 0;
 
   for (const item of items) {
-    const cat = resolveItemCategory(item);
+    const cat = groupCategory(resolveItemCategory(item));
     const sec =
       item.duration_seconds !== null &&
       item.duration_seconds !== undefined &&
@@ -840,7 +841,7 @@ export function buildCalmCellLines(
   let musicSeconds = 0;
 
   for (const item of items) {
-    const cat = resolveItemCategory(item);
+    const cat = groupCategory(resolveItemCategory(item));
     const sec =
       item.duration_seconds !== null &&
       item.duration_seconds !== undefined &&
@@ -992,7 +993,7 @@ export function buildMonthModels(params: {
     }
 
     for (const item of d?.items ?? []) {
-      const cat = resolveItemCategory(item);
+      const cat = groupCategory(resolveItemCategory(item));
       const sec =
         item.duration_seconds !== null &&
         item.duration_seconds !== undefined &&
@@ -1432,7 +1433,7 @@ export function buildHomeDayDetailModel(params: {
   let shortformSeconds = 0;
 
   for (const item of items) {
-    const cat = resolveItemCategory(item);
+    const cat = groupCategory(resolveItemCategory(item));
     const sec =
       item.duration_seconds !== null &&
       item.duration_seconds !== undefined &&
