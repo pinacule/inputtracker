@@ -370,6 +370,8 @@ describe("v2.2 placement of YouTube & music and multi-select chips (web/src/lib/
     });
     expect(matchesLibraryCategorySelection("youtube", ["youtube"])).toBe(true);
     expect(matchesLibraryCategorySelection("music", ["music"])).toBe(true);
+    expect(matchesLibraryCategorySelection("audiobook", ["book"])).toBe(true);
+    expect(matchesLibraryCategorySelection("audiobook", ["anime"])).toBe(false);
 
     // Insights, Review, Search, Calendar "All" include YouTube and music
     expect(buildCategoryFilterParams([])).toEqual({});
