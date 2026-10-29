@@ -941,13 +941,16 @@ export function Add({
                       id="manual-work-cat"
                       class="ui-input"
                       value={manualDraft.category}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const category = (e.currentTarget as HTMLSelectElement)
+                          .value as Category;
+                        // Games have no default length: hours played is opt-in.
                         setManualDraft((d) => ({
                           ...d,
-                          category: (e.currentTarget as HTMLSelectElement)
-                            .value as Category,
-                        }))
-                      }
+                          category,
+                          ...(category === "game" ? { runtime_minutes: "" } : {}),
+                        }));
+                      }}
                     >
                       {CATEGORIES.filter((cat) => cat !== "shortform" && cat !== "audiobook").map((cat) => (
                         <option key={cat} value={cat}>
@@ -1091,6 +1094,36 @@ export function Add({
                             .value,
                         }))
                       }
+                    />
+                  </div>
+                )}
+
+                {manualDraft.category === "game" && (
+                  <div class="ui-form-field">
+                    <label class="ui-form-label" for="manual-game-hours">
+                      Hours played (optional)
+                    </label>
+                    <input
+                      id="manual-game-hours"
+                      type="number"
+                      class="ui-input"
+                      min="0"
+                      max="10000"
+                      step="0.5"
+                      value={
+                        manualDraft.runtime_minutes === undefined ||
+                        manualDraft.runtime_minutes === null ||
+                        String(manualDraft.runtime_minutes) === ""
+                          ? ""
+                          : String(Number(manualDraft.runtime_minutes) / 60)
+                      }
+                      onInput={(e) => {
+                        const hours = (e.currentTarget as HTMLInputElement).value.trim();
+                        setManualDraft((d) => ({
+                          ...d,
+                          runtime_minutes: hours === "" ? "" : String(Number(hours) * 60),
+                        }));
+                      }}
                     />
                   </div>
                 )}

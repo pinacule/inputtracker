@@ -118,6 +118,7 @@ const SHARED_DARK_CATEGORIES: Readonly<Record<Category, CategoryThemeColors>> = 
     solid: "#9c9080",
   },
   shortform: { fg: "#b1d3ff", bg: "#192638", border: "#354f70", solid: "#6194cf" },
+  game: { fg: "#b9c6ff", bg: "#1c2238", border: "#3a4670", solid: "#6f85e6" },
 };
 
 // ANSI's bright fills use black labels on white rather than unreadable bright
@@ -132,6 +133,7 @@ const ANSI_CATEGORIES: Readonly<Record<Category, CategoryThemeColors>> = {
   podcast: { fg: "#aa5500", bg: "#ffffff", border: "#000000", solid: "#aa5500" },
   music: { fg: "#000000", bg: "#ffffff", border: "#000000", solid: "#ff55ff" },
   shortform: { fg: "#5555ff", bg: "#ffffff", border: "#000000", solid: "#5555ff" },
+  game: { fg: "#000000", bg: "#ffffff", border: "#000000", solid: "#55ffff" },
   other: { fg: "#555555", bg: "#ffffff", border: "#000000", solid: "#555555" },
 };
 
@@ -291,6 +293,7 @@ export const ALL_THEMES: ReadonlyArray<ThemeDefinition> = [
       podcast: { fg: "#ffc18a", bg: "#33251e", border: "#a9815d", solid: "#f4a25e" },
       music: { fg: "#ff9acd", bg: "#321f35", border: "#a96892", solid: "#ed74b8" },
       shortform: { fg: "#d5e87d", bg: "#292e1b", border: "#899754", solid: "#bcd45b" },
+      game: { fg: "#a9bcff", bg: "#1f2638", border: "#6a7fb4", solid: "#7f9cf2" },
       other: { fg: "#c7d0db", bg: "#242a34", border: "#7d8998", solid: "#9eadbf" },
     },
   },
@@ -318,6 +321,7 @@ export const ALL_THEMES: ReadonlyArray<ThemeDefinition> = [
       podcast: { fg: "#ffd0a2", bg: "#3b2a1e", border: "#b28455", solid: "#e7a16d" },
       music: { fg: "#f2bada", bg: "#382133", border: "#ac6a96", solid: "#dd8fbc" },
       shortform: { fg: "#aed9ff", bg: "#192b41", border: "#648bc1", solid: "#78aff0" },
+      game: { fg: "#c8cbff", bg: "#23243f", border: "#7a7fc0", solid: "#9aa0f0" },
       other: { fg: "#dbd5c7", bg: "#2c2c2a", border: "#918d81", solid: "#b6b1a5" },
     },
   },
@@ -345,6 +349,7 @@ export const ALL_THEMES: ReadonlyArray<ThemeDefinition> = [
       podcast: { fg: "#e7c5a6", bg: "#2c231c", border: "#94704f", solid: "#d3a07b" },
       music: { fg: "#edbdd5", bg: "#2d1e28", border: "#95647f", solid: "#d894b6" },
       shortform: { fg: "#bcd9eb", bg: "#1c2630", border: "#617f94", solid: "#88b4cf" },
+      game: { fg: "#c9d0ee", bg: "#22263a", border: "#737ca3", solid: "#9ea8d6" },
       other: { fg: "#ddd6c9", bg: "#28251f", border: "#8a8273", solid: "#c8c1b4" },
     },
   },

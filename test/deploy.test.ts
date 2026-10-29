@@ -203,9 +203,9 @@ describe("deploy files: required directives", () => {
     );
   });
 
-  test("simkl timer is hourly at :30 and points at its service", () => {
+  test("simkl timer runs every 30 minutes and points at its service", () => {
     const text = readDeploy("inputtracker-sync@simkl.timer");
-    expect(directive(text, "OnCalendar")).toBe("*-*-* *:30:00");
+    expect(directive(text, "OnCalendar")).toBe("*-*-* *:00,30:00");
     expect(directive(text, "Persistent")).toBe("true");
     expect(directive(text, "RandomizedDelaySec")).toBe("120");
     expect(directive(text, "Unit")).toBe(

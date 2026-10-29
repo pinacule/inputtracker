@@ -105,7 +105,7 @@ describe("app skins", () => {
         }
         solids.add(theme.categories[category].solid);
       }
-      expect(solids.size).toBe(10);
+      expect(solids.size).toBe(11);
     }
   });
 

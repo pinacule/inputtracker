@@ -289,11 +289,17 @@
 
   /* Short-form — Slate Blue; inherited by all five dark themes. */
   --cat-shortform-fg: #b1d3ff;
+  --cat-game-fg: #b9c6ff;
   --cat-shortform-bg: #192638;
+  --cat-game-bg: #1c2238;
   --cat-shortform-border: #354f70;
+  --cat-game-border: #3a4670;
   --cat-shortform-solid: #6194cf;
+  --cat-game-solid: #6f85e6;
   --cat-shortform-tile-start: #354f70;
+  --cat-game-tile-start: #3a4670;
   --cat-shortform-tile-end: #192638;
+  --cat-game-tile-end: #1c2238;
 
   /* 9. Other — Warm Stone / Pewter */
   --cat-other-fg: #d2c9bb;

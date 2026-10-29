@@ -123,6 +123,9 @@ export const DEMO_TITLES = [
   "Interactive Nebula Exhibit",
   "Live Coding Jam Session",
   "Virtual Museum Tour: Antiquities",
+
+  // Games
+  "Synthetic Starfall Odyssey",
 ] as const;
 
 export const DEMO_PARENT_TITLES = [
@@ -538,6 +541,9 @@ export function seedDemoData(
     { category: "other", media_type: "other", title: "Interactive Nebula Exhibit", parent_title: null, duration_seconds: 2700 },
     { category: "other", media_type: "other", title: "Live Coding Jam Session", parent_title: null, duration_seconds: 3600 },
     { category: "other", media_type: "other", title: "Virtual Museum Tour: Antiquities", parent_title: null, duration_seconds: 2100 },
+
+    // Games (archive-only: the category lives in raw)
+    { category: "game", media_type: "other", title: "Synthetic Starfall Odyssey", parent_title: null, duration_seconds: 5400 },
   ];
 
   const eventsToInsert: NewEvent[] = [];
@@ -597,7 +603,7 @@ export function seedDemoData(
         duration_seconds: item.duration_seconds,
         progress: item.progress ?? null,
         device: "demo",
-        raw: null,
+        raw: item.category === "game" ? { category: "game" } : null,
       });
     }
   }

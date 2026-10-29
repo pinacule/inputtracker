@@ -428,6 +428,7 @@
 .work-banner--podcast { --work-category-bg: var(--cat-podcast-bg); }
 .work-banner--music { --work-category-bg: var(--cat-music-bg); }
 .work-banner--shortform { --work-category-bg: var(--cat-shortform-bg); }
+.work-banner--game { --work-category-bg: var(--cat-game-bg); }
 .work-banner--other { --work-category-bg: var(--cat-other-bg); }
 
 .work-banner img {

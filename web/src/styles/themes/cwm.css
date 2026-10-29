@@ -151,9 +151,13 @@
   --cat-music-border: #000000;
   --cat-music-solid: #ff55ff;
   --cat-shortform-fg: #5555ff;
+  --cat-game-fg: #000000;
   --cat-shortform-bg: #ffffff;
+  --cat-game-bg: #ffffff;
   --cat-shortform-border: #000000;
+  --cat-game-border: #000000;
   --cat-shortform-solid: #5555ff;
+  --cat-game-solid: #55ffff;
   --cat-other-fg: #555555;
   --cat-other-bg: #ffffff;
   --cat-other-border: #000000;
@@ -176,7 +180,9 @@
   --cat-music-tile-start: #000000;
   --cat-music-tile-end: #000000;
   --cat-shortform-tile-start: #000000;
+  --cat-game-tile-start: #000000;
   --cat-shortform-tile-end: #000000;
+  --cat-game-tile-end: #000000;
   --cat-other-tile-start: #000000;
   --cat-other-tile-end: #000000;
 }
