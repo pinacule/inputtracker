@@ -192,6 +192,26 @@ export function categoryLabel(category: Category | string | null | undefined): s
   return "Other";
 }
 
+/** Label for the user-set completion count: "Times watched", "Times read", ... */
+export function timesLabel(category: Category): string {
+  switch (groupCategory(category)) {
+    case "anime":
+    case "series":
+    case "film":
+    case "youtube":
+      return "Times watched";
+    case "book":
+      return category === "audiobook" ? "Times listened" : "Times read";
+    case "podcast":
+    case "music":
+      return "Times listened";
+    case "game":
+      return "Times played";
+    default:
+      return "Times completed";
+  }
+}
+
 export function categoryPluralLabel(
   category: Category | string | null | undefined
 ): string {

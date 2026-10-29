@@ -217,6 +217,8 @@ export interface LibraryWork {
   consumption_progress?: number | null;
   /** v2.2 (W11): true when a track/video is in Favorite Songs. */
   favorite?: boolean;
+  /** Times watched/read/played, when the user set it in Edit work. */
+  times?: number;
 }
 
 export interface CategoryTotal {
@@ -358,6 +360,8 @@ export interface WorkEdit {
   meta?: { provider: MetaProvider; provider_id: string } | null;
   /** YouTube works: the topic of this video (channel topics are set with /api/youtube/channel-topic). */
   topic?: string | null;
+  /** Times watched/read/played (0..999); null clears it. Display only, adds no time. */
+  times?: number | null;
 }
 
 /** GET /api/library/hidden */
