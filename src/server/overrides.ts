@@ -54,6 +54,7 @@ const VALID_META_PROVIDERS: ReadonlySet<MetaProvider> = new Set<MetaProvider>([
   "itunes",
   "openlibrary",
   "tmdb",
+  "steam",
 ]);
 
 const META_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -80,6 +81,7 @@ const CANONICAL_ID_PRIORITY = [
   "openlibrary",
   "itunes",
   "tmdb",
+  "steam",
   "abs_item",
 ] as const;
 

@@ -91,6 +91,8 @@ function makeConfig(dbPath: string, overrides: Partial<Config> = {}): Config {
       openlibrary_covers_url: "https://covers.openlibrary.invalid",
       tmdb_url: "https://tmdb.invalid/3",
       tmdb_image_url: "https://image.tmdb.invalid/t/p",
+      steam_url: "https://steam.invalid",
+      steam_cdn_url: "https://steamcdn.invalid",
       tmdb_api_key: "",
     },
     notify: {

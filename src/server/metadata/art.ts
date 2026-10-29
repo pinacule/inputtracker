@@ -11,6 +11,7 @@ import { defaultMetadataLimiter, fetchRemoteCoverImage, METADATA_TIMEOUT_MS, typ
 import type { MetadataDeps } from "./index.ts";
 import { getItunesWork } from "./itunes.ts";
 import { getOpenLibraryArt } from "./openlibrary.ts";
+import { getSteamWork } from "./steam.ts";
 import { getTmdbArt } from "./tmdb.ts";
 import { getTvmazeArt } from "./tvmaze.ts";
 import { isMetaProvider, isValidProviderId, resolveMetadataConfig, type ProviderContext } from "./types.ts";
@@ -43,6 +44,7 @@ async function sourcesFor(provider: MetaProvider, id: string, deps: MetadataDeps
         case "openlibrary": sources = await getOpenLibraryArt(id, ctx); break;
         case "cinemeta": sources = (await getCinemetaWork(id, ctx))?.remoteArt ?? []; break;
         case "itunes": sources = (await getItunesWork(id, ctx))?.remoteArt ?? []; break;
+        case "steam": sources = (await getSteamWork(id, ctx))?.remoteArt ?? []; break;
       }
       sources = selectArt(sources);
     } catch { /* Unavailable optional art is a cached absence, never a work-page failure. */ }

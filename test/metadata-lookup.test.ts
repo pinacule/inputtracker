@@ -61,6 +61,8 @@ function makeConfig(dbPath: string, overrides: Partial<Config> = {}): Config {
       openlibrary_covers_url: "https://covers.openlibrary.invalid",
       tmdb_url: "https://tmdb.invalid/3",
       tmdb_image_url: "https://image.tmdb.invalid/t/p",
+      steam_url: "https://steam.invalid",
+      steam_cdn_url: "https://steamcdn.invalid",
       tmdb_api_key: "",
     },
     notify: {
@@ -103,6 +105,8 @@ describe("[metadata] config loading and redaction", () => {
       openlibrary_covers_url: "https://covers.openlibrary.org",
       tmdb_url: "https://api.themoviedb.org/3",
       tmdb_image_url: "https://image.tmdb.org/t/p",
+      steam_url: "https://store.steampowered.com",
+      steam_cdn_url: "https://shared.akamai.steamstatic.com",
     } as Config["metadata"]);
     expect(cfg.metadata?.tmdb_api_key).toBe("");
   });
@@ -619,6 +623,70 @@ describe("Provider mappings and AniList season chain", () => {
     const cover = await getMetaCover("itunes", "1485258363", { config, fetch: mockFetch });
     expect(cover).not.toBeNull();
     expect(fetchedUrls.some((u) => u.includes("600x600bb.jpg"))).toBe(true);
+  });
+
+  test("Steam Store: games search, work details, and portrait cover with header fallback", async () => {
+    const searchPayload = {
+      total: 2,
+      items: [
+        { type: "app", name: "Synthetic Neon Runner", id: 4242 },
+        { type: "sub", name: "Synthetic Bundle", id: 99 },
+      ],
+    };
+    const detailsPayload = {
+      "4242": {
+        success: true,
+        data: {
+          type: "game",
+          name: "Synthetic Neon Runner",
+          steam_appid: 4242,
+          developers: ["Synthetic Studio"],
+          genres: [{ id: "1", description: "Action" }, { id: "3", description: "RPG" }],
+          release_date: { coming_soon: false, date: "9 Dec, 2020" },
+          short_description: "A <b>synthetic</b> city runner.",
+          header_image: "https://steamcdn.invalid/header/4242.jpg",
+          metacritic: { score: 86 },
+        },
+      },
+    };
+    const fetchedUrls: string[] = [];
+    const mockFetch = (async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      fetchedUrls.push(`${init?.method ?? "GET"} ${url}`);
+      if (url.startsWith("https://steam.invalid/api/storesearch/")) return Response.json(searchPayload);
+      if (url.startsWith("https://steam.invalid/api/appdetails")) return Response.json(detailsPayload);
+      if (url === "https://steamcdn.invalid/header/4242.jpg") {
+        return new Response(new Uint8Array([7, 8, 9]), { status: 200, headers: { "content-type": "image/jpeg" } });
+      }
+      return new Response("Not found", { status: 404 });
+    }) as typeof fetch;
+
+    expect(providersForCategory("game", config)).toEqual(["steam"]);
+    const searchRes = await lookupSearch("Synthetic Neon Runner", "game", { config, fetch: mockFetch });
+    expect(searchRes.results).toEqual([{
+      provider: "steam",
+      provider_id: "4242",
+      category: "game",
+      title: "Synthetic Neon Runner",
+      subtitle: "Steam",
+      year: null,
+      cover_url: "/api/meta-cover/steam/4242",
+    }]);
+
+    const work = await lookupWork("steam", "4242", { config, fetch: mockFetch });
+    expect(work?.category).toBe("game");
+    expect(work?.year).toBe(2020);
+    expect(work?.creators).toEqual(["Synthetic Studio"]);
+    expect(work?.genres).toEqual(["Action", "RPG"]);
+    expect(work?.description).toBe("A synthetic city runner.");
+    expect(work?.community_score).toEqual({ source: "Metacritic", value_10: 8.6, votes: null });
+    expect(work?.external_ids).toEqual({ steam: "4242" });
+
+    // No portrait capsule on the CDN: the cover falls back to the header image.
+    const cover = await getMetaCover("steam", "4242", { config, fetch: mockFetch });
+    expect(cover?.bytes).toEqual(new Uint8Array([7, 8, 9]));
+    expect(fetchedUrls).toContain("GET https://steamcdn.invalid/store_item_assets/steam/apps/4242/library_600x900_2x.jpg");
+    expect(fetchedUrls.every((u) => u.startsWith("GET "))).toBe(true);
   });
 
   test("Open Library: maps books and audiobooks, editions pages fallback, and ISBN", async () => {

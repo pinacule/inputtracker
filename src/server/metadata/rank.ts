@@ -23,6 +23,7 @@ const PROVIDER_PRIORITY: Record<MetaProvider, number> = {
   cinemeta: 3,
   itunes: 4,
   openlibrary: 5,
+  steam: 6,
 };
 
 function singleTitleTier(titleNorm: string, queryNorm: string, queryWords: string[]): number {
