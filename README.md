@@ -226,7 +226,7 @@ server omits the ActivityWatch pull timer):
 | `inputtracker.service` | runs the HTTP server | always (restarts on failure) |
 | `inputtracker-sync@.service` | oneshot `it sync %i` | launched by its timer |
 | `inputtracker-sync@audiobookshelf.timer` | Audiobookshelf sync | hourly, persistent, up to 120 s jitter |
-| `inputtracker-sync@simkl.timer` | Simkl sync | hourly at :30, persistent, up to 120 s jitter |
+| `inputtracker-sync@simkl.timer` | Simkl sync | every 30 min (:00 and :30), persistent, up to 120 s jitter |
 | `inputtracker-sync@activitywatch.timer` | ActivityWatch sync (YouTube) | every 10 minutes (`*:0/10`), persistent, up to 30 s jitter |
 | `inputtracker-push@.service` (PC role) | oneshot `it push %i` | launched by its timer |
 | `inputtracker-push@activitywatch.timer` (PC role) | ActivityWatch push to the VM | every 10 minutes, persistent, up to 30 s jitter |
@@ -504,7 +504,7 @@ do not have to be equal — the closest pair wins, ties go to the lower row id.
    access token refreshes automatically; if a refresh fails, the sync error tells you to
    run `it auth simkl` again.
 5. Re-run `scripts/install.sh` so the new `inputtracker-sync@simkl.timer` is installed and
-   enabled. It runs the Simkl sync hourly at :30, persistent, with up to 120 s of jitter
+   enabled. It runs the Simkl sync every 30 minutes (:00 and :30), persistent, with up to 120 s of jitter
    (the Audiobookshelf timer runs on the hour).
 6. Sync now with `bun run it sync simkl`, or use "Sync Simkl now" on the Import/Export
    page (`POST /api/sync/simkl`). If `simkl.client_id` is empty or the account is not
