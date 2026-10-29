@@ -46,6 +46,7 @@ describe("demo-server", () => {
       }
 
       for (const cat of CATEGORIES) {
+        if (cat === "shortform") continue; // No longer tracked.
         expect(categoriesSeen.has(cat)).toBe(true);
       }
       db.close();

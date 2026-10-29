@@ -78,14 +78,14 @@ test("series norm-history boundary is before range/category filtering; hidden/pl
     session({ title: "Synthetic Hidden Book", source_id: "hidden", external_ids: { abs_item: "hidden-item" }, started_at: "2026-01-01T10:00:00Z" }),
     session({ title: "Synthetic Planned Book", source_id: "planned", external_ids: { abs_item: "planned-item" }, started_at: "2026-02-01T10:00:00Z" }),
     session({ started_at: "2026-03-28T23:30:00Z" }), // Bratislava March 29, DST day.
-    session({ source: "phone", source_kind: "shortform_day", source_id: "synthetic-phone-day", media_type: "shortform",
-      title: null, parent_title: null, external_ids: {}, started_at: "2026-10-19T22:00:00Z", duration_seconds: 2820 }),
+    session({ source: "youtube", source_kind: "phone_play", source_id: "synthetic-phone-play", media_type: "video",
+      title: "Synthetic Video", parent_title: "Synthetic Channel", external_ids: {}, started_at: "2026-10-19T22:00:00Z", duration_seconds: 2820 }),
   ]);
   const works = buildAllLibraryWorks(database);
   await editLibraryWork(database, works.find((w) => w.work.title === "Synthetic Hidden Book")!.work.key, { hidden: true });
   await editLibraryWork(database, works.find((w) => w.work.title === "Synthetic Planned Book")!.work.key, { status: "planned" });
-  const result = getSeries(database, { bucket: "day", from: "2026-10-19", to: "2026-10-20", category: "shortform" });
+  const result = getSeries(database, { bucket: "day", from: "2026-10-19", to: "2026-10-20", category: "youtube" });
   expect(result.history_start).toBe("2026-03-29");
   expect(result.points[0]?.minutes_by_category).toEqual({});
-  expect(result.points[1]?.minutes_by_category).toEqual({ shortform: 47 });
+  expect(result.points[1]?.minutes_by_category).toEqual({ youtube: 47 });
 });

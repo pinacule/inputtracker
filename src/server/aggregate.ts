@@ -41,7 +41,6 @@ export const CONSUMPTION_KINDS = new Set([
   "history_item",
   "aw_play",
   "phone_play",
-  "shortform_day",
   "archive",
 ]);
 
