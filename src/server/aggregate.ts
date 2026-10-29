@@ -296,6 +296,7 @@ export const VALID_META_PROVIDERS: ReadonlySet<string> = new Set([
   "openlibrary",
   "tmdb",
   "steam",
+  "wikipedia",
 ]);
 
 export const META_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;

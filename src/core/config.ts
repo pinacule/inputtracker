@@ -101,6 +101,8 @@ export interface MetadataConfig {
   tmdb_image_url: string;
   steam_url: string;
   steam_cdn_url: string;
+  wikipedia_url: string;
+  wikidata_url: string;
   /** Optional TMDB API key; non-enumerable secret, never logged. */
   tmdb_api_key: string;
 }
@@ -536,6 +538,18 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
       "steam_cdn_url",
       "metadata.steam_cdn_url",
       "https://shared.akamai.steamstatic.com"
+    ),
+    wikipedia_url: readString(
+      metadataTable,
+      "wikipedia_url",
+      "metadata.wikipedia_url",
+      "https://en.wikipedia.org"
+    ),
+    wikidata_url: readString(
+      metadataTable,
+      "wikidata_url",
+      "metadata.wikidata_url",
+      "https://www.wikidata.org"
     ),
   } as MetadataConfig;
 

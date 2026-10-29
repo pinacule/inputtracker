@@ -48,6 +48,8 @@ interface SteamAppData {
 type SteamDetailsResponse = Record<string, { success?: boolean; data?: SteamAppData | null } | undefined>;
 
 const APP_ID_RE = /^\d{1,10}$/;
+/** Soundtracks are sold as apps but are never what a game search wants. */
+const SOUNDTRACK_RE = /\bsoundtrack\b|\bOST\b/i;
 
 function appAssetUrl(ctx: ProviderContext, id: string, file: string): string {
   return `${ctx.metaConfig.steam_cdn_url}/store_item_assets/steam/apps/${id}/${file}`;
@@ -67,7 +69,7 @@ export async function searchSteam(query: string, ctx: ProviderContext): Promise<
     if (!item || item.type !== "app" || typeof item.id !== "number" || item.id <= 0) continue;
     const providerId = String(item.id);
     const title = (item.name ?? "").trim();
-    if (!title || !isValidProviderId(providerId)) continue;
+    if (!title || !isValidProviderId(providerId) || SOUNDTRACK_RE.test(title)) continue;
     results.push({
       hit: {
         provider: "steam",

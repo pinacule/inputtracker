@@ -553,6 +553,7 @@ describe("Settings endpoint (GET /api/settings)", () => {
       { provider: "itunes", enabled: true },
       { provider: "openlibrary", enabled: true },
       { provider: "steam", enabled: true },
+      { provider: "wikipedia", enabled: true },
       { provider: "tmdb", enabled: false },
     ]);
 

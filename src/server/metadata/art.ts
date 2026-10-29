@@ -45,6 +45,7 @@ async function sourcesFor(provider: MetaProvider, id: string, deps: MetadataDeps
         case "cinemeta": sources = (await getCinemetaWork(id, ctx))?.remoteArt ?? []; break;
         case "itunes": sources = (await getItunesWork(id, ctx))?.remoteArt ?? []; break;
         case "steam": sources = (await getSteamWork(id, ctx))?.remoteArt ?? []; break;
+        case "wikipedia": sources = []; break;
       }
       sources = selectArt(sources);
     } catch { /* Unavailable optional art is a cached absence, never a work-page failure. */ }

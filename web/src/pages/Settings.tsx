@@ -55,6 +55,7 @@ const PROVIDER_LABELS: Readonly<Record<MetaProvider, string>> = {
   openlibrary: "Open Library (Books & Audiobooks)",
   tmdb: "TMDB (Films & Series)",
   steam: "Steam Store (Games)",
+  wikipedia: "Wikipedia & Wikidata (Games)",
 };
 
 export function formatBytes(bytes: number | null | undefined): string {
@@ -784,6 +785,7 @@ export function Settings({
                 { provider: "itunes" as const, enabled: true },
                 { provider: "openlibrary" as const, enabled: true },
                 { provider: "steam" as const, enabled: true },
+                { provider: "wikipedia" as const, enabled: true },
                 { provider: "tmdb" as const, enabled: false },
               ]
             ).map((p) => (

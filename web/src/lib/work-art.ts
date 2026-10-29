@@ -1,6 +1,6 @@
 import type { WorkArtImage } from "../../../src/core/contract";
 
-const ART_PATH = /^\/api\/meta-art\/(?:anilist|tmdb|tvmaze|cinemeta|openlibrary|itunes|steam)\/[A-Za-z0-9_-]{1,64}$/;
+const ART_PATH = /^\/api\/meta-art\/(?:anilist|tmdb|tvmaze|cinemeta|openlibrary|itunes|steam|wikipedia)\/[A-Za-z0-9_-]{1,64}$/;
 export function localArtListUrl(url: string | null | undefined): string | null {
   return url && ART_PATH.test(url) ? url : null;
 }
