@@ -298,6 +298,13 @@
   word-break: break-word;
 }
 
+/* Category kicker and empty creator line are only shown by skins that use
+   fixed-height cards (Dot); other skins keep their existing layout. */
+.library-work-card-kicker,
+.library-work-card-creator--empty {
+  display: none;
+}
+
 .library-work-card-creator {
   font-size: 0.72rem;
   color: var(--text-secondary);

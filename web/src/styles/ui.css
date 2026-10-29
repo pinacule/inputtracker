@@ -1407,6 +1407,25 @@
     opacity var(--duration-fast) var(--ease-standard);
 }
 
+/* Star and value are separate boxes so both sit on the pill's centre line,
+   whatever the fallback font for the star glyph. */
+.ui-quick-rate-pill-star,
+.ui-quick-rate-pill-value {
+  display: block;
+  line-height: 1;
+}
+
+.ui-quick-rate-pill-star {
+  font-family: system-ui, sans-serif;
+  font-size: 0.9em;
+}
+
+@supports (text-box: trim-both cap alphabetic) {
+  .ui-quick-rate-pill-value {
+    text-box: trim-both cap alphabetic;
+  }
+}
+
 .ui-quick-rate-pill--rated {
   background-color: var(--cat-film-bg);
   color: var(--cat-film-fg);

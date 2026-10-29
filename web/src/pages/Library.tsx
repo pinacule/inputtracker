@@ -1290,6 +1290,12 @@ export function Library({
                     </div>
 
                     <div class="library-work-card-body">
+                      <span
+                        class="library-work-card-kicker"
+                        style={{ color: `var(--cat-${work.category}-fg)` }}
+                      >
+                        {categoryLabel(work.category)}
+                      </span>
                       <a
                         href={workHref}
                         class="library-work-card-title"
@@ -1297,12 +1303,19 @@ export function Library({
                       >
                         {work.title}
                       </a>
-                      {creatorText && (
+                      {creatorText ? (
                         <span
                           class="library-work-card-creator"
                           title={creatorText}
                         >
                           {creatorText}
+                        </span>
+                      ) : (
+                        <span
+                          class="library-work-card-creator library-work-card-creator--empty"
+                          aria-hidden="true"
+                        >
+                          {" "}
                         </span>
                       )}
                       <div class="library-work-card-meta tabular-nums">
