@@ -1104,13 +1104,8 @@ export function Insights({
           </div>
         )}
       </Card>
-      {/* Ranked music/YouTube lists beside the small short-form total. */}
       <div class="insights-media-row">
         <MostPlayed categories={selectedCategories} />
-        <Card padding="md" title="Short-form time" subtitle="Daily time only — no archived videos" class={staleClass(seriesStale)}>
-          <Stat label="Short-form" value={seriesFirstLoad ? statSkeleton : formatMinutes(points.reduce((sum, p) => sum + (p.minutes_by_category.shortform ?? 0), 0))} category="shortform"
-            sparkline={seriesFirstLoad ? undefined : <Sparkline values={points.map((p) => p.minutes_by_category.shortform ?? 0)} category="shortform" label="Short-form time trend" />} />
-        </Card>
       </div>
 
       {/* Chart 4: 52-Week Streak & Activity Heatmap Calendar */}

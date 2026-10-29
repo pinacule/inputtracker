@@ -53,12 +53,12 @@ describe("ActivityWatch event push API and HttpSink", () => {
     expect(db.query<{ source: string; kind: string; status: string }, []>("SELECT source, kind, status FROM ingest_runs;").all())
       .toEqual(Array.from({ length: 3 }, () => ({ source: "activitywatch", kind: "push", status: "ok" })));
   });
-  test("only permitted video/music and reserved shortform pairs are accepted", async () => {
+  test("only permitted video/music and reserved shortform pairs are accepted; short-form is dropped", async () => {
     const events = [event({ media_type: "music", source_id: "synthetic-music" }),
       event({ source_kind: "shortform_day", source_id: "synthetic-shortform", media_type: "other", external_ids: null }),
       event({ source: "activitywatch", source_kind: "shortform_day", source_id: "synthetic-shortform-2", external_ids: null })];
     expect((await post({ events })).status).toBe(200);
-    expect(count()).toBe(3);
+    expect(count()).toBe(1);
     expect((await post({ events: [] })).status).toBe(200);
     expect(count("ingest_runs")).toBe(2);
   });

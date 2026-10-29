@@ -60,7 +60,7 @@ export function CategoryChips({
             presentSet.has(c) ||
             (scope === "library" && (c === "youtube" || c === "music"))
         )
-      : CATEGORIES).filter((c) => scope !== "library" || c !== "shortform");
+      : CATEGORIES).filter((c) => c !== "shortform");
 
   const applyChange = (next: Category[]) => {
     if (syncUrl && typeof window !== "undefined") {

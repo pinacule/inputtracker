@@ -990,7 +990,7 @@ describe("importYoutubeTakeout (JSON fixture)", () => {
     expect(result.seen).toBe(8);
     expect(result.gap_skipped).toBe(1); // BbCcDdEeFfG has 1m gap before AbCdEfGhIjK
     expect(result.stored).toBe(8); // seven views plus one time-only day
-    expect(result.inserted).toBe(8);
+    expect(result.inserted).toBe(7); // short-form days are no longer stored
     expect(result.music).toBe(1);
     expect(result.skipped).toEqual({
       ads: 1,
@@ -998,7 +998,7 @@ describe("importYoutubeTakeout (JSON fixture)", () => {
       other: 1,
       invalid: 1,
     });
-    expect(countEvents(db)).toBe(8);
+    expect(countEvents(db)).toBe(7);
     expect(result.records).toBe(
       result.seen +
         result.skipped.ads +
@@ -1011,7 +1011,7 @@ describe("importYoutubeTakeout (JSON fixture)", () => {
     expect(run.source).toBe("youtube-takeout");
     expect(run.status).toBe("ok");
     expect(run.rows_seen).toBe(8);
-    expect(run.rows_inserted).toBe(8);
+    expect(run.rows_inserted).toBe(7);
   });
 
   test("stores timestamps as UTC ISO with milliseconds and estimated gap duration", () => {
@@ -1039,7 +1039,7 @@ describe("importYoutubeTakeout (JSON fixture)", () => {
 
     expect(second.seen).toBe(8);
     expect(second.inserted).toBe(0);
-    expect(countEvents(db)).toBe(8);
+    expect(countEvents(db)).toBe(7);
   });
 
   test("an overlapping file inserts only the new records", () => {
@@ -1068,7 +1068,7 @@ describe("importYoutubeTakeout (JSON fixture)", () => {
 
     expect(result.seen).toBe(3);
     expect(result.inserted).toBe(2);
-    expect(countEvents(db)).toBe(10);
+    expect(countEvents(db)).toBe(9);
   });
 
   test("a JSON object throws and records a failed run", () => {
@@ -1151,11 +1151,11 @@ describe("CLI: it import youtube-takeout <file>", () => {
     expect(code).toBe(0);
     expect(deps.captured.err).toBe("");
     expect(deps.captured.out).toBe(
-      "youtube-takeout: 12 records, 8 views, 8 stored, 8 new, 1 music, 7.6 h, skipped 1 ads, 1 without video, 1 other, 1 invalid, 1 gap-skipped, 0 favourites, 0 subscriptions\n"
+      "youtube-takeout: 12 records, 8 views, 8 stored, 7 new, 1 music, 7.6 h, skipped 1 ads, 1 without video, 1 other, 1 invalid, 1 gap-skipped, 0 favourites, 0 subscriptions\n"
     );
 
     const db = openDb(join(tempDir, "ok.db"));
-    expect(countEvents(db)).toBe(8);
+    expect(countEvents(db)).toBe(7);
     db.close();
   });
 
