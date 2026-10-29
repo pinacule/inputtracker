@@ -502,6 +502,28 @@ export const migrations: readonly Migration[] = [
     },
   },
   workIdentityMigration,
+  {
+    version: 15,
+    name: "work_override_times",
+    up: (db: Database) => {
+      // How many times the work was watched/read/played; display only, never time.
+      db.run(`
+        ALTER TABLE work_overrides
+        ADD COLUMN times INTEGER CHECK (times IS NULL OR (times BETWEEN 0 AND 999));
+      `);
+      db.run("DROP VIEW IF EXISTS work_overrides_latest;");
+      db.run(`
+        CREATE VIEW work_overrides_latest AS
+        SELECT *
+        FROM work_overrides
+        WHERE id IN (
+          SELECT MAX(id)
+          FROM work_overrides
+          GROUP BY work_key
+        );
+      `);
+    },
+  },
 ];
 
 export function migrate(db: Database): void {

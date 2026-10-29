@@ -596,6 +596,8 @@ export interface LatestOverride {
   /** Explicit WorkEdit.meta=null, distinct from an override that never mentioned metadata. */
   meta_unlinked: boolean;
   topic: string | null;
+  /** Times watched/read/played, set by the user. */
+  times: number | null;
   created_at: string;
   edited: boolean;
 }
@@ -644,6 +646,8 @@ function rowToLatestOverride(row: WorkOverrideRow): LatestOverride {
     typeof row.topic === "string" && row.topic.trim() !== ""
       ? row.topic.trim()
       : null;
+  const times =
+    typeof row.times === "number" && Number.isInteger(row.times) ? row.times : null;
 
   const edited =
     title !== null ||
@@ -653,7 +657,8 @@ function rowToLatestOverride(row: WorkOverrideRow): LatestOverride {
     note !== null ||
     hidden ||
     meta !== null ||
-    topic !== null;
+    topic !== null ||
+    times !== null;
 
   return {
     id: row.id,
@@ -671,6 +676,7 @@ function rowToLatestOverride(row: WorkOverrideRow): LatestOverride {
     meta_work: metaWork,
     meta_unlinked: metaUnlinked,
     topic,
+    times,
     created_at: row.created_at,
     edited,
   };
@@ -711,6 +717,7 @@ const ALLOWED_WORK_EDIT_KEYS = new Set([
   "hidden",
   "meta",
   "topic",
+  "times",
 ]);
 
 export interface ParsedWorkEdit {
@@ -730,6 +737,8 @@ export interface ParsedWorkEdit {
   meta: { provider: MetaProvider; provider_id: string } | null;
   hasTopic: boolean;
   topic: string | null;
+  hasTimes: boolean;
+  times: number | null;
 }
 
 /** Validate a `WorkEdit` payload (`POST /api/library/work/edit?key=`). */
@@ -890,6 +899,26 @@ export function parseWorkEdit(input: unknown): ParsedWorkEdit {
     }
   }
 
+  let hasTimes = false;
+  let times: number | null = null;
+  if ("times" in obj && obj.times !== undefined) {
+    hasTimes = true;
+    if (obj.times === null) {
+      times = null;
+    } else if (
+      typeof obj.times === "number" &&
+      Number.isInteger(obj.times) &&
+      obj.times >= 0 &&
+      obj.times <= 999
+    ) {
+      times = obj.times;
+    } else {
+      throw new WorkOverrideValidationError(
+        "Field 'times' must be a whole number from 0 to 999, or null"
+      );
+    }
+  }
+
   return {
     hasTitle,
     title,
@@ -907,6 +936,8 @@ export function parseWorkEdit(input: unknown): ParsedWorkEdit {
     meta,
     hasTopic,
     topic,
+    hasTimes,
+    times,
   };
 }
 
@@ -922,6 +953,7 @@ export function workOverrideRecordHash(norm: {
   meta_provider: string | null;
   meta_id: string | null;
   topic: string | null;
+  times?: number | null;
 }): string {
   return createHash("sha256")
     .update(
@@ -937,6 +969,8 @@ export function workOverrideRecordHash(norm: {
         meta_provider: norm.meta_provider,
         meta_id: norm.meta_id,
         topic: norm.topic,
+        // Only present when set, so hashes of older rows stay reproducible.
+        ...(norm.times !== undefined && norm.times !== null ? { times: norm.times } : {}),
       })
     )
     .digest("hex");
@@ -964,6 +998,7 @@ export function saveWorkOverride(
   const hidden = edit.hasHidden ? edit.hidden : (current?.hidden ?? false);
   const meta = edit.hasMeta ? edit.meta : (current?.meta ?? null);
   const topic = edit.hasTopic ? edit.topic : (current?.topic ?? null);
+  const times = edit.hasTimes ? edit.times : (current?.times ?? null);
   const effectiveMetaWork = edit.hasMeta
     ? edit.meta === null
       ? null
@@ -991,6 +1026,7 @@ export function saveWorkOverride(
     meta_provider: metaProvider,
     meta_id: metaId,
     topic,
+    times,
   });
 
   const res = db.run(
@@ -1008,8 +1044,9 @@ export function saveWorkOverride(
       meta_id,
       meta_json,
       topic,
+      times,
       created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     [
       recordHash,
       workKey,
@@ -1024,6 +1061,7 @@ export function saveWorkOverride(
       metaId,
       metaJson,
       topic,
+      times,
       createdAt,
     ]
   );

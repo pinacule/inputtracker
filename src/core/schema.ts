@@ -86,6 +86,7 @@ export interface WorkOverrideRow {
   meta_id: string | null;
   meta_json: string | null;
   topic: string | null;
+  times?: number | null;
   created_at: string;
 }
 

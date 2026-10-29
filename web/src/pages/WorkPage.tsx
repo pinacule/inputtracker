@@ -15,6 +15,7 @@ import {
   formatReadableHistoryItem,
   formatWorkDetailProgress,
   formatWorkUnitLabel,
+  timesLabel,
 } from "../lib/categories";
 import { formatLocalDay } from "../lib/format-date";
 import { canRateCategory } from "../lib/rating";
@@ -399,6 +400,15 @@ export function WorkPage({
                     </div>
                   )}
 
+                  {effectiveWorkDetail.times !== undefined && (
+                    <div class="work-metric-pill">
+                      <span class="work-metric-label">
+                        {timesLabel(effectiveWorkDetail.category)}
+                      </span>
+                      <strong>{effectiveWorkDetail.times}×</strong>
+                    </div>
+                  )}
+
                   {detailUnitText && (
                     <div class="work-metric-pill">
                       <span class="work-metric-label">Recorded</span>
@@ -477,6 +487,7 @@ export function WorkPage({
                           rating: effectiveWorkDetail.rating,
                           note: effectiveWorkDetail.note,
                           topic: effectiveWorkDetail.topic,
+                          times: effectiveWorkDetail.times ?? null,
                           channel: effectiveWorkDetail.channel,
                           cover_url: effectiveWorkDetail.cover_url,
                           edited: effectiveWorkDetail.edited,

@@ -937,6 +937,7 @@ export function buildAllLibraryWorks(
       topic: ytFields.topic,
       progress,
       creator,
+      ...(override?.times != null ? { times: override.times } : {}),
       ...(isBook ? { consumption_progress: status === "planned" ? 0 : maxProgress } : {}),
       ...(favoriteVideoIds.size > 0 ? { favorite: isFavorite } : {}),
     };

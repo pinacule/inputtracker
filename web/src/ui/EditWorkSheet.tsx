@@ -8,7 +8,7 @@ import {
   type WorkEdit,
   type WorkStatus,
 } from "../api";
-import { CATEGORIES, CATEGORY_META, categoryLabel } from "../lib/categories";
+import { CATEGORIES, CATEGORY_META, categoryLabel, timesLabel } from "../lib/categories";
 import { validateRating10 } from "../lib/rating";
 import { performWorkEdit, pushToast } from "../lib/work-edits";
 import { COMMON_YOUTUBE_TOPICS } from "../lib/youtube";
@@ -27,6 +27,7 @@ export interface EditableWorkTarget {
   rating?: number | null;
   note?: string | null;
   topic?: string | null;
+  times?: number | null;
   channel?: string | null;
   cover_url?: string | null;
   edited?: boolean;
@@ -59,6 +60,7 @@ export function EditWorkSheet({
   const [rating, setRating] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const [topic, setTopic] = useState("");
+  const [times, setTimes] = useState("");
   const [selectedMeta, setSelectedMeta] = useState<{
     provider: MetaProvider;
     provider_id: string;
@@ -84,6 +86,7 @@ export function EditWorkSheet({
       setRating(work.rating ?? null);
       setNote(work.note ?? "");
       setTopic(work.topic ?? "");
+      setTimes(work.times != null ? String(work.times) : "");
       setSelectedMeta(null);
       setClearMeta(false);
       setShowMetaPicker(false);
@@ -125,6 +128,10 @@ export function EditWorkSheet({
     if (!rCheck.ok) {
       errs.push(rCheck.error);
     }
+    const timesValue = times.trim() === "" ? null : Number(times.trim());
+    if (timesValue !== null && (!Number.isInteger(timesValue) || timesValue < 0 || timesValue > 999)) {
+      errs.push(`${timesLabel(category)} must be a whole number from 0 to 999.`);
+    }
     if (errs.length > 0) {
       setErrors(errs);
       return;
@@ -138,6 +145,7 @@ export function EditWorkSheet({
         ? { rating: rCheck.ok ? rCheck.rating : null }
         : {}),
       note: note.trim() ? note.trim() : null,
+      times: timesValue,
     };
 
     if (category === "youtube" || work.channel || topic.trim() !== "") {
@@ -162,6 +170,7 @@ export function EditWorkSheet({
         rating: work.rating,
         note: work.note,
         topic: work.topic,
+        times: work.times ?? null,
         cover_url: selectedMeta?.cover_url ?? work.cover_url,
       });
 
@@ -350,6 +359,24 @@ export function EditWorkSheet({
             />
           </div>
         )}
+
+        <div class="ui-form-field">
+          <label class="ui-form-label" for="edit-work-times">
+            {timesLabel(category)}
+          </label>
+          <input
+            id="edit-work-times"
+            type="number"
+            class="ui-input tabular-nums"
+            min="0"
+            max="999"
+            step="1"
+            inputMode="numeric"
+            placeholder="Not set"
+            value={times}
+            onInput={(e) => setTimes((e.currentTarget as HTMLInputElement).value)}
+          />
+        </div>
 
         {/* Personal Note */}
         <div class="ui-form-field">

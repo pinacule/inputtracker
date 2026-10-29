@@ -30,6 +30,7 @@ export interface StoredWorkOverride {
   hidden?: boolean;
   meta?: WorkEdit["meta"];
   topic?: string | null;
+  times?: number | null;
   snapshot?: Partial<LibraryWork>;
   updatedAt: string;
 }
@@ -119,6 +120,7 @@ export function applyWorkOverridesToList(
         ov.status !== undefined && ov.status !== null ? ov.status : work.status,
       rating: ov.rating !== undefined ? ov.rating : work.rating,
       topic: ov.topic !== undefined ? ov.topic : chTopic,
+      ...withTimes(ov, work.times),
       edited: true,
     });
   }
@@ -147,8 +149,15 @@ export function applyWorkOverrideToDetail(
     rating: ov.rating !== undefined ? ov.rating : detail.rating,
     note: ov.note !== undefined ? ov.note : detail.note,
     topic: ov.topic !== undefined ? ov.topic : detail.topic,
+    ...withTimes(ov, detail.times),
     edited: true,
   };
+}
+
+/** `times` is absent when unset, so an optimistic clear removes the field. */
+function withTimes(ov: StoredWorkOverride, current: number | undefined): { times?: number } {
+  const times = ov.times !== undefined ? ov.times : current;
+  return times === null || times === undefined ? { times: undefined } : { times };
 }
 
 export interface PerformWorkEditContext {
@@ -158,6 +167,7 @@ export interface PerformWorkEditContext {
   rating?: number | null;
   note?: string | null;
   topic?: string | null;
+  times?: number | null;
   cover_url?: string | null;
   total_minutes?: number;
   units?: number;
@@ -217,6 +227,12 @@ export async function performWorkEdit(
       prevOverride?.topic !== undefined
         ? prevOverride.topic
         : (context?.topic ?? null);
+  }
+  if ("times" in edit) {
+    reverseEdit.times =
+      prevOverride?.times !== undefined
+        ? prevOverride.times
+        : (context?.times ?? null);
   }
   if ("meta" in edit) {
     if (prevOverride?.meta !== undefined) {
