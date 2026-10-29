@@ -405,7 +405,12 @@ export function QuickRatingPill({
           }
           onClick={startEditing}
         >
-          {hasRating ? `★ ${formatRating10(effectiveRating)}` : "☆ Rate"}
+          <span class="ui-quick-rate-pill-star" aria-hidden="true">
+            {hasRating ? "★" : "☆"}
+          </span>
+          <span class="ui-quick-rate-pill-value">
+            {hasRating ? formatRating10(effectiveRating) : "Rate"}
+          </span>
         </button>
       ) : (
         <span

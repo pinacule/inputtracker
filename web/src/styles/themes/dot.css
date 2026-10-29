@@ -241,3 +241,16 @@
   :root[data-theme="dot"] .home-day-week-total { display: none; }
   :root[data-theme="dot"] .home-week-summary { display: flex; }
 }
+
+/* Library cards: bordered block, pixel titles, fixed-height text rows so every
+   card in a row lines up (2-line title, 1-line creator, 1-line meta). */
+:root[data-theme="dot"] .library-work-card { gap: 0; overflow: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-surface-raised); }
+:root[data-theme="dot"] .library-work-card .ui-cover { border-radius: 0; box-shadow: none; }
+:root[data-theme="dot"] .library-work-card-body { flex: 1; gap: 6px; padding: 12px 14px 14px; border-top: 1px solid var(--border-default); }
+:root[data-theme="dot"] .library-work-card-kicker { display: block; height: 14px; font: 700 0.625rem/14px var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:root[data-theme="dot"] .library-work-card-title { height: 44px; font-family: "Pixelify Sans", var(--font-mono); font-size: 1.0625rem; font-weight: 500; line-height: 22px; letter-spacing: 0; }
+:root[data-theme="dot"] .library-work-card-creator { display: block; height: 16px; font-size: 0.75rem; font-style: italic; line-height: 16px; color: var(--text-secondary); }
+:root[data-theme="dot"] .library-work-card-meta { height: 16px; font-family: var(--font-mono); font-size: 0.6875rem; line-height: 16px; color: var(--text-secondary); }
+:root[data-theme="dot"] .library-work-card-meta .ui-tab-dot { display: none; }
+:root[data-theme="dot"] .library-work-card .ui-quick-rate-pill--overlay { box-sizing: border-box; min-height: 0; height: 22px; padding: 0 9px; gap: 4px; font: 700 0.6875rem/1 var(--font-mono); }
+:root[data-theme="dot"] .library-work-card .ui-quick-rate-pill--overlay.ui-quick-rate-pill--rated { background-color: rgba(14, 14, 14, 0.88); border-color: #333333; color: #ffd36b; }
