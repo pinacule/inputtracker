@@ -87,6 +87,7 @@ const LOOKUP_CATEGORIES: ReadonlyArray<TabOption<Category | "any">> = [
   { value: "series", label: "Series", category: "series" },
   { value: "film", label: "Films", category: "film" },
   { value: "book", label: "Books", category: "book" },
+  { value: "game", label: "Games", category: "game" },
 ];
 
 const BOOK_FORMAT_TABS: ReadonlyArray<TabOption<"book" | "audiobook">> = [
@@ -1529,7 +1530,9 @@ export function Add({
                       >
                         {selectedWork.category === "audiobook"
                           ? "Listening time in hours"
-                          : "Reading time in hours (optional — leave blank to estimate from pages)"}
+                          : selectedWork.category === "game"
+                            ? "Hours played (optional)"
+                            : "Reading time in hours (optional — leave blank to estimate from pages)"}
                       </label>
                       <input
                         id="archive-book-hours-override"

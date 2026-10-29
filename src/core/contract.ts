@@ -11,7 +11,7 @@ export type { Category } from "./category.ts";
 
 // --- metadata lookup (GET /api/lookup/...) ---------------------------------
 
-export type MetaProvider = "anilist" | "tvmaze" | "cinemeta" | "itunes" | "openlibrary" | "tmdb";
+export type MetaProvider = "anilist" | "tvmaze" | "cinemeta" | "itunes" | "openlibrary" | "tmdb" | "steam";
 
 /** GET /api/meta-art/:provider/:id. URLs are local proxies, never provider URLs. */
 export interface WorkArtImage {
@@ -60,7 +60,7 @@ export interface SeasonInfo {
 }
 
 export interface CommunityScore {
-  source: "AniList" | "TMDB" | "TVmaze" | "IMDb" | "Open Library" | "iTunes";
+  source: "AniList" | "TMDB" | "TVmaze" | "IMDb" | "Open Library" | "iTunes" | "Metacritic";
   value_10: number;
   votes: number | null;
 }

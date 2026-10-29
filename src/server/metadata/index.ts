@@ -50,6 +50,7 @@ import {
   searchOpenLibraryMeta,
 } from "./openlibrary.ts";
 import { computeMatchTier, MAX_LOOKUP_RESULTS, rankLookupHits } from "./rank.ts";
+import { fetchSteamCover, getSteamWork, searchSteam } from "./steam.ts";
 import { fetchTmdbCover, getTmdbWork, searchTmdb } from "./tmdb.ts";
 import { detectTvmazeSlotRuntime, fetchTvmazeCover, getTvmazeWork, searchTvmaze } from "./tvmaze.ts";
 import {
@@ -161,10 +162,12 @@ export function providersForCategory(
     case "book":
     case "audiobook":
       return ["openlibrary"];
+    case "game":
+      return ["steam"];
     case "any":
       return tmdbOn
-        ? ["anilist", "tmdb", "tvmaze", "cinemeta", "itunes", "openlibrary"]
-        : ["anilist", "tvmaze", "cinemeta", "itunes", "openlibrary"];
+        ? ["anilist", "tmdb", "tvmaze", "cinemeta", "itunes", "openlibrary", "steam"]
+        : ["anilist", "tvmaze", "cinemeta", "itunes", "openlibrary", "steam"];
     default:
       return [];
   }
@@ -219,6 +222,9 @@ async function runProviderSearch(
       break;
     case "tmdb":
       candidates = await searchTmdb(query, category, ctx);
+      break;
+    case "steam":
+      candidates = await searchSteam(query, ctx);
       break;
   }
 
@@ -324,6 +330,9 @@ export async function lookupWork(
       break;
     case "tmdb":
       fetched = await getTmdbWork(id, ctx, categoryOverride);
+      break;
+    case "steam":
+      fetched = await getSteamWork(id, ctx);
       break;
   }
 
@@ -458,6 +467,9 @@ async function getMetaCoverInternal(
         break;
       case "tmdb":
         directImage = await fetchTmdbCover(id, ctx);
+        break;
+      case "steam":
+        directImage = await fetchSteamCover(id, ctx);
         break;
     }
 

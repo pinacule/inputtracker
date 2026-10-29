@@ -226,6 +226,7 @@ export function getSettings(deps: GetSettingsDeps): SettingsView {
       { provider: "tvmaze", enabled: metaEnabled },
       { provider: "itunes", enabled: metaEnabled },
       { provider: "openlibrary", enabled: metaEnabled },
+      { provider: "steam", enabled: metaEnabled },
       { provider: "tmdb", enabled: metaEnabled && tmdbKeySet },
     ];
 

@@ -54,6 +54,7 @@ const PROVIDER_LABELS: Readonly<Record<MetaProvider, string>> = {
   itunes: "iTunes Search (Films)",
   openlibrary: "Open Library (Books & Audiobooks)",
   tmdb: "TMDB (Films & Series)",
+  steam: "Steam Store (Games)",
 };
 
 export function formatBytes(bytes: number | null | undefined): string {
@@ -782,6 +783,7 @@ export function Settings({
                 { provider: "tvmaze" as const, enabled: true },
                 { provider: "itunes" as const, enabled: true },
                 { provider: "openlibrary" as const, enabled: true },
+                { provider: "steam" as const, enabled: true },
                 { provider: "tmdb" as const, enabled: false },
               ]
             ).map((p) => (

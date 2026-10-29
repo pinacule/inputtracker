@@ -17,6 +17,7 @@ export const META_PROVIDERS: readonly MetaProvider[] = [
   "itunes",
   "openlibrary",
   "tmdb",
+  "steam",
 ] as const;
 
 const META_PROVIDER_SET: ReadonlySet<string> = new Set(META_PROVIDERS);
@@ -120,6 +121,8 @@ export function resolveMetadataConfig(config: Config): MetadataConfig {
       .replace(/\/+$/, ""),
     tmdb_url: (m?.tmdb_url ?? "https://api.themoviedb.org/3").trim().replace(/\/+$/, ""),
     tmdb_image_url: (m?.tmdb_image_url ?? "https://image.tmdb.org/t/p").trim().replace(/\/+$/, ""),
+    steam_url: (m?.steam_url ?? "https://store.steampowered.com").trim().replace(/\/+$/, ""),
+    steam_cdn_url: (m?.steam_cdn_url ?? "https://shared.akamai.steamstatic.com").trim().replace(/\/+$/, ""),
     tmdb_api_key: typeof m?.tmdb_api_key === "string" ? m.tmdb_api_key.trim() : "",
   };
 }

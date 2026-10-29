@@ -99,6 +99,8 @@ export interface MetadataConfig {
   openlibrary_covers_url: string;
   tmdb_url: string;
   tmdb_image_url: string;
+  steam_url: string;
+  steam_cdn_url: string;
   /** Optional TMDB API key; non-enumerable secret, never logged. */
   tmdb_api_key: string;
 }
@@ -522,6 +524,18 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
       "tmdb_image_url",
       "metadata.tmdb_image_url",
       "https://image.tmdb.org/t/p"
+    ),
+    steam_url: readString(
+      metadataTable,
+      "steam_url",
+      "metadata.steam_url",
+      "https://store.steampowered.com"
+    ),
+    steam_cdn_url: readString(
+      metadataTable,
+      "steam_cdn_url",
+      "metadata.steam_cdn_url",
+      "https://shared.akamai.steamstatic.com"
     ),
   } as MetadataConfig;
 

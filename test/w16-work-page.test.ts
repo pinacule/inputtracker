@@ -29,7 +29,7 @@ function configFor(dir: string): Config {
       enabled: true, anilist_url: "https://anilist.invalid", tvmaze_url: "https://tvmaze.invalid",
       cinemeta_url: "https://cinemeta.invalid", itunes_url: "https://itunes.invalid",
       openlibrary_url: "https://ol.invalid", openlibrary_covers_url: "https://covers.invalid",
-      tmdb_url: "https://tmdb.invalid", tmdb_image_url: "https://images.invalid", tmdb_api_key: "synthetic-key",
+      tmdb_url: "https://tmdb.invalid", tmdb_image_url: "https://images.invalid", steam_url: "https://steam.invalid", steam_cdn_url: "https://steamcdn.invalid", tmdb_api_key: "synthetic-key",
     },
     notify: { desktop: false, ntfy_url: "", ntfy_token: "", app_url: "", weekly_summary: false },
     toJSON: () => ({}), toString: () => "{}",
