@@ -9,7 +9,7 @@
  * No DOM dependencies; safe to run under Bun or in the browser.
  */
 
-import { isCategory, type Category } from "./categories";
+import { groupCategory, isCategory, type Category } from "./categories";
 
 export const LIBRARY_ALL_EXCLUDED_CATEGORIES: readonly Category[] = [
   "youtube",
@@ -149,7 +149,9 @@ export function matchesCategorySelection(
 ): boolean {
   if (scopeOrLegacy === "library" && category === "shortform") return false;
   if (selected.length > 0) {
-    return selected.includes(category);
+    // Audiobooks are a format of books: the Books chip shows them too.
+    const group = groupCategory(category);
+    return selected.some((c) => groupCategory(c) === group);
   }
   if (scopeOrLegacy === "library") {
     return !LIBRARY_ALL_EXCLUDED_CATEGORIES.includes(category);
