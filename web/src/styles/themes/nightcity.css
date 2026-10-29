@@ -169,9 +169,13 @@
   --cat-music-border: #a96892;
   --cat-music-solid: #ed74b8;
   --cat-shortform-fg: #d5e87d;
+  --cat-game-fg: #a9bcff;
   --cat-shortform-bg: #292e1b;
+  --cat-game-bg: #1f2638;
   --cat-shortform-border: #899754;
+  --cat-game-border: #6a7fb4;
   --cat-shortform-solid: #bcd45b;
+  --cat-game-solid: #7f9cf2;
   --cat-other-fg: #c7d0db;
   --cat-other-bg: #242a34;
   --cat-other-border: #7d8998;
@@ -359,6 +363,7 @@
 :root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-music-"] { --nc-map-bg: var(--cat-music-bg); --nc-map-fg: var(--cat-music-fg); --nc-map-border: var(--cat-music-border); }
 
 :root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-shortform-"] { --nc-map-bg: var(--cat-shortform-bg); --nc-map-fg: var(--cat-shortform-fg); --nc-map-border: var(--cat-shortform-border); }
+:root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-game-"] { --nc-map-bg: var(--cat-game-bg); --nc-map-fg: var(--cat-game-fg); --nc-map-border: var(--cat-game-border); }
 
 :root[data-theme="nightcity"] .home-map-tile-inner[style*="--cat-other-"] { --nc-map-bg: var(--cat-other-bg); --nc-map-fg: var(--cat-other-fg); --nc-map-border: var(--cat-other-border); }
 

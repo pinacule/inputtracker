@@ -12,7 +12,7 @@ export function workBannerImage(detail: Pick<LibraryWorkDetail, "banner_url" | "
 
 export function workRankLines(detail: LibraryWorkDetail): string[] {
   if (!detail.rank || detail.status === "planned") return [];
-  const label = ({ anime: "anime", series: "series", film: "film", book: "book", audiobook: "audiobook", youtube: "YouTube work", podcast: "podcast", music: "track", shortform: "short-form", other: "work" } as const)[detail.category];
+  const label = ({ anime: "anime", series: "series", film: "film", book: "book", audiobook: "audiobook", youtube: "YouTube work", podcast: "podcast", music: "track", shortform: "short-form", game: "game", other: "work" } as const)[detail.category];
   const lines: string[] = [];
   if (detail.rank.time !== null) {
     const percent = detail.rank.time_share_percent;

@@ -72,7 +72,7 @@ describe("Editorial home presentation", () => {
   test("empty archives keep every category reachable", () => {
     const tree = CategoryIndex({ selected: [], totals: [], availableCategories: [], onChange: () => {} });
     const inputs = nodes(tree).filter((node) => node.type === "input");
-    expect(inputs).toHaveLength(11);
+    expect(inputs).toHaveLength(12);
     expect(inputs[0]!.props.checked).toBe(true);
     expect(nodes(tree).some((node) => node.type === "legend" && text(node).includes("select several"))).toBe(true);
   });

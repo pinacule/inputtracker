@@ -196,9 +196,13 @@
   --cat-music-border: #95647f;
   --cat-music-solid: #d894b6;
   --cat-shortform-fg: #bcd9eb;
+  --cat-game-fg: #c9d0ee;
   --cat-shortform-bg: #1c2630;
+  --cat-game-bg: #22263a;
   --cat-shortform-border: #617f94;
+  --cat-game-border: #737ca3;
   --cat-shortform-solid: #88b4cf;
+  --cat-game-solid: #9ea8d6;
   --cat-other-fg: #ddd6c9;
   --cat-other-bg: #28251f;
   --cat-other-border: #8a8273;
@@ -220,7 +224,9 @@
   --cat-music-tile-start: var(--cat-music-bg);
   --cat-music-tile-end: var(--bg-surface);
   --cat-shortform-tile-start: var(--cat-shortform-bg);
+  --cat-game-tile-start: var(--cat-game-bg);
   --cat-shortform-tile-end: var(--bg-surface);
+  --cat-game-tile-end: var(--bg-surface);
   --cat-other-tile-start: var(--cat-other-bg);
   --cat-other-tile-end: var(--bg-surface);
 }
@@ -485,6 +491,7 @@
 :root[data-theme="thinker"] .ui-cat-chip--podcast { --th-chip-fg: var(--cat-podcast-fg); --th-chip-bg: var(--cat-podcast-bg); --th-chip-solid: var(--cat-podcast-solid); }
 :root[data-theme="thinker"] .ui-cat-chip--music { --th-chip-fg: var(--cat-music-fg); --th-chip-bg: var(--cat-music-bg); --th-chip-solid: var(--cat-music-solid); }
 :root[data-theme="thinker"] .ui-cat-chip--shortform { --th-chip-fg: var(--cat-shortform-fg); --th-chip-bg: var(--cat-shortform-bg); --th-chip-solid: var(--cat-shortform-solid); }
+:root[data-theme="thinker"] .ui-cat-chip--game { --th-chip-fg: var(--cat-game-fg); --th-chip-bg: var(--cat-game-bg); --th-chip-solid: var(--cat-game-solid); }
 :root[data-theme="thinker"] .ui-cat-chip--other { --th-chip-fg: var(--cat-other-fg); --th-chip-bg: var(--cat-other-bg); --th-chip-solid: var(--cat-other-solid); }
 :root[data-theme="thinker"] .ui-cat-chip[class*="ui-cat-chip--"] {
   color: var(--th-chip-fg, var(--text-primary));

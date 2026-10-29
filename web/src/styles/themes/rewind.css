@@ -148,9 +148,13 @@
   --cat-other-border: #918d81;
   --cat-other-solid: #b6b1a5;
   --cat-shortform-fg: #aed9ff;
+  --cat-game-fg: #c8cbff;
   --cat-shortform-bg: #192b41;
+  --cat-game-bg: #23243f;
   --cat-shortform-border: #648bc1;
+  --cat-game-border: #7a7fc0;
   --cat-shortform-solid: #78aff0;
+  --cat-game-solid: #9aa0f0;
   --rw-frame-shadow: inset 0 0 0 3px var(--bg-surface), inset 0 0 0 4px #537fff, 0 8px 24px #00000055, -3px 0 10px #ff6c9e30, 3px 0 10px #77ffad24, 0 0 18px #70bcff24;
   --rw-photo: url("/wallpapers/rewind/vcr-desktop.webp");
   --rw-photo-position: 72% 46%;
@@ -467,6 +471,7 @@
 :root[data-theme="rewind"] .ui-cat-chip--podcast { color: var(--cat-podcast-fg); background: var(--cat-podcast-bg); border-color: var(--cat-podcast-border); }
 :root[data-theme="rewind"] .ui-cat-chip--music { color: var(--cat-music-fg); background: var(--cat-music-bg); border-color: var(--cat-music-border); }
 :root[data-theme="rewind"] .ui-cat-chip--shortform { color: var(--cat-shortform-fg); background: var(--cat-shortform-bg); border-color: var(--cat-shortform-border); }
+:root[data-theme="rewind"] .ui-cat-chip--game { color: var(--cat-game-fg); background: var(--cat-game-bg); border-color: var(--cat-game-border); }
 :root[data-theme="rewind"] .ui-cat-chip--other { color: var(--cat-other-fg); background: var(--cat-other-bg); border-color: var(--cat-other-border); }
 
 :root[data-theme="rewind"][data-rewind-save-data] .rewind-room::before { background-image: none; }

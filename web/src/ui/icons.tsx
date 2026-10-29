@@ -207,6 +207,17 @@ export function TvIcon(props: IconProps) {
   );
 }
 
+export function GameIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="7" width="20" height="11" rx="5" />
+      <path d="M7 10.5v4M5 12.5h4" />
+      <circle cx="15.5" cy="11.5" r="0.6" />
+      <circle cx="17.5" cy="13.5" r="0.6" />
+    </Svg>
+  );
+}
+
 export function PodcastIcon(props: IconProps) {
   return (
     <Svg {...props}>
@@ -398,6 +409,8 @@ export function CategoryIcon({
       return <PodcastIcon size={size} class={className} />;
     case "music":
       return <MusicIcon size={size} class={className} />;
+    case "game":
+      return <GameIcon size={size} class={className} />;
     case "other":
       return <ManualIcon size={size} class={className} />;
   }

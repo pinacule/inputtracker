@@ -20,6 +20,7 @@ export const CATEGORIES = [
   "podcast",
   "music",
   "shortform",
+  "game",
   "other",
 ] as const;
 

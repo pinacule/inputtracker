@@ -1,8 +1,8 @@
 [Unit]
-Description=Hourly InputTracker Simkl sync
+Description=Half-hourly InputTracker Simkl sync
 
 [Timer]
-OnCalendar=*-*-* *:30:00
+OnCalendar=*-*-* *:00,30:00
 Persistent=true
 RandomizedDelaySec=120
 Unit=inputtracker-sync@simkl.service
